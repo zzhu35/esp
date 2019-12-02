@@ -117,6 +117,13 @@
 #define LLC_TAG_OFFSET		(1 << LLC_TAG_RANGE_LO)
 #define LLC_LOOKUP_WAYS         16
 
+
+// Ongoing transaction buffers
+#define LLC_N_REQS		4	// affects LLC_REQS_BITS
+#define LLC_REQS_BITS	(ilog2(LLC_N_REQS))	// depends on LLC_N_REQS
+#define LLC_REQS_BITS_P1	(LLC_REQS_BITS + 1)	// depends on LLC_N_REQS + 1
+
+
 /*
  * Testbench 
  */
@@ -152,7 +159,7 @@
 
 // N bits to indicate the state
 #define STABLE_STATE_BITS	2	// depends on # of stable states
-#define LLC_STATE_BITS	        3 	// M, E, S, I, S^D, VALID, EID
+#define LLC_STATE_BITS	        4
 #define UNSTABLE_STATE_BITS	4	// depends on # of unstable states
 
 // L2 Stable states

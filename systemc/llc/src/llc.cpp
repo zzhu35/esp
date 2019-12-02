@@ -579,6 +579,167 @@ inline void llc::send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t li
     llc_dma_rsp_out.nb_put(rsp_out);
 }
 
+// write MSHR
+void llc::fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit, 
+		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
+		   sc_uint<LLC_REQS_BITS> reqs_i)
+{
+    LLC_FILL_REQS;
+
+    reqs[reqs_i].msg         = msg;
+    reqs[reqs_i].tag	     = addr_br.tag;
+    reqs[reqs_i].tag_estall  = tag_estall;
+    reqs[reqs_i].set	     = addr_br.set;
+    reqs[reqs_i].way	     = way_hit;
+    reqs[reqs_i].hsize	     = hsize;
+    reqs[reqs_i].w_off       = addr_br.w_off;
+    reqs[reqs_i].b_off       = addr_br.b_off;
+    reqs[reqs_i].state	     = state;
+    reqs[reqs_i].hprot	     = hprot;
+    reqs[reqs_i].invack_cnt  = MAX_N_L2;
+    reqs[reqs_i].word	     = word;
+    reqs[reqs_i].line	     = line;
+
+    reqs_cnt--;
+}
+
+
+// @TODO find use case in L2
+void llc::put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hprot_t hprot, llc_state_t state,
+            sc_uint<LLC_REQS_BITS> reqs_i)
+{
+    LLC_PUT_REQS;
+
+    sc_uint<LLC_SET_BITS+LLC_WAY_BITS> base = set << LLC_WAY_BITS;
+
+    lines.port1[0][base + way]  = line;
+    hprots.port1[0][base + way] = hprot;
+    states.port1[0][base + way] = state;
+    tags.port1[0][base + way]   = tag;
+
+    // if necessary end the forward messages stall
+    if (fwd_stall && reqs_fwd_stall_i == reqs_i) {
+	fwd_stall_ended = true;
+    }
+}
+
+// lookup MSHR
+void llc::reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
+		    sc_uint<LLC_REQS_BITS> &reqs_hit_i)
+{
+    LLC_REQS_LOOKUP;
+
+    bool reqs_hit = false;
+
+    for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
+	LLC_REQS_LOOKUP_LOOP;
+
+	if (reqs[i].tag == line_br.tag && reqs[i].set == line_br.set && reqs[i].state != INVALID) {
+	    reqs_hit = true;
+	    reqs_hit_i = i;
+	}
+    }
+
+#ifdef LLC_DEBUG
+    // @TODO
+    // reqs_hit_req_dbg.write(reqs_hit);
+    // reqs_hit_i_req_dbg.write(reqs_hit_i);
+#endif
+    // REQS_LOOKUP_ASSERT;
+}
+
+bool llc::reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
+{
+    LLC_REQS_PEEK_REQ;
+
+    set_conflict = false;
+
+    for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
+	LLC_REQS_PEEK_REQ_LOOP;
+	
+	if (reqs[i].state == INVALID)
+	    reqs_i = i;
+
+	if (reqs[i].set == set && reqs[i].state != INVALID)
+	    set_conflict = true;
+    }
+
+#ifdef LLC_DEBUG
+    // @TODO
+    // peek_reqs_i_dbg.write(reqs_i);
+#endif
+
+    return set_conflict;
+}
+
+void llc::reqs_peek_flush(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
+{
+    LLC_REQS_PEEK_REQ;
+
+    for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
+	LLC_REQS_PEEK_REQ_LOOP;
+	
+	if (reqs[i].state == INVALID)
+	    reqs_i = i;
+    }
+
+#ifdef LLC_DEBUG
+    // @TODO
+    // peek_reqs_i_flush_dbg.write(reqs_i);
+#endif
+}
+
+bool llc::reqs_peek_fwd(line_breakdown_t<llc_tag_t, llc_set_t> line_br, sc_uint<LLC_REQS_BITS> &reqs_i,
+		    bool &reqs_hit, mix_msg_t coh_msg)
+{
+    LLC_REQS_PEEK_FWD;
+
+    bool fwd_stall_tmp = false;
+
+    reqs_hit = false;
+    reqs_i = 0;
+
+    for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
+	LLC_REQS_PEEK_FWD_LOOP;
+	
+	if (reqs[i].state != INVALID && 
+	    reqs[i].tag == line_br.tag && 
+	    reqs[i].set == line_br.set) {
+
+	    reqs_hit = true;
+	    reqs_i = i;
+
+	    fwd_stall_tmp = true;
+
+        // @TODO
+
+	    // if (coh_msg == FWD_PUTACK) {
+
+		// fwd_stall_tmp = false;		
+
+	    // } else if (coh_msg == FWD_INV || coh_msg == FWD_INV_LLC) {
+
+		// if (reqs[i].state != ISD)
+		//     fwd_stall_tmp = false;
+	    // } else {
+
+		// if (reqs[i].state == MIA)
+		//     fwd_stall_tmp = false;
+	    // }
+	}
+    }
+
+    reqs_fwd_stall_i = reqs_i;
+
+#ifdef LLC_DEBUG
+    // @TODO
+    // peek_reqs_hit_fwd_dbg.write(reqs_hit);
+#endif
+
+    return fwd_stall_tmp;
+}
+
+
 /*
  * Processes
  */

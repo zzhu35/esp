@@ -110,6 +110,9 @@ public:
     // llc_way_t evict_ways[LLC_SETS];
 
     // Local registers
+
+    llc_reqs_buf_t	 reqs[LLC_N_REQS]; // MSHR
+
     llc_tag_t	 tags_buf[LLC_WAYS];
     llc_state_t	 states_buf[LLC_WAYS];
     hprot_t	 hprots_buf[LLC_WAYS];
@@ -198,6 +201,19 @@ public:
     inline void send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
                                  cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
 
+    /* Functions to move around buffered lines */
+    void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit, 
+		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
+		   sc_uint<LLC_REQS_BITS> reqs_i);
+    void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hprot_t hprot, llc_state_t state,
+		  sc_uint<LLC_REQS_BITS> reqs_i);
+    void reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
+		     sc_uint<LLC_REQS_BITS> &reqs_hit_i);
+    bool reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
+    void reqs_peek_flush(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
+    bool reqs_peek_fwd(line_breakdown_t<llc_tag_t, llc_set_t> line_br, sc_uint<LLC_REQS_BITS> &reqs_i,
+		       bool &reqs_hit, mix_msg_t coh_msg);
+
 private:
 
 #ifdef LLC_DEBUG
@@ -206,6 +222,7 @@ private:
     sc_bv<LLC_BOOKMARK_WIDTH> bookmark_tmp;
 #endif
 
+    sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
     bool rst_stall;
     bool flush_stall;
     llc_set_t rst_flush_stalled_set;

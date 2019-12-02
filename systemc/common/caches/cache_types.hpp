@@ -778,6 +778,112 @@ public:
     }
 };
 
+
+class llc_reqs_buf_t
+{
+
+public:
+
+    mix_msg_t           msg;
+    llc_tag_t		tag;
+    llc_tag_t            tag_estall;
+    llc_set_t		set;
+    llc_way_t            way;
+    hsize_t             hsize;
+    word_offset_t	w_off;
+    byte_offset_t	b_off;
+    llc_state_t	state;
+    hprot_t		hprot;
+    invack_cnt_calc_t	invack_cnt;
+    word_t		word;
+    line_t		line;
+
+    reqs_buf_t() :
+	cpu_msg(0),
+	tag(0),
+	tag_estall(0),
+	set(0),
+	way(0),
+	hsize(0),
+	w_off(0),
+	b_off(0),
+	state(0),
+	hprot(0),
+	invack_cnt(0),
+    	word(0),
+    	line(0)
+    {}
+
+    inline llc_reqs_buf_t& operator = (const llc_reqs_buf_t& x) {
+	msg			= x.msg;
+	tag			= x.tag;
+	tag_estall		= x.tag_estall;
+	set			= x.set;
+	way			= x.way;
+	hsize			= x.hsize;
+	w_off			= x.w_off;
+	b_off			= x.b_off;
+	state			= x.state;
+	hprot			= x.hprot;
+	invack_cnt		= x.invack_cnt;
+	word			= x.word;
+	line			= x.line;
+	return *this;
+    }
+    inline bool operator     == (const llc_reqs_buf_t& x) const {
+	return (x.msg    == msg		&&
+		x.tag	     == tag		&&
+		x.tag_estall == tag_estall	&&
+		x.set	     == set		&&
+		x.way	     == way		&&
+		x.hsize	     == hsize		&&
+		x.w_off	     == w_off		&&
+		x.b_off	     == b_off		&&
+		x.state	     == state		&&
+		x.hprot	     == hprot		&&
+		x.invack_cnt == invack_cnt	&&
+		x.word	     == word		&&
+		x.line	     == line);
+    }
+    inline friend void sc_trace(sc_trace_file *tf, const llc_reqs_buf_t& x, const std::string & name) {
+	sc_trace(tf, x.msg , name + ".msg ");
+	sc_trace(tf, x.tag , name + ".tag");
+	sc_trace(tf, x.tag_estall , name + ".tag_estall");
+	sc_trace(tf, x.set , name + ".set");
+	sc_trace(tf, x.way , name + ".way");
+	sc_trace(tf, x.hsize , name + ".hsize");
+	sc_trace(tf, x.w_off , name + ".w_off");
+	sc_trace(tf, x.b_off , name + ".b_off");
+	sc_trace(tf, x.state , name + ".state");
+	sc_trace(tf, x.hprot , name + ".hprot");
+	sc_trace(tf, x.invack_cnt , name + ".invack_cnt");
+	sc_trace(tf, x.word , name + ".word");
+	sc_trace(tf, x.line , name + ".line");
+    }
+    inline friend ostream & operator<<(ostream& os, const llc_reqs_buf_t& x) {
+	os << hex << "("
+	   << "msg: " << x.msg
+	   << "tag: " << x.tag
+	   << "tag_estall: " << x.tag_estall
+	   << ", set: "<< x.set
+	   << ", way: " << x.way
+	   << ", hsize: " << x.hsize
+	   << ", w_off: " << x.w_off
+	   << ", b_off: " << x.b_off
+	   << ", state: " << x.state
+	   << ", hprot: " << x.hprot
+	   << ", invack_cnt: " << x.invack_cnt
+	   << ", word: " << x.word
+	   << ", line: ";
+	for (int i = WORDS_PER_LINE-1; i >= 0; --i) {
+	    int base = i*BITS_PER_WORD;
+	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
+	}
+	os << ")";
+	return os;
+    }
+};
+
 // forward stall backup
 class fwd_stall_backup_t
 {

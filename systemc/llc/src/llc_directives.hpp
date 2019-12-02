@@ -307,6 +307,35 @@
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
 
+#define LLC_FILL_REQS							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-fill-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Fill reqs.")
+
+#define LLC_PUT_REQS					\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-put-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Put reqs.")
+
+#define LLC_REQS_LOOKUP							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-lookup-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs lookup rsp.")
+
+#define LLC_REQS_LOOKUP_LOOP				\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-lookup-loop-unroll")
+
+#define LLC_REQS_PEEK_REQ							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-req-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek req.")
+
+#define LLC_REQS_PEEK_REQ_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-req-loop-unroll")
+
+#define LLC_REQS_PEEK_FWD							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-fwd-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek fwd.")
+
+#define LLC_REQS_PEEK_FWD_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-fwd-loop-unroll")
+
 #define LLC_GETS
 #define LLC_GETM
 #define LLC_PUTS
