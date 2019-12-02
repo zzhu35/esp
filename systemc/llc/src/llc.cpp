@@ -172,6 +172,8 @@ inline void llc::reset_io()
     evict_ways.port1.reset();
     evict_ways.port2.reset();
 
+    reqs_cnt = LLC_N_REQS;
+
     wait();
 }
 
