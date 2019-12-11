@@ -120,12 +120,12 @@
 
 // Ongoing transaction buffers
 #define LLC_N_REQS		4	// affects LLC_REQS_BITS
-#define LLC_REQS_BITS	(ilog2(LLC_N_REQS))	// depends on LLC_N_REQS
+#define LLC_REQS_BITS   	(ilog2(LLC_N_REQS))	// depends on LLC_N_REQS
 #define LLC_REQS_BITS_P1	(LLC_REQS_BITS + 1)	// depends on LLC_N_REQS + 1
 
 
 /*
- * Testbench 
+ * Testbench
  */
 
 // L2 operation behavior
@@ -190,18 +190,20 @@
 #define LLC_I       0
 #define LLC_V       1
 #define LLC_S       2
-#define LLC_O       3
-#define LLC_IV      4
-#define LLC_IS      5
-#define LLC_IO      6
-#define LLC_SO      7
-#define LLC_SV      8
-#define LLC_OS      9
-#define LLC_OV      10
-#define LLC_SWB     11
-#define LLC_OWB     12
-#define LLC_SI      13
-#define LLC_WB      14
+
+// LLC unstable states
+#define LLC_O       0
+#define LLC_IV      1
+#define LLC_IS      2
+#define LLC_IO      3
+#define LLC_SO      4
+#define LLC_SV      5
+#define LLC_OS      6
+#define LLC_OV      7
+#define LLC_SWB     8
+#define LLC_OWB     9
+#define LLC_SI      10
+#define LLC_WB      11
 
 
 /*
@@ -250,6 +252,7 @@
 #define RSP_Odata      3
 #define RSP_RVK_O      4
 #define RSP_INV_ACK    5
+#define RSP_NACK       6
 
 // DMA burst not currently supported in Spandex
 // #define DMA_BURST_LENGTH_BITS 32
@@ -269,7 +272,7 @@
 #define INSTR 0
 #define DATA  1
 
-/* 
+/*
  * Debug and report (currently not in use)
  */
 
@@ -278,7 +281,7 @@
 
 #define STATS_ENABLE 1
 
-// Decide whether to send to LLC regular DMA transaction or to send the unrolled 
+// Decide whether to send to LLC regular DMA transaction or to send the unrolled
 // DMA transaction one cache line at a time
 
 #define INTERNAL 0

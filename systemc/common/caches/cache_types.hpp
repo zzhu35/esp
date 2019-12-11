@@ -40,6 +40,7 @@ typedef sc_uint<L2_WAY_BITS> l2_way_t;
 typedef sc_uint<LLC_WAY_BITS>		llc_way_t;
 typedef sc_uint<OFFSET_BITS>		offset_t;
 typedef sc_uint<WORD_BITS>		word_offset_t;
+typedef sc_uint<WORDS_PER_LINE> word_mask_t;
 typedef sc_uint<BYTE_BITS>		byte_offset_t;
 typedef sc_uint<STABLE_STATE_BITS>	state_t;
 typedef sc_uint<LLC_STATE_BITS>	        llc_state_t;
@@ -421,18 +422,20 @@ public:
     }
 };
 
+
 class llc_req_in_t
 {
 
 public:
 
-    mix_msg_t	  coh_msg;	// gets, getm, puts, putm, dma_read, dma_write
+    mix_msg_t	  coh_msg;
     hprot_t	  hprot; // used for dma write burst end (0) and non-aligned addr (1)
     line_addr_t	  addr;
     line_t	  line; // used for dma burst length too
     cache_id_t    req_id;
     word_offset_t word_offset;
     word_offset_t valid_words;
+    word_mask_t   word_mask;
 
     llc_req_in_t() :
 	coh_msg(coh_msg_t(0)),
@@ -441,7 +444,8 @@ public:
 	line(0),
 	req_id(0),
         word_offset(0),
-        valid_words(0)
+        valid_words(0),
+        word_mask(0)
     {}
 
     inline llc_req_in_t& operator  = (const llc_req_in_t& x) {
@@ -452,6 +456,7 @@ public:
 	req_id      = x.req_id;
         word_offset = x.word_offset;
         valid_words = x.valid_words;
+        word_mask   = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const llc_req_in_t& x) const {
@@ -461,7 +466,8 @@ public:
 		x.line        == line        &&
 		x.req_id      == req_id      &&
 		x.word_offset == word_offset &&
-		x.valid_words == valid_words);
+		x.valid_words == valid_words &&
+                x.word_mask   == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const llc_req_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg,     name + ".coh_msg ");
@@ -471,10 +477,12 @@ public:
 	sc_trace(tf, x.req_id,      name + ".req_id");
 	sc_trace(tf, x.word_offset, name + ".word_offset");
 	sc_trace(tf, x.valid_words, name + ".valid_words");
+	sc_trace(tf, x.word_mask,   name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_req_in_t& x) {
 	os << hex << "(coh_msg: ";
         switch (x.coh_msg) {
+                // @TODO
         case REQ_GETS : os << "GETS"; break;
         case REQ_GETM : os << "GETM"; break;
         case REQ_PUTS : os << "PUTS"; break;

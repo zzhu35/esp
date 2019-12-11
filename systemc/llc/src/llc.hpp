@@ -96,7 +96,7 @@ public:
     EXP_MEM_TYPE_STRING(llc, states, LLC_SETS, LLC_WAYS)<llc_state_t, LLC_LINES> states;
     EXP_MEM_TYPE_STRING(llc, lines, LLC_SETS, LLC_WAYS)<line_t, LLC_LINES> lines;
     EXP_MEM_TYPE_STRING(llc, hprots, LLC_SETS, LLC_WAYS)<hprot_t, LLC_LINES> hprots;
-    EXP_MEM_TYPE_STRING(llc, owners, LLC_SETS, LLC_WAYS)<owner_t, LLC_LINES> owners;
+    EXP_MEM_TYPE_STRING(llc, owners, LLC_SETS, LLC_WAYS)<word_mask_t, LLC_LINES> owners;
     EXP_MEM_TYPE_STRING(llc, sharers, LLC_SETS, LLC_WAYS)<sharers_t, LLC_LINES> sharers;
     EXP_MEM_TYPE_STRING(llc, dirty_bits, LLC_SETS, LLC_WAYS)<sc_uint<2>, LLC_LINES> dirty_bits;
     EXP_MEM_TYPE_STRING(llc, evict_ways, LLC_SETS, LLC_WAYS)<llc_way_t, LLC_SETS> evict_ways;
@@ -118,7 +118,7 @@ public:
     hprot_t	 hprots_buf[LLC_WAYS];
     line_t	 lines_buf[LLC_WAYS];
     sharers_t	 sharers_buf[LLC_WAYS];
-    owner_t      owners_buf[LLC_WAYS];
+    word_mask_t  owners_buf[LLC_WAYS];
     sc_uint<2>   dirty_bits_buf[LLC_WAYS];
     llc_way_t	 evict_ways_buf;
 
@@ -198,11 +198,12 @@ public:
     inline void send_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
                              cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
     inline void send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id);
+    inline void send_fwd_on_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data);
     inline void send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
                                  cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
 
     /* Functions to move around buffered lines */
-    void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit, 
+    void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
 		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
 		   sc_uint<LLC_REQS_BITS> reqs_i);
     void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hprot_t hprot, llc_state_t state,

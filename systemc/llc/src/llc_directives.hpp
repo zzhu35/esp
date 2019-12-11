@@ -98,8 +98,8 @@
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
 
-#define LLC_GETS \
-    bookmark_tmp |= BM_LLC_GETS
+#define LLC_REQS \
+    bookmark_tmp |= BM_LLC_REQS
 
 #define LLC_GETM \
     bookmark_tmp |= BM_LLC_GETM
@@ -132,16 +132,16 @@
 #define GENERIC_ASSERT \
     asserts_tmp |= AS_GENERIC
 
-#define GETS_IV							 \
+#define REQS_IV							 \
     bookmark_tmp |= BM_GETS_IV
 
-#define GETS_S							 \
+#define REQS_S							 \
     bookmark_tmp |= BM_GETS_S;					 \
     if (sharers_buf[way] == 0) asserts_tmp |= AS_GETS_S_NOSHARE; \
     if ((sharers_buf[way] & (1 << req_in.req_id)) != 0)		 \
 	asserts_tmp |= AS_GETS_S_ALREADYSHARE
 
-#define GETS_EM				     \
+#define REQS_O				     \
     bookmark_tmp |= BM_GETS_EM;			\
     if (owner_buf[way] == req_in.req_id)	\
 	asserts_tmp |= AS_GETS_EM_ALREADYOWN

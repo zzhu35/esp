@@ -564,6 +564,16 @@ inline void llc::send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t re
     llc_fwd_out.nb_put(fwd_out);
 }
 
+inline void send_fwd_on_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id,
+                                word_mask_t word_mask, line_t data)
+{
+        for (int i = 0; i < WORDS_PER_LINE; i++) {
+            HLS_UNROLL_LOOP(ON, "send-fwd-ownermask");
+            if (word_mask & (1 << i))
+                send_fwd_out(coh_msg, addr, req_id, data.range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD))
+        }
+}
+
 inline void llc::send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
                            cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset)
 {
@@ -581,8 +591,8 @@ inline void llc::send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t li
     llc_dma_rsp_out.nb_put(rsp_out);
 }
 
-// write MSHR
-void llc::fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit, 
+// write reqs buf
+void llc::fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
 		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
 		   sc_uint<LLC_REQS_BITS> reqs_i)
 {
@@ -625,7 +635,7 @@ void llc::put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hp
     }
 }
 
-// lookup MSHR
+// lookup reqs buf
 void llc::reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
 		    sc_uint<LLC_REQS_BITS> &reqs_hit_i)
 {
@@ -658,7 +668,7 @@ bool llc::reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
 
     for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
 	LLC_REQS_PEEK_REQ_LOOP;
-	
+
 	if (reqs[i].state == INVALID)
 	    reqs_i = i;
 
@@ -680,7 +690,7 @@ void llc::reqs_peek_flush(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
 
     for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
 	LLC_REQS_PEEK_REQ_LOOP;
-	
+
 	if (reqs[i].state == INVALID)
 	    reqs_i = i;
     }
@@ -703,9 +713,9 @@ bool llc::reqs_peek_fwd(line_breakdown_t<llc_tag_t, llc_set_t> line_br, sc_uint<
 
     for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
 	LLC_REQS_PEEK_FWD_LOOP;
-	
-	if (reqs[i].state != INVALID && 
-	    reqs[i].tag == line_br.tag && 
+
+	if (reqs[i].state != INVALID &&
+	    reqs[i].tag == line_br.tag &&
 	    reqs[i].set == line_br.set) {
 
 	    reqs_hit = true;
@@ -717,7 +727,7 @@ bool llc::reqs_peek_fwd(line_breakdown_t<llc_tag_t, llc_set_t> line_br, sc_uint<
 
 	    // if (coh_msg == FWD_PUTACK) {
 
-		// fwd_stall_tmp = false;		
+		// fwd_stall_tmp = false;
 
 	    // } else if (coh_msg == FWD_INV || coh_msg == FWD_INV_LLC) {
 
@@ -797,6 +807,7 @@ void llc::ctrl()
         llc_addr_t base;
         llc_addr_t llc_addr;
         line_addr_t addr_evict;
+        word_mask_t word_owner_mask;
 
         // -----------------------------
         // Check input channels
@@ -1019,6 +1030,9 @@ void llc::ctrl()
 
         }
 
+
+
+        // @TODO reqs buf
         // Process response
         else if (is_rsp_to_get) {
 
@@ -1073,6 +1087,8 @@ void llc::ctrl()
                     evict_ways_buf++;
                 }
 
+
+                // @TODO how to implement recall?
                 if (states_buf[way] == VALID) {
                     EVICT_V;
 
@@ -1086,53 +1102,74 @@ void llc::ctrl()
 
             switch (req_in.coh_msg) {
 
-            case REQ_GETS :
-                LLC_GETS;
+            case REQ_V:
+
+                switch (states_buf[way]) {
+                        case LLC_I:
+                        {
+                                send_mem_req(READ, req_in.addr, req_in.hprot, 0);
+                                get_mem_rsp(lines_buf[way]);
+                                send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                                hprots_buf[way]     = req_in.hprot;
+                                tags_buf[way]       = line_br.tag;
+                                dirty_bits_buf[way] = 0;
+                                states_buf[way]     = LLC_V;
+                        }
+                        break;
+                        case LLC_V:
+                        {
+                                // @TODO
+                        }
+                        break;
+                        case LLC_S:
+                        {
+                                // @TODO
+                        }
+                        break;
+                        default:
+                                GENERIC_ASSERT;
+                }
+
+                break;
+            case REQ_S :
+                LLC_REQS;
 
                 switch (states_buf[way]) {
 
-                case INVALID :
-                case VALID :
+                case LLC_I :
+                    {
+			REQS_IV;
+                        send_mem_req(READ, req_in.addr, req_in.hprot, 0);
+                        get_mem_rsp(lines_buf[way]);
+                        send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                        hprots_buf[way]     = req_in.hprot;
+                        tags_buf[way]       = line_br.tag;
+                        dirty_bits_buf[way] = 0;
+                        states_buf[way]     = LLC_S;
+                        sharers_buf[way]    = 1 << req_in.req_id;
+                    }
+                    break;
+                case LLC_V :
 		    {
-			GETS_IV;
+			REQS_IV;
 
-			if (states_buf[way] == INVALID) {
-                            {
-                                HLS_DEFINE_PROTOCOL("send_mem_req-3");
-                                send_mem_req(READ, req_in.addr, req_in.hprot, 0);
-                                get_mem_rsp(lines_buf[way]);
-                            }
-			    hprots_buf[way]     = req_in.hprot;
-			    tags_buf[way]       = line_br.tag;
-			    dirty_bits_buf[way] = 0;
-			}
+                        word_owner_mask = owners_buf[way] & req_in.word_mask;
 
-			if (req_in.hprot == 0) {
-			    {
-                                HLS_DEFINE_PROTOCOL("send_rsp_out-1");
-                                send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
-                            }
+                        // @TODO if has owner, put req in reqs buffer and forward request
+                        HLS_DEFINE_PROTOCOL("send_rsp_out-1");
+                        send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
 
-
-			    states_buf[way] = SHARED;
-			    sharers_buf[way] = 1 << req_in.req_id;
-			} else {
-			    {
-                                HLS_DEFINE_PROTOCOL("send_rsp_out-2");
-                                send_rsp_out(RSP_EDATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
-                            }
-
-
-			    states_buf[way] = EXCLUSIVE;
-			    owners_buf[way] = req_in.req_id;
-			}
+                        states_buf[way] = LLC_S;
+                        sharers_buf[way] = 1 << req_in.req_id;
 
 		    }
 		    break;
 
-                case SHARED :
+                case LLC_S :
 		    {
-			GETS_S;
+                        word_owner_mask = owners_buf[way] & req_in.word_mask;
+
+			REQS_S;
 
 			{
                             HLS_DEFINE_PROTOCOL("send_rsp_out-3");
@@ -1143,40 +1180,13 @@ void llc::ctrl()
 		    }
 		    break;
 
-                case EXCLUSIVE :
-                case MODIFIED :
-		    {
-			GETS_EM;
-
-                        {
-                            HLS_DEFINE_PROTOCOL("send_fwd_out-0");
-                            send_fwd_out(FWD_GETS, req_in.addr, req_in.req_id, owners_buf[way]);
-                        }
-
-			sharers_buf[way] = (1 << req_in.req_id) | (1 << owners_buf[way]);
-			states_buf[way]  = SD;
-		    }
-		    break;
-
-                case SD :
-		    {
-			GETS_SD;
-
-			req_stall = true;
-			req_in_stalled_valid = true;
-			req_in_stalled = req_in;
-			req_in_stalled_tag = line_br.tag;
-			req_in_stalled_set = line_br.set;
-		    }
-		    break;
-
                 default :
                     GENERIC_ASSERT;
                 }
 
                 break;
 
-            case REQ_GETM :
+            case REQ_O :
 
                 LLC_GETM;
 
@@ -1388,6 +1398,7 @@ void llc::ctrl()
                     GENERIC_ASSERT;
                 }
                 break;
+
 
             default :
                 GENERIC_ASSERT;

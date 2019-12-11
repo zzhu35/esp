@@ -357,7 +357,7 @@ package body nocpackage is
     return ret;
   end get_unused_msb_field;
 
-
+-- @TODO
   function is_gets (
     msg : noc_msg_type)
     return boolean is
