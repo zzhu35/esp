@@ -593,7 +593,7 @@ inline void llc::send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t li
 
 // write reqs buf
 void llc::fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
-		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
+		   hsize_t hsize, llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line,
 		   sc_uint<LLC_REQS_BITS> reqs_i)
 {
     LLC_FILL_REQS;
@@ -1036,43 +1036,19 @@ void llc::ctrl()
         // Process response
         else if (is_rsp_to_get) {
 
-            // Check if response resolve the pending recall
-            if (recall_pending && (rsp_in.addr == addr_evict)) {
-                if (rsp_in.coh_msg == RSP_DATA) {
-                    lines_buf[way] = rsp_in.line;
-                    dirty_bits_buf[way] = 1;
-                }
-                recall_valid = true;
-            } else {
-                lines_buf[way] = rsp_in.line;
-                dirty_bits_buf[way] = 1;
-            }
-
-            // Check if response solves a currently stalled request
-            if ((req_stall == true) && (line_br.tag == req_in_stalled_tag)
-                && (line_br.set == req_in_stalled_set)) {
-                req_stall = false;
-            }
-
-            // Update buffers with data from response
-            // (state/sharers/owners to be fixed when recall completes)
-            if (sharers_buf[way] != 0)
-                states_buf[way] = SHARED;
-            else
-                states_buf[way] = VALID;
-
+                // @TODO handle responses
         }
 
 
         // Process new request
         else if (is_req_to_get) {
 
-#ifdef LLC_DEBUG
-            dbg_evict_addr.write(addr_evict);
-#endif
+            addr_breakdown_llc_t addr_br;
+    	    sc_uint<LLC_REQS_BITS> reqs_hit_i;
+    	    addr_br.breakdown(req_in.addr);
 
 #ifdef STATS_ENABLE
-            const bool hit = !((states_buf[way] == INVALID) || evict);
+            const bool hit = !((states_buf[way] == LLC_I) || evict);
             {
                 HLS_DEFINE_PROTOCOL("send_stats-1");
                 send_stats(hit);
@@ -1082,13 +1058,14 @@ void llc::ctrl()
             if (evict) {
                 LLC_EVICT;
 
+                // @TODO ?
                 if (way == evict_ways_buf) {
                     update_evict_ways = true;
                     evict_ways_buf++;
                 }
 
 
-                // @TODO how to implement recall?
+                // @TODO ? how to implement recall?
                 if (states_buf[way] == VALID) {
                     EVICT_V;
 
@@ -1109,7 +1086,7 @@ void llc::ctrl()
                         {
                                 send_mem_req(READ, req_in.addr, req_in.hprot, 0);
                                 get_mem_rsp(lines_buf[way]);
-                                send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                                send_rsp_out(RSP_V, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
                                 hprots_buf[way]     = req_in.hprot;
                                 tags_buf[way]       = line_br.tag;
                                 dirty_bits_buf[way] = 0;
@@ -1131,6 +1108,7 @@ void llc::ctrl()
                 }
 
                 break;
+
             case REQ_S :
                 LLC_REQS;
 
@@ -1141,7 +1119,7 @@ void llc::ctrl()
 			REQS_IV;
                         send_mem_req(READ, req_in.addr, req_in.hprot, 0);
                         get_mem_rsp(lines_buf[way]);
-                        send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                        send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
                         hprots_buf[way]     = req_in.hprot;
                         tags_buf[way]       = line_br.tag;
                         dirty_bits_buf[way] = 0;
@@ -1154,14 +1132,16 @@ void llc::ctrl()
 			REQS_IV;
 
                         word_owner_mask = owners_buf[way] & req_in.word_mask;
-
-                        // @TODO if has owner, put req in reqs buffer and forward request
-                        HLS_DEFINE_PROTOCOL("send_rsp_out-1");
-                        send_rsp_out(RSP_DATA, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
-
-                        states_buf[way] = LLC_S;
-                        sharers_buf[way] = 1 << req_in.req_id;
-
+                        if (word_owner_mask) {
+                                send_fwd_on_owner_mask(FWD_REQ_S, req_in.addr, req_in.req_id, word_owner_mask, line_buf[way]);
+                                fill_reqs(req_in.coh_msg, addr_br, 0, way,
+                            		   req_in.hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
+                            		   sc_uint<LLC_REQS_BITS> reqs_i); // save this request in reqs buffer
+                        } else { // we are lucky, no owner present
+                                send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                                states_buf[way] = LLC_S;
+                                sharers_buf[way] = 1 << req_in.req_id;
+                        }
 		    }
 		    break;
 
@@ -1680,7 +1660,7 @@ void llc::ctrl()
             }
         }
 
-
+        // update memory
         else if (is_rsp_to_get ||
                  is_req_to_get ||
                  is_dma_req_to_get ||

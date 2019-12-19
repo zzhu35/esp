@@ -37,18 +37,19 @@ typedef sc_uint<2> l2_way_t;
 #else
 typedef sc_uint<L2_WAY_BITS> l2_way_t;
 #endif
-typedef sc_uint<LLC_WAY_BITS>		llc_way_t;
-typedef sc_uint<OFFSET_BITS>		offset_t;
-typedef sc_uint<WORD_BITS>		word_offset_t;
-typedef sc_uint<WORDS_PER_LINE> word_mask_t;
-typedef sc_uint<BYTE_BITS>		byte_offset_t;
-typedef sc_uint<STABLE_STATE_BITS>	state_t;
-typedef sc_uint<LLC_STATE_BITS>	        llc_state_t;
-typedef sc_uint<UNSTABLE_STATE_BITS>	unstable_state_t;
-typedef sc_uint<CACHE_ID_WIDTH>         cache_id_t;
-typedef sc_uint<MAX_N_L2_BITS>		owner_t;
-typedef sc_uint<MAX_N_L2>		sharers_t;
-typedef sc_uint<DMA_BURST_LENGTH_BITS>  dma_length_t;
+typedef sc_uint<LLC_WAY_BITS>		    llc_way_t;
+typedef sc_uint<OFFSET_BITS>		    offset_t;
+typedef sc_uint<WORD_BITS>		    word_offset_t;
+typedef sc_uint<WORDS_PER_LINE>             word_mask_t;
+typedef sc_uint<BYTE_BITS>		    byte_offset_t;
+typedef sc_uint<STABLE_STATE_BITS>	    state_t;
+typedef sc_uint<LLC_STABLE_STATE_BITS>      llc_state_t;
+typedef sc_uint<UNSTABLE_STATE_BITS>        unstable_state_t;
+typedef sc_uint<LLC_UNSTABLE_STATE_BITS>    llc_unstable_state_t;
+typedef sc_uint<CACHE_ID_WIDTH>             cache_id_t;
+typedef sc_uint<MAX_N_L2_BITS>		    owner_t;
+typedef sc_uint<MAX_N_L2>		    sharers_t;
+typedef sc_uint<DMA_BURST_LENGTH_BITS>      dma_length_t;
 
 /*
  * L2 cache coherence channels types

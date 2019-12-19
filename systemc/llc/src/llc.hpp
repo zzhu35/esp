@@ -204,7 +204,7 @@ public:
 
     /* Functions to move around buffered lines */
     void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
-		   hsize_t hsize, llc_state_t state, hprot_t hprot, word_t word, line_t line,
+		   hsize_t hsize, llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line,
 		   sc_uint<LLC_REQS_BITS> reqs_i);
     void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hprot_t hprot, llc_state_t state,
 		  sc_uint<LLC_REQS_BITS> reqs_i);

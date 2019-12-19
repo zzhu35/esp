@@ -159,8 +159,9 @@
 
 // N bits to indicate the state
 #define STABLE_STATE_BITS	2	// depends on # of stable states
-#define LLC_STATE_BITS	        4
+#define LLC_STABLE_STATE_BITS	2
 #define UNSTABLE_STATE_BITS	4	// depends on # of unstable states
+#define LLC_UNSTABLE_STATE_BITS	4	// depends on # of unstable states
 
 // L2 Stable states
 #define INVALID			0
