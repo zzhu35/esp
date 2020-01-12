@@ -254,6 +254,7 @@
 #define RSP_RVK_O      4
 #define RSP_INV_ACK    5
 #define RSP_NACK       6
+#define RSP_WB         7
 
 // DMA burst not currently supported in Spandex
 // #define DMA_BURST_LENGTH_BITS 32
