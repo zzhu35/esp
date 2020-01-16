@@ -860,15 +860,17 @@ void llc::ctrl()
                 // Response
                 is_rsp_to_get = true;
 
-            } else if ((can_get_req_in && !req_stall) || (!req_stall && req_in_stalled_valid)) {
+        } else if (((can_get_req_in || set_conflict) && !req_stall) || (!req_stall && req_in_stalled_valid)) {
                 // New request
 
-                if (req_in_stalled_valid) {
+            if (req_in_stalled_valid) {
                     req_in_stalled_valid = false;
                     req_in = req_in_stalled;
-                } else {
+            } else if (set_conflict) {
+                    req_in = llc_req_conflict;
+            } else {
                     do_get_req = true;
-                }
+            }
 
                 is_req_to_get = true;
 
@@ -1038,11 +1040,95 @@ void llc::ctrl()
 
 
 
-        // @TODO reqs buf
         // Process response
         else if (is_rsp_to_get) {
 
                 // @TODO handle responses
+                line_breakdown_t<llc_tag_t, llc_set_t> line_br;
+                sc_uint<LLC_REQS_BITS> reqs_hit_i;
+                line_br.llc_line_breakdown(rsp_in.addr);
+                reqs_lookup(line_br, reqs_hit_i);
+                switch (rsp_in.coh_msg) {
+                        case RSP_INV_ACK:
+                        {
+                                if (--reqs[reqs_hit_i].invack_cnt == 0) {
+                                        switch (reqs[reqs_hit_i].state) {
+                                                case LLC_SO:
+                                                {
+                                                        if (reqs[reqs_hit_i].msg == REQ_O) {
+                                                                send_rsp_out(RSP_O, req_in.addr, 0, req_in.req_id, 0, 0, 0);
+                                                        }
+                                                        else {
+                                                                send_rsp_out(RSP_Odata, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                                                        }
+                                                        // @TODO update owner in buf
+                                                        reqs[reqs_hit_i].state = LLC_I;
+                                                        reqs_cnt++;
+                                                }
+                                                break;
+                                                case LLC_SV:
+                                                {
+                                                        if (reqs[reqs_hit_i].msg == REQ_WT) {
+                                                                send_rsp_out(RSP_WT, req_in.addr, 0, req_in.req_id, 0, 0, 0);
+                                                        }
+                                                        else {
+                                                                send_rsp_out(RSP_WTdata, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                                                        }
+                                                        states_buf[way] = LLC_V;
+                                                        reqs[reqs_hit_i].state = LLC_I;
+                                                        reqs_cnt++;
+                                                }
+                                                break;
+                                                case LLC_SWB:
+                                                {
+                                                        // @TODO
+                                                }
+                                                break;
+                                                case LLC_SI:
+                                                {
+                                                        states_buf[way] = LLC_I;
+                                                        reqs[reqs_hit_i].state = LLC_I;
+                                                        reqs_cnt++;
+
+                                                }
+                                                break;
+                                                default:
+                                                {
+                                                        // nothing
+                                                }
+                                                break;
+                                        }
+                                }
+                        }
+                        break;
+
+                        case RSP_RVK_O:
+                        {
+                                switch (reqs[reqs_hit_i].state) {
+                                        case LLC_OS:
+                                        {
+                                                // @TODO FWD_REQ_S or RVK_O ?
+                                        }
+                                        break;
+                                        case LLC_OV:
+                                        {
+                                                // @TODO
+                                        }
+                                        break;
+                                        case LLC_OWB:
+                                        {
+                                                // @TODO
+                                        }
+                                        break;
+                                        default:
+                                        {
+                                                // nothing
+                                        }
+                                        break;
+                                }
+                        }
+                        break;
+                }
         }
 
 
@@ -1055,18 +1141,15 @@ void llc::ctrl()
 
             set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
 
-#ifdef STATS_ENABLE
-            const bool hit = !((states_buf[way] == LLC_I) || evict);
+            if (set_conflict)
             {
-                HLS_DEFINE_PROTOCOL("send_stats-1");
-                send_stats(hit);
-            }
-#endif
+                    llc_req_conflict = req_in;
+            } else {
 
             if (evict) {
                 LLC_EVICT;
 
-                // @TODO ?
+                // @TODO implement evict?
                 if (way == evict_ways_buf) {
                     update_evict_ways = true;
                     evict_ways_buf++;
@@ -1074,7 +1157,7 @@ void llc::ctrl()
 
 
                 // @TODO ? how to implement recall?
-                if (states_buf[way] == VALID) {
+                if (states_buf[way] == LLC_V) {
                     EVICT_V;
 
                     if (dirty_bits_buf[way]) {
@@ -1082,7 +1165,7 @@ void llc::ctrl()
                         send_mem_req(WRITE, addr_evict, hprots_buf[way], lines_buf[way]);
                     }
                 }
-                states_buf[way] = INVALID;
+                states_buf[way] = LLC_I;
             }
 
             switch (req_in.coh_msg) {
@@ -1227,23 +1310,18 @@ void llc::ctrl()
 
                 case LLC_S :
 		    {
-			REQO_S;
+                        REQO_S;
                         // invalidate
+                        int cnt = 0;
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_UNROLL_LOOP(ON, "set-ownermask");
                                 if (sharers_buf[way] & (1 << i)) {
                                         send_fwd_out(FWD_INV, req_in.addr, req_id, i);
+                                        cnt ++;
                                 }
                         }
-                        // update owner
-                        for (int i = 0; i < WORDS_PER_LINE; i++) {
-                                HLS_UNROLL_LOOP(ON, "set-ownermask");
-                                if (req_in.word_mask & (1 << i)) {
-                                        lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
-                                }
-                        }
-                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
-
+                        fill_reqs(req_in.coh_msg, addr_br, 0, way, req_in.hsize, LLC_SO, req_in.hprot, 0, line_buf[way], reqs_hit_i); // save this request in reqs buffer
+                        reqs[reqs_hit_i].invack_cnt = cnt;
 		    }
 		    break;
 
@@ -1299,14 +1377,16 @@ void llc::ctrl()
                         {
                             REQWT_S;
                             // invalidate
+                            int cnt = 0;
                             for (int i = 0; i < MAX_N_L2; i++) {
                                     HLS_UNROLL_LOOP(ON, "set-ownermask");
                                     if (sharers_buf[way] & (1 << i)) {
                                             send_fwd_out(FWD_INV, req_in.addr, req_id, i);
+                                            cnt ++;
                                     }
                             }
                             fill_reqs(req_in.coh_msg, addr_br, 0, way, req_in.hsize, LLC_SV, req_in.hprot, 0, line_buf[way], reqs_hit_i); // save this request in reqs buffer
-
+                            reqs[reqs_hit_i].invack_cnt = cnt;
                         }
                         break;
 
@@ -1364,14 +1444,16 @@ void llc::ctrl()
     		    {
     			    REQO_S;
                             // invalidate
+                            int cnt = 0;
                             for (int i = 0; i < MAX_N_L2; i++) {
                                     HLS_UNROLL_LOOP(ON, "set-ownermask");
                                     if (sharers_buf[way] & (1 << i)) {
                                             send_fwd_out(FWD_INV, req_in.addr, req_id, i);
+                                            cnt ++;
                                     }
                             }
                             fill_reqs(req_in.coh_msg, addr_br, 0, way, req_in.hsize, LLC_SO, req_in.hprot, 0, line_buf[way], reqs_hit_i); // save this request in reqs buffer
-
+                            reqs[reqs_hit_i].invack_cnt = cnt;
 
     		    }
     		    break;
@@ -1427,14 +1509,16 @@ void llc::ctrl()
                     {
                         REQWT_S;
                         // invalidate
+                        int cnt = 0;
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_UNROLL_LOOP(ON, "set-ownermask");
                                 if (sharers_buf[way] & (1 << i)) {
                                         send_fwd_out(FWD_INV, req_in.addr, req_id, i);
+                                        cnt ++;
                                 }
                         }
                         fill_reqs(req_in.coh_msg, addr_br, 0, way, req_in.hsize, LLC_SV, req_in.hprot, 0, line_buf[way], reqs_hit_i); // save this request in reqs buffer
-
+                        reqs[reqs_hit_i].invack_cnt = cnt;
                     }
                     break;
 
@@ -1461,6 +1545,8 @@ void llc::ctrl()
 
             default :
                 GENERIC_ASSERT;
+            }
+
             }
 	}
 

@@ -111,7 +111,7 @@ public:
 
     // Local registers
 
-    llc_reqs_buf_t	 reqs[LLC_N_REQS]; // MSHR
+    llc_reqs_buf_t	 reqs[LLC_N_REQS]; // multi request buffer
 
     llc_tag_t	 tags_buf[LLC_WAYS];
     llc_state_t	 states_buf[LLC_WAYS];
@@ -223,6 +223,8 @@ private:
     sc_bv<LLC_BOOKMARK_WIDTH> bookmark_tmp;
 #endif
 
+    bool set_conflict;
+    llc_req_in_t llc_req_conflict;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
     bool rst_stall;
     bool flush_stall;

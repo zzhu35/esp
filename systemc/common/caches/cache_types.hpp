@@ -801,7 +801,7 @@ public:
     hsize_t             hsize;
     word_offset_t	w_off;
     byte_offset_t	b_off;
-    llc_state_t	state;
+    llc_unstable_state_t	state;
     hprot_t		hprot;
     invack_cnt_calc_t	invack_cnt;
     word_t		word;
