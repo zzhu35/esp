@@ -49,7 +49,6 @@ typedef sc_uint<LLC_UNSTABLE_STATE_BITS>    llc_unstable_state_t;
 typedef sc_uint<CACHE_ID_WIDTH>             cache_id_t;
 typedef sc_uint<MAX_N_L2_BITS>		    owner_t;
 typedef sc_uint<MAX_N_L2>		    sharers_t;
-typedef sc_uint<DMA_BURST_LENGTH_BITS>      dma_length_t;
 
 /*
  * L2 cache coherence channels types
@@ -354,12 +353,12 @@ public:
     inline friend ostream & operator<<(ostream& os, const llc_fwd_out_t& x) {
 	os << hex << "(coh_msg: ";
         switch (x.coh_msg) {
-        case FWD_GETS : os << "GETS"; break;
-        case FWD_GETM : os << "GETM"; break;
-        case FWD_INV : os << "INV"; break;
-        case FWD_PUTACK : os << "PUTACK"; break;
-        case FWD_GETM_LLC : os << "RECALL_EM"; break;
-        case FWD_INV_LLC : os << "RECALL_S"; break;
+        case FWD_REQ_V : os << "FWD_REQ_V"; break;
+        case FWD_REQ_S : os << "FWD_REQ_S"; break;
+        case FWD_REQ_O : os << "FWD_REQ_O"; break;
+        case FWD_REQ_Odata : os << "FWD_REQ_Odata"; break;
+        case FWD_RVK_O : os << "FWD_RVK_O"; break;
+        case FWD_INV_SPDX : os << "FWD_INV"; break;
         default: os << "UNKNOWN"; break;
         }
         os << ", addr: "       << x.addr
@@ -798,7 +797,6 @@ public:
     llc_tag_t            tag_estall;
     llc_set_t		set;
     llc_way_t            way;
-    hsize_t             hsize;
     word_offset_t	w_off;
     byte_offset_t	b_off;
     llc_unstable_state_t	state;
@@ -807,13 +805,12 @@ public:
     word_t		word;
     line_t		line;
 
-    reqs_buf_t() :
-	cpu_msg(0),
+    llc_reqs_buf_t() :
+	msg(0),
 	tag(0),
 	tag_estall(0),
 	set(0),
 	way(0),
-	hsize(0),
 	w_off(0),
 	b_off(0),
 	state(0),
@@ -829,7 +826,6 @@ public:
 	tag_estall		= x.tag_estall;
 	set			= x.set;
 	way			= x.way;
-	hsize			= x.hsize;
 	w_off			= x.w_off;
 	b_off			= x.b_off;
 	state			= x.state;
@@ -845,7 +841,6 @@ public:
 		x.tag_estall == tag_estall	&&
 		x.set	     == set		&&
 		x.way	     == way		&&
-		x.hsize	     == hsize		&&
 		x.w_off	     == w_off		&&
 		x.b_off	     == b_off		&&
 		x.state	     == state		&&
@@ -860,7 +855,6 @@ public:
 	sc_trace(tf, x.tag_estall , name + ".tag_estall");
 	sc_trace(tf, x.set , name + ".set");
 	sc_trace(tf, x.way , name + ".way");
-	sc_trace(tf, x.hsize , name + ".hsize");
 	sc_trace(tf, x.w_off , name + ".w_off");
 	sc_trace(tf, x.b_off , name + ".b_off");
 	sc_trace(tf, x.state , name + ".state");
@@ -876,7 +870,6 @@ public:
 	   << "tag_estall: " << x.tag_estall
 	   << ", set: "<< x.set
 	   << ", way: " << x.way
-	   << ", hsize: " << x.hsize
 	   << ", w_off: " << x.w_off
 	   << ", b_off: " << x.b_off
 	   << ", state: " << x.state

@@ -195,25 +195,18 @@ public:
     inline void send_stats(bool stats);
 #endif
     inline void get_mem_rsp(line_t &line);
-    inline void send_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
-                             cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
+    inline void send_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id, cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
     inline void send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id);
-    inline bool send_fwd_on_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data);
-    inline void send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
-                                 cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
+    inline bool send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data);
 
     /* Functions to move around buffered lines */
     void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
-		   hsize_t hsize, llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line,
-		   sc_uint<LLC_REQS_BITS> reqs_i);
-    void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t lines, hprot_t hprot, llc_state_t state,
+		   llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line, sc_uint<LLC_REQS_BITS> reqs_i);
+    void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t line, hprot_t hprot, llc_state_t state,
 		  sc_uint<LLC_REQS_BITS> reqs_i);
     void reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
 		     sc_uint<LLC_REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
-    void reqs_peek_flush(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
-    bool reqs_peek_fwd(line_breakdown_t<llc_tag_t, llc_set_t> line_br, sc_uint<LLC_REQS_BITS> &reqs_i,
-		       bool &reqs_hit, mix_msg_t coh_msg);
 
 private:
 
@@ -226,24 +219,12 @@ private:
     bool set_conflict;
     llc_req_in_t llc_req_conflict;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
-    bool rst_stall;
-    bool flush_stall;
     llc_set_t rst_flush_stalled_set;
     bool req_stall;
     bool req_in_stalled_valid;
     llc_req_in_t req_in_stalled;
     llc_tag_t req_in_stalled_tag;
     llc_set_t req_in_stalled_set;
-    llc_req_in_t dma_req_in;
-    bool dma_read_pending;
-    bool dma_write_pending;
-    addr_t dma_addr;
-    dma_length_t dma_read_length;
-    dma_length_t dma_length;
-    bool dma_done;
-    bool dma_start;
-    bool recall_pending;
-    bool recall_valid;
 };
 
 #endif /* __LLC_HPP__ */

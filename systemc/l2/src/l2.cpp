@@ -865,9 +865,7 @@ void l2::ctrl()
 	evict_way_dbg.write(evict_way);
 #endif
 
-#ifndef STRATUS_HLS
         wait();
-#endif
     }
     /*
      * End of main loop
@@ -1039,6 +1037,8 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
     L2_GET_FWD_IN;
 
     l2_fwd_in.nb_get(fwd_in);
+
+    // @TODO TU translation
 }
 
 void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
@@ -1046,6 +1046,8 @@ void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
     L2_GET_RSP_IN;
 
     l2_rsp_in.nb_get(rsp_in);
+
+    // @TODO TU translation
 }
 
 bool l2::get_flush()
@@ -1092,6 +1094,8 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.addr = line_addr;
     req_out.line = line;
 
+    // @TODO TU translation
+
     while (!l2_req_out.nb_can_put()) wait();
 
     l2_req_out.nb_put(req_out);
@@ -1108,6 +1112,8 @@ void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_ad
     rsp_out.to_req  = to_req;
     rsp_out.addr    = line_addr;
     rsp_out.line    = line;
+
+    // @TODO TU translation
 
     while (!l2_rsp_out.nb_can_put()) wait();
 

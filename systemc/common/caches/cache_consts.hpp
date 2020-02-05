@@ -226,6 +226,39 @@
 #define FWD_PLANE 1
 #define RSP_PLANE 2
 
+/******************
+original ESP messages
+*****************/
+
+// requests (L2 to L3)
+#define REQ_GETS		0
+#define REQ_GETM		1
+#define REQ_PUTS		2
+#define REQ_PUTM		3
+#define REQ_DMA_READ		4
+#define REQ_DMA_WRITE		5
+#define REQ_DMA_READ_BURST	6
+#define REQ_DMA_WRITE_BURST	7
+
+// forwards (L3 to L2)
+#define FWD_GETS	0
+#define FWD_GETM	1
+#define FWD_INV		2
+#define FWD_PUTACK	3
+#define FWD_GETM_LLC    4
+#define FWD_INV_LLC     5
+
+// response (L2 to L2, L2 to L3, L3 to L2)
+#define RSP_DATA	0
+#define RSP_EDATA	1
+#define RSP_INVACK	2
+#define RSP_DATA_DMA    3
+
+/******************
+original ESP messages
+*****************/
+
+
 // requests (L2/TU to L3)
 #define REQ_V          0
 #define REQ_S          1
@@ -244,7 +277,7 @@
 #define FWD_REQ_O      2
 #define FWD_REQ_Odata  3
 #define FWD_RVK_O      4
-#define FWD_INV        5
+#define FWD_INV_SPDX   5
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
 #define RSP_V          0
@@ -252,12 +285,14 @@
 #define RSP_O          2
 #define RSP_Odata      3
 #define RSP_RVK_O      4
-#define RSP_INV_ACK    5
+#define RSP_INV_ACK_SPDX    5
 #define RSP_NACK       6
 #define RSP_WB         7
+#define RSP_WT         8
+#define RSP_WTdata     9
+
 
 // DMA burst not currently supported in Spandex
-// #define DMA_BURST_LENGTH_BITS 32
 
 /*
  * AMBA Bus
