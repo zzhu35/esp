@@ -37,17 +37,18 @@ typedef sc_uint<2> l2_way_t;
 #else
 typedef sc_uint<L2_WAY_BITS> l2_way_t;
 #endif
-typedef sc_uint<LLC_WAY_BITS>		llc_way_t;
-typedef sc_uint<OFFSET_BITS>		offset_t;
-typedef sc_uint<WORD_BITS>		word_offset_t;
-typedef sc_uint<BYTE_BITS>		byte_offset_t;
-typedef sc_uint<STABLE_STATE_BITS>	state_t;
-typedef sc_uint<LLC_STATE_BITS>	        llc_state_t;
-typedef sc_uint<UNSTABLE_STATE_BITS>	unstable_state_t;
-typedef sc_uint<CACHE_ID_WIDTH>         cache_id_t;
-typedef sc_uint<MAX_N_L2_BITS>		owner_t;
-typedef sc_uint<MAX_N_L2>		sharers_t;
-typedef sc_uint<DMA_BURST_LENGTH_BITS>  dma_length_t;
+typedef sc_uint<LLC_WAY_BITS>		    llc_way_t;
+typedef sc_uint<OFFSET_BITS>		    offset_t;
+typedef sc_uint<WORD_BITS>		    word_offset_t;
+typedef sc_uint<WORDS_PER_LINE>             word_mask_t;
+typedef sc_uint<BYTE_BITS>		    byte_offset_t;
+typedef sc_uint<STABLE_STATE_BITS>	    state_t;
+typedef sc_uint<LLC_STABLE_STATE_BITS>      llc_state_t;
+typedef sc_uint<UNSTABLE_STATE_BITS>        unstable_state_t;
+typedef sc_uint<LLC_UNSTABLE_STATE_BITS>    llc_unstable_state_t;
+typedef sc_uint<CACHE_ID_WIDTH>             cache_id_t;
+typedef sc_uint<MAX_N_L2_BITS>		    owner_t;
+typedef sc_uint<MAX_N_L2>		    sharers_t;
 
 /*
  * L2 cache coherence channels types
@@ -352,12 +353,12 @@ public:
     inline friend ostream & operator<<(ostream& os, const llc_fwd_out_t& x) {
 	os << hex << "(coh_msg: ";
         switch (x.coh_msg) {
-        case FWD_GETS : os << "GETS"; break;
-        case FWD_GETM : os << "GETM"; break;
-        case FWD_INV : os << "INV"; break;
-        case FWD_PUTACK : os << "PUTACK"; break;
-        case FWD_GETM_LLC : os << "RECALL_EM"; break;
-        case FWD_INV_LLC : os << "RECALL_S"; break;
+        case FWD_REQ_V : os << "FWD_REQ_V"; break;
+        case FWD_REQ_S : os << "FWD_REQ_S"; break;
+        case FWD_REQ_O : os << "FWD_REQ_O"; break;
+        case FWD_REQ_Odata : os << "FWD_REQ_Odata"; break;
+        case FWD_RVK_O : os << "FWD_RVK_O"; break;
+        case FWD_INV_SPDX : os << "FWD_INV"; break;
         default: os << "UNKNOWN"; break;
         }
         os << ", addr: "       << x.addr
@@ -421,18 +422,20 @@ public:
     }
 };
 
+
 class llc_req_in_t
 {
 
 public:
 
-    mix_msg_t	  coh_msg;	// gets, getm, puts, putm, dma_read, dma_write
+    mix_msg_t	  coh_msg;
     hprot_t	  hprot; // used for dma write burst end (0) and non-aligned addr (1)
     line_addr_t	  addr;
     line_t	  line; // used for dma burst length too
     cache_id_t    req_id;
     word_offset_t word_offset;
     word_offset_t valid_words;
+    word_mask_t   word_mask;
 
     llc_req_in_t() :
 	coh_msg(coh_msg_t(0)),
@@ -441,7 +444,8 @@ public:
 	line(0),
 	req_id(0),
         word_offset(0),
-        valid_words(0)
+        valid_words(0),
+        word_mask(0)
     {}
 
     inline llc_req_in_t& operator  = (const llc_req_in_t& x) {
@@ -452,6 +456,7 @@ public:
 	req_id      = x.req_id;
         word_offset = x.word_offset;
         valid_words = x.valid_words;
+        word_mask   = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const llc_req_in_t& x) const {
@@ -461,7 +466,8 @@ public:
 		x.line        == line        &&
 		x.req_id      == req_id      &&
 		x.word_offset == word_offset &&
-		x.valid_words == valid_words);
+		x.valid_words == valid_words &&
+                x.word_mask   == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const llc_req_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg,     name + ".coh_msg ");
@@ -471,10 +477,12 @@ public:
 	sc_trace(tf, x.req_id,      name + ".req_id");
 	sc_trace(tf, x.word_offset, name + ".word_offset");
 	sc_trace(tf, x.valid_words, name + ".valid_words");
+	sc_trace(tf, x.word_mask,   name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_req_in_t& x) {
 	os << hex << "(coh_msg: ";
         switch (x.coh_msg) {
+                // @TODO
         case REQ_GETS : os << "GETS"; break;
         case REQ_GETM : os << "GETM"; break;
         case REQ_PUTS : os << "PUTS"; break;
@@ -762,6 +770,106 @@ public:
 	   << ", set: "<< x.set
 	   << ", way: " << x.way
 	   << ", hsize: " << x.hsize
+	   << ", w_off: " << x.w_off
+	   << ", b_off: " << x.b_off
+	   << ", state: " << x.state
+	   << ", hprot: " << x.hprot
+	   << ", invack_cnt: " << x.invack_cnt
+	   << ", word: " << x.word
+	   << ", line: ";
+	for (int i = WORDS_PER_LINE-1; i >= 0; --i) {
+	    int base = i*BITS_PER_WORD;
+	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
+	}
+	os << ")";
+	return os;
+    }
+};
+
+
+class llc_reqs_buf_t
+{
+
+public:
+
+    mix_msg_t           msg;
+    llc_tag_t		tag;
+    llc_tag_t            tag_estall;
+    llc_set_t		set;
+    llc_way_t            way;
+    word_offset_t	w_off;
+    byte_offset_t	b_off;
+    llc_unstable_state_t	state;
+    hprot_t		hprot;
+    invack_cnt_calc_t	invack_cnt;
+    word_t		word;
+    line_t		line;
+
+    llc_reqs_buf_t() :
+	msg(0),
+	tag(0),
+	tag_estall(0),
+	set(0),
+	way(0),
+	w_off(0),
+	b_off(0),
+	state(0),
+	hprot(0),
+	invack_cnt(0),
+    	word(0),
+    	line(0)
+    {}
+
+    inline llc_reqs_buf_t& operator = (const llc_reqs_buf_t& x) {
+	msg			= x.msg;
+	tag			= x.tag;
+	tag_estall		= x.tag_estall;
+	set			= x.set;
+	way			= x.way;
+	w_off			= x.w_off;
+	b_off			= x.b_off;
+	state			= x.state;
+	hprot			= x.hprot;
+	invack_cnt		= x.invack_cnt;
+	word			= x.word;
+	line			= x.line;
+	return *this;
+    }
+    inline bool operator     == (const llc_reqs_buf_t& x) const {
+	return (x.msg    == msg		&&
+		x.tag	     == tag		&&
+		x.tag_estall == tag_estall	&&
+		x.set	     == set		&&
+		x.way	     == way		&&
+		x.w_off	     == w_off		&&
+		x.b_off	     == b_off		&&
+		x.state	     == state		&&
+		x.hprot	     == hprot		&&
+		x.invack_cnt == invack_cnt	&&
+		x.word	     == word		&&
+		x.line	     == line);
+    }
+    inline friend void sc_trace(sc_trace_file *tf, const llc_reqs_buf_t& x, const std::string & name) {
+	sc_trace(tf, x.msg , name + ".msg ");
+	sc_trace(tf, x.tag , name + ".tag");
+	sc_trace(tf, x.tag_estall , name + ".tag_estall");
+	sc_trace(tf, x.set , name + ".set");
+	sc_trace(tf, x.way , name + ".way");
+	sc_trace(tf, x.w_off , name + ".w_off");
+	sc_trace(tf, x.b_off , name + ".b_off");
+	sc_trace(tf, x.state , name + ".state");
+	sc_trace(tf, x.hprot , name + ".hprot");
+	sc_trace(tf, x.invack_cnt , name + ".invack_cnt");
+	sc_trace(tf, x.word , name + ".word");
+	sc_trace(tf, x.line , name + ".line");
+    }
+    inline friend ostream & operator<<(ostream& os, const llc_reqs_buf_t& x) {
+	os << hex << "("
+	   << "msg: " << x.msg
+	   << "tag: " << x.tag
+	   << "tag_estall: " << x.tag_estall
+	   << ", set: "<< x.set
+	   << ", way: " << x.way
 	   << ", w_off: " << x.w_off
 	   << ", b_off: " << x.b_off
 	   << ", state: " << x.state

@@ -98,8 +98,8 @@
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
 
-#define LLC_GETS \
-    bookmark_tmp |= BM_LLC_GETS
+#define LLC_REQS \
+    bookmark_tmp |= BM_LLC_REQS
 
 #define LLC_GETM \
     bookmark_tmp |= BM_LLC_GETM
@@ -132,16 +132,16 @@
 #define GENERIC_ASSERT \
     asserts_tmp |= AS_GENERIC
 
-#define GETS_IV							 \
+#define REQS_IV							 \
     bookmark_tmp |= BM_GETS_IV
 
-#define GETS_S							 \
+#define REQS_S							 \
     bookmark_tmp |= BM_GETS_S;					 \
     if (sharers_buf[way] == 0) asserts_tmp |= AS_GETS_S_NOSHARE; \
     if ((sharers_buf[way] & (1 << req_in.req_id)) != 0)		 \
 	asserts_tmp |= AS_GETS_S_ALREADYSHARE
 
-#define GETS_EM				     \
+#define REQS_O				     \
     bookmark_tmp |= BM_GETS_EM;			\
     if (owner_buf[way] == req_in.req_id)	\
 	asserts_tmp |= AS_GETS_EM_ALREADYOWN
@@ -306,6 +306,35 @@
 
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
+
+#define LLC_FILL_REQS							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-fill-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Fill reqs.")
+
+#define LLC_PUT_REQS					\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-put-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Put reqs.")
+
+#define LLC_REQS_LOOKUP							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-lookup-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs lookup rsp.")
+
+#define LLC_REQS_LOOKUP_LOOP				\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-lookup-loop-unroll")
+
+#define LLC_REQS_PEEK_REQ							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-req-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek req.")
+
+#define LLC_REQS_PEEK_REQ_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-req-loop-unroll")
+
+#define LLC_REQS_PEEK_FWD							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-fwd-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek fwd.")
+
+#define LLC_REQS_PEEK_FWD_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-fwd-loop-unroll")
 
 #define LLC_GETS
 #define LLC_GETM

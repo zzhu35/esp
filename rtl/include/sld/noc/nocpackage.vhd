@@ -60,25 +60,34 @@ package nocpackage is
 
   -- -- Message type encoding
   -- -- Cachable data plane 1 -> request messages
-  constant REQ_GETS_W   : noc_msg_type := "000";  --Get Shared (word)
-  constant REQ_GETM_W   : noc_msg_type := "001";  --Get Modified (word)
-  constant REQ_PUTS     : noc_msg_type := "010";  --Put Shared/Exclusive
-  constant REQ_PUTM     : noc_msg_type := "011";  --Put Modified
-  constant REQ_GETS_B   : noc_msg_type := "100";  --Get Shared (Byte)
-  constant REQ_GETS_HW  : noc_msg_type := "101";  --Get Shared (Half Word)
-  constant REQ_GETM_B   : noc_msg_type := "110";  --Get Modified (Byte)
-  constant REQ_GETM_HW  : noc_msg_type := "111";  --Get Modified (Half word)
+  constant REQ_V          : noc_msg_type := "000";  -- Self-invalidated Read
+  constant REQ_S          : noc_msg_type := "001";  -- Writer-invalidated Read
+  constant REQ_WT         : noc_msg_type := "010";  -- Write-through Write (overwrites all requested data)
+  constant REQ_O          : noc_msg_type := "011";  -- Ownership Write (overwrites all requested data)
+  constant REQ_WTdata     : noc_msg_type := "100";  -- Write-through Write (returns the value before update)
+  constant REQ_Odata      : noc_msg_type := "101";  -- Ownership Write (returns the value before update)
+  constant REQ_WB         : noc_msg_type := "110";  -- Write-back owned data
   -- Cachable data plane 2 -> forwarded messages
-  constant FWD_GETS       : noc_msg_type := "000";
-  constant FWD_GETM       : noc_msg_type := "001";
-  constant FWD_INV        : noc_msg_type := "010";  --Invalidation
-  constant FWD_PUT_ACK    : noc_msg_type := "011";  --Put Acknowledge
-  constant FWD_GETM_NOCOH : noc_msg_type := "100";  --Recall on exclusive/modified
-  constant FWD_INV_NOCOH  : noc_msg_type := "101";  --Recall on shared
+  constant FWD_REQ_V      : noc_msg_type := "000";
+  constant FWD_REQ_S      : noc_msg_type := "001";
+  constant FWD_REQ_O      : noc_msg_type := "010";
+  constant FWD_REQ_Odata  : noc_msg_type := "011";
+  constant FWD_RVK_O      : noc_msg_type := "100";
+  constant FWD_INV        : noc_msg_type := "101";
   -- Cachable data plane 3 -> response messages
-  constant RSP_DATA     : noc_msg_type := "000";  --CacheLine
-  constant RSP_EDATA    : noc_msg_type := "001";  --Cache Line (Exclusive)
-  constant RSP_INV_ACK  : noc_msg_type := "010";  --Invalidation Acknowledge
+  constant RSP_V          : noc_msg_type := "000";
+  constant RSP_S          : noc_msg_type := "001";
+  constant RSP_O          : noc_msg_type := "010";
+  constant RSP_Odata      : noc_msg_type := "011";
+  constant RSP_RVK_O      : noc_msg_type := "100";
+  constant RSP_INV_ACK    : noc_msg_type := "101";
+
+
+-- ********
+-- Temporarily not used by Spandex
+-- ********
+
+
   -- [LLC|Non]-Coherent DMA request plane 6 and response plane 4
   constant DMA_TO_DEV    : noc_msg_type := "001";
   constant DMA_FROM_DEV  : noc_msg_type := "010";
@@ -348,7 +357,7 @@ package body nocpackage is
     return ret;
   end get_unused_msb_field;
 
-
+-- @TODO
   function is_gets (
     msg : noc_msg_type)
     return boolean is
