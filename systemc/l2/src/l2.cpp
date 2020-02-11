@@ -1038,7 +1038,32 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 
     l2_fwd_in.nb_get(fwd_in);
 
-    // @TODO TU translation
+#if USE_SPANDEX == 1
+    switch (fwd_in.coh_msg)
+    {
+        case FWD_REQ_V:
+            // @TODO
+            break;
+        case FWD_REQ_S:
+            fwd_in.coh_msg = FWD_GETS;
+            break;
+        case FWD_REQ_O:
+        case FWD_REQ_Odata:
+            fwd_in.coh_msg = FWD_GETM;
+            break;
+        case FWD_RVK_O:
+            // save as inv for MESI
+        case FWD_INV_SPDX:
+            fwd_in.coh_msg = FWD_INV;
+            break;
+        case FWD_WB_ACK:
+            fwd_in.coh_msg = FWD_PUTACK;
+            break;
+        default:
+            break;
+
+    }
+#endif
 }
 
 void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
@@ -1047,7 +1072,23 @@ void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
 
     l2_rsp_in.nb_get(rsp_in);
 
-    // @TODO TU translation
+#if USE_SPANDEX == 1
+    switch (rsp_in.coh_msg)
+    {
+        case RSP_S:
+            rsp_in.coh_msg = RSP_DATA;
+            break;
+        case RSP_O:
+            rsp_in.coh_msg = RSP_DATA;
+            break;
+        case RSP_Odata:
+            rsp_in.coh_msg = RSP_DATA;
+            break;
+        defaut:
+            break;
+    }
+
+#endif
 }
 
 bool l2::get_flush()
@@ -1094,7 +1135,21 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.addr = line_addr;
     req_out.line = line;
 
-    // @TODO TU translation
+    switch (req_out.coh_msg)
+    {
+        case REQ_GETS:
+            req_out.coh_msg = REQ_S;
+            break;
+        case REQ_GETM:
+            req_out.coh_msg = REQ_O;
+        case REQ_PUTS:
+            // silent eviction
+            return;
+        case REQ_PUTM:
+            req_out.coh_msg = REQ_WB;
+        default:
+            break;
+    }
 
     while (!l2_req_out.nb_can_put()) wait();
 
@@ -1113,7 +1168,18 @@ void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_ad
     rsp_out.addr    = line_addr;
     rsp_out.line    = line;
 
-    // @TODO TU translation
+    switch (rsp_out.coh_msg)
+    {
+        case RSP_DATA:
+            // @TODO check what type of request that has data?
+            break;
+        case RSP_INVACK:
+            // @TODO inv_ack or rsp_rvko?
+            rsp_out.coh_msg = RSP_INV_ACK_SPDX;
+            break;
+        default:
+            break;
+    }
 
     while (!l2_rsp_out.nb_can_put()) wait();
 

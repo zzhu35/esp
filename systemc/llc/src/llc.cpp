@@ -858,7 +858,7 @@ void llc::ctrl()
                                                         states_buf[way] = LLC_I;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
-                
+
                                                 }
                                                 break;
                                                 default:
@@ -870,7 +870,7 @@ void llc::ctrl()
                                 }
                         }
                         break;
-                
+
                         case RSP_RVK_O:
                         {
                                 switch (reqs[reqs_hit_i].state) {
@@ -1376,7 +1376,7 @@ void llc::ctrl()
                 // send response
                 {
                         HLS_DEFINE_PROTOCOL("send_rsp_1330");
-                        send_rsp_out(RSP_WB, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                        send_fwd_out(FWD_WB_ACK, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
 
                 }
                 for (int i = 0; i < WORDS_PER_LINE; i++) {

@@ -255,7 +255,7 @@ original ESP messages
 #define RSP_DATA_DMA    3
 
 /******************
-original ESP messages
+end original ESP messages
 *****************/
 
 
@@ -278,6 +278,7 @@ original ESP messages
 #define FWD_REQ_Odata  3
 #define FWD_RVK_O      4
 #define FWD_INV_SPDX   5
+#define FWD_WB_ACK     6
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
 #define RSP_V          0
@@ -287,9 +288,8 @@ original ESP messages
 #define RSP_RVK_O      4
 #define RSP_INV_ACK_SPDX    5
 #define RSP_NACK       6
-#define RSP_WB         7
-#define RSP_WT         8
-#define RSP_WTdata     9
+#define RSP_WT         7
+#define RSP_WTdata     8
 
 
 // DMA burst not currently supported in Spandex
