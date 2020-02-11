@@ -3,7 +3,7 @@
 
 ### Supported technology libraries ###
 ASICLIBS =
-FPGALIBS = virtex7 virtexup
+FPGALIBS = virtex7 virtexu virtexup
 
 
 ### Check for technology library definition ###
@@ -28,6 +28,7 @@ $(error proFPGA tools version must be "$(PROFPGA_REQUIRED_VER)")
 endif
 
 endif
+
 
 ### Create FPGA part name ###
 ifneq ($(filter $(TECHLIB),$(FPGALIBS)),)
@@ -57,7 +58,7 @@ CROSS_COMPILE_LINUX = riscv64-unknown-linux-gnu-
 else
 ARCH=sparc
 CROSS_COMPILE_ELF = sparc-elf-
-CROSS_COMPILE_LINUX = sparc-leon3-linux-
+CROSS_COMPILE_LINUX = sparc-linux-
 endif
 
 ### Vivado constaints ###
@@ -121,6 +122,14 @@ ARIANE_VLOGOPT += -sv
 ARIANE_VLOGOPT += +incdir+${ARIANE}/src/common_cells/include
 ARIANE_VLOGOPT += -suppress 2583
 
+ARIANE_XLOGOPT  =
+# Define verilator env because Incisive and Xcelium do not support SVAs and UVM in Ariane
+ARIANE_XLOGOPT += -DEFINE VERILATOR
+ARIANE_XLOGOPT += -UNCLOCKEDSVA
+ARIANE_XLOGOPT += -DEFINE WT_DCACHE=1
+ARIANE_XLOGOPT += -SV
+ARIANE_XLOGOPT += -INCDIR ${ARIANE}/src/common_cells/include
+
 # Simulator switches
 ifeq ("$(CPU_ARCH)", "ariane")
 VSIMOPT += +UVM_NO_RELNOTES -64 +permissive-off
@@ -169,3 +178,6 @@ TOP_VHDL_SIM_PKGS +=
 TOP_VHDL_SIM_SRCS += $(DESIGN_PATH)/$(SIMTOP).vhd
 
 TOP_VLOG_SIM_SRCS +=
+
+# Random MAC address for Linux
+LINUX_MAC ?= $(shell echo 0000$$(dd if=/dev/urandom count=1 2>/dev/null | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\).*$$/\1\2\3\4/'))

@@ -1,5 +1,5 @@
 
-CROSS_COMPILE ?= sparc-leon3-linux-
+CROSS_COMPILE ?= sparc-linux-
 ARCH ?= sparc
 
 CFLAGS ?= -O3
@@ -8,7 +8,7 @@ CFLAGS += -Wall -Werror
 CFLAGS += -I../include
 
 OUT := libtest.a
-OBJS := test.o le.o wami.o fft.o
+OBJS := test.o le.o wami.o fft_test.o
 
 all: $(OUT)
 

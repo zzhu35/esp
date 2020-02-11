@@ -31,6 +31,9 @@
 #include <esp_accelerator.h>
 
 // <<--esp-include-->>
+#include "FFTAccelerator.h"
+#include "AdderAccelerator.h"
+#include "fft.h"
 #include "adder.h"
 #include "CounterAccelerator.h"
 #include "dummy.h"
@@ -44,6 +47,9 @@ unsigned DMA_WORD_PER_BEAT(unsigned _st);
 
 enum esp_accelerator_type {
 	// <<--esp-enum-->>
+	fftaccelerator,
+	adderaccelerator,
+	fft,
 	adder,
 	CounterAccelerator,
 	dummy,
@@ -56,6 +62,9 @@ enum esp_accelerator_type {
 
 union esp_accelerator_descriptor {
 	// <<--esp-descriptor-->>
+	struct fftaccelerator_access fftaccelerator_desc;
+	struct adderaccelerator_access adderaccelerator_desc;
+	struct fft_access fft_desc;
 	struct adder_access adder_desc;
 	struct CounterAccelerator_access CounterAccelerator_desc;
 	struct dummy_access dummy_desc;
@@ -80,9 +89,8 @@ struct esp_accelerator_thread_info {
 
 typedef struct esp_accelerator_thread_info esp_thread_info_t;
 
-void esp_alloc(contig_handle_t *handle, void *swbuf, size_t size, size_t in_size);
+void *esp_alloc(size_t size);
 void esp_run(esp_thread_info_t cfg[], unsigned nacc);
-void esp_dump(void *swbuf, size_t offset, size_t size);
 void esp_cleanup();
 
 #endif /* __ESPLIB_H__ */

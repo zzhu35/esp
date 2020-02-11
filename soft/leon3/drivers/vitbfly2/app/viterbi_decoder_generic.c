@@ -447,13 +447,16 @@ uint8_t* decode(ofdm_param *ofdm, frame_param *frame, uint8_t *in) {
   }
 
   printf("Allocate hardware buffer of size %zu\n", size);
-  if (contig_alloc(size, &mem)) {
+  if (contig_alloc(size, &mem) == NULL) {
 	  fprintf(stderr, "Error: cannot allocate %zu contig bytes", size);
 	  exit(EXIT_FAILURE);
   }
 
-  desc.esp.contig = contig_to_khandle(mem);
   desc.esp.run = true;
+  desc.esp.coherence = ACC_COH_NONE;
+  desc.esp.p2p_store = 0;
+  desc.esp.p2p_nsrcs = 0;
+  desc.esp.contig = contig_to_khandle(mem);
 
   printf("\n================================================\n");
   printf("Viterbi butterfly accelerator invocations: \r");

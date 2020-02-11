@@ -58,6 +58,8 @@ entity tile_io is
     uart_rtsn          : out std_ulogic;
     --TODO: REMOVE THIS and use NoC proxies
     irq                : out std_logic_vector(CFG_NCPU_TILE * 2 - 1 downto 0);
+    timer_irq          : out std_logic_vector(CFG_NCPU_TILE - 1 downto 0);
+    ipi                : out std_logic_vector(CFG_NCPU_TILE - 1 downto 0);
     -- NOC
     noc1_input_port    : out noc_flit_type;
     noc1_data_void_in  : out std_ulogic;
@@ -505,6 +507,25 @@ begin
         pready      => plic_pready,
         pslverr     => plic_pslverr);
 
+    riscv_clint_ahb_wrap_1: riscv_clint_ahb_wrap
+      generic map (
+        hindex  => clint_hindex,
+        hconfig => clint_hconfig,
+        NHARTS  => CFG_NCPU_TILE)
+      port map (
+        clk       => clk,
+        rstn      => rst,
+        timer_irq => timer_irq,
+        ipi       => ipi,
+        ahbsi     => ahbsi,
+        ahbso     => ahbso(clint_hindex));
+
+  end generate;
+
+  unused_riscv_irq_gen: if GLOB_CPU_ARCH /= ariane generate
+    irq <= (others => '0');
+    timer_irq <= (others => '0');
+    ipi <= (others => '0');
   end generate;
 
   ----------------------------------------------------------------------
@@ -569,7 +590,7 @@ begin
 
     -- Dedicated Video Memory with dual-port interface.
 
-    -- SLV 7: 0xB0100000 - 0xB01FFFFF
+    -- SLV 7: 0x30100000 - 0x301FFFFF
     ahbmo2(NAHBMST - 1 downto 1)   <= (others => ahbm_none);
     ahbso2(1 to NAHBSLV - 1) <= (others => ahbs_none);
     ahbram_dp_1 : ahbram_dp
@@ -738,7 +759,7 @@ begin
 
     pready <= '1';
 
-    if noc_apbi.psel(2) = '1' then
+    if noc_apbi.psel(2) = '1' and GLOB_CPU_ARCH = ariane then
       pready <= plic_pready;
     end if;
 
@@ -809,6 +830,7 @@ begin
       local_x     => this_local_x,
       axitran     => GLOB_CPU_AXI,
       little_end  => GLOB_CPU_AXI,
+      narrow_noc  => 1,
       eth_dma     => 0,
       cacheline   => 1,
       l2_cache_en => 0)

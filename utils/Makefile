@@ -87,10 +87,10 @@ help:
 	@echo "                                         generate the corresponding SoC map (may run as dependency)."
 	@echo " make esp-xconfig                      : open a GUI to configure and generate the SoC map."
 	@echo " make sim                              : compile all source files and run an RTL simulation of ESP"
-	@echo "                                         (requires Modelsim 10.5c)."
 	@echo " make sim-gui                          : compile all source files and run an RTL simulation of ESP"
-	@echo "                                         with graphic user interface (requires Modelsim 10.5c)."
+	@echo "                                         with graphic user interface"
 	@echo " make vivado-syn                       : generate a bitstream of ESP (requires Vivado 2018.2)."
+	@echo " make vivado-update                    : run synthesis and implemenation without touching the current Vivado project setup"
 	@echo " make vivado-prog-fpga                 : load the generated bitstream to FPGA. This target requires"
 	@echo "                                         the environment variable FPGA_HOST set to the network ip of"
 	@echo "                                         the machine with FTDI or JTAG link to the FPGA. The FPGA_HOST"
@@ -143,6 +143,13 @@ help:
 	@echo "                                         generic \"linux\" target when the variable CPU_ARCH is set to"
 	@echo "                                         leon3 (see \"make linux\")."
 	@echo
+	@echo
+	@echo " === utilities ==="
+	@echo
+	@echo " make [x]uart                          : open a UART console for remote FPGA; UART_IP and UART_PORT must be defined"
+	@echo " make ssh                              : log into the ESP instance after booting Linux; SSH_IP and SSH_PORT must be defined"
+	@echo "                                         and the default password for root is openesp."
+	@echo
 
 
 
@@ -194,21 +201,24 @@ socmap.vhd: .esp_config grlib_config.vhd top.vhd
 	fi
 	@echo ""
 	@echo "Generating ESP configuration..."
-	@python3 $(ESP_ROOT)/utils/socmap/esp_creator_batch.py $(NOC_WIDTH) $(TECHLIB)
+	@python3 $(ESP_ROOT)/utils/socmap/esp_creator_batch.py $(NOC_WIDTH) $(TECHLIB) $(LINUX_MAC)
 
 socmap.h: socmap.vhd
 
 ESPLINK_SRCS = $(wildcard $(ESP_ROOT)/utils/esplink/src/*.c)
 ESPLINK_HDRS = $(wildcard $(ESP_ROOT)/utils/esplink/src/*.h)
 esplink: socmap.h $(ESPLINK_HDRS) $(ESPLINK_SRCS)
-	$(QUIET_CC) gcc -O3 -Wall -Werror -fmax-errors=5 -I$(ESP_ROOT)/utils/esplink/src/ -I$(DESIGN_PATH) $(ESPLINK_SRCS) -o $@
+	$(QUIET_CC) gcc -O3 -Wall -Werror -fmax-errors=5 \
+		-DESPLINK_IP=\"$(ESPLINK_IP)\" -DPORT=$(ESPLINK_PORT) \
+		-I$(ESP_ROOT)/utils/esplink/src/ -I$(DESIGN_PATH) \
+		$(ESPLINK_SRCS) -o $@
 
 esp-config: socmap.vhd
 
 esp-xconfig: grlib_config.vhd
 	@echo ""
 	@echo "Running interactive ESP configuration..."
-	@python3 $(ESP_ROOT)/utils/socmap/esp_creator.py $(NOC_WIDTH) $(TECHLIB)
+	@python3 $(ESP_ROOT)/utils/socmap/esp_creator.py $(NOC_WIDTH) $(TECHLIB) $(LINUX_MAC)
 
 esp-config-clean:
 	$(QUIET_CLEAN)$(RM) \
@@ -224,6 +234,7 @@ esp-config-distclean: esp-config-clean
 		socmap.vhd	\
 		esp_global.vhd	\
 		.esp_config	\
+		.soft_config	\
 		ariane.dts	\
 		mmi64_regs.h	\
 		power.h		\
@@ -231,9 +242,9 @@ esp-config-distclean: esp-config-clean
 		esplink
 
 
-.PHONY: esp-xconfig esp-defconfig esp-config-clean esp-config-distclean
+.PHONY: esplink esp-xconfig esp-defconfig esp-config-clean esp-config-distclean
 
-### RTL simulator executables for Modelsim SE ###
+### RTL simulator executables ###
 VLIB = vlib
 VCOM = vcom -quiet $(VCOMOPT)
 VLOG = vlog -quiet $(VLOGOPT)
@@ -376,23 +387,23 @@ sysroot.cpio: sysroot.files
 
 linux-build/.config: $(LINUXSRC)/arch/sparc/configs/$(LINUX_CONFIG)
 	@$(MAKE) linux-build
-	$(QUIET_MAKE)ARCH=sparc CROSS_COMPILE=sparc-leon3-linux- $(MAKE)  O=${PWD}/linux-build -C ${LINUXSRC} $(LINUX_CONFIG)
+	$(QUIET_MAKE)ARCH=sparc CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE)  O=${PWD}/linux-build -C ${LINUXSRC} $(LINUX_CONFIG)
 
 linux-build/vmlinux: sysroot.cpio linux-build/.config
-	$(QUIET_MAKE)ARCH=sparc CROSS_COMPILE=sparc-leon3-linux- $(MAKE) -C linux-build
+	$(QUIET_MAKE)ARCH=sparc CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) -C linux-build
 
 linux.dsu: sysroot-update
-	$(QUIET_BUILD)mklinuximg linux-build/vmlinux $@
+	$(QUIET_BUILD)mklinuximg -ethmac $(LINUX_MAC) linux-build/vmlinux $@
 
 linux.bin: linux.dsu
-	$(QUIET_OBJCP) sparc-leon3-linux-objcopy -S -O binary --change-addresses -0x40000000 $< $@
+	$(QUIET_OBJCP) $(CROSS_COMPILE_LINUX)objcopy -S -O binary --change-addresses -0x40000000 $< $@
 
 linux: linux.bin
 
 linux-clean: sysroot-clean
 	$(QUIET_CLEAN)
 	@if test -e linux-build; then \
-		ARCH=sparc CROSS_COMPILE=sparc-leon3-linux- $(MAKE) --quiet -C linux-build clean; \
+		ARCH=sparc CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) --quiet -C linux-build clean; \
 	fi;
 
 linux-distclean: sysroot-distclean
@@ -658,9 +669,6 @@ sysroot-clean:
 	$(QUIET_CLEAN)$(RM) sysroot.files sysroot.cpio
 	@$(MAKE) --quiet -C $(DRIVERS)/dvi/app clean
 	@if test -e linux-build; then \
-		ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE_LINUX) KSRC=$(PWD)/linux-build CONTIG_ALLOC_PATH=$(CONTIG_ALLOC_PATH) $(MAKE) --quiet -C $(ESP_CORE_PATH) clean; \
-		ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE_LINUX) KSRC=$(PWD)/linux-build CONTIG_ALLOC_PATH=$(CONTIG_ALLOC_PATH) $(MAKE) --quiet -C $(ESP_CORE_PATH)/../esp_cache clean; \
-		ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE_LINUX) KSRC=$(PWD)/linux-build $(MAKE) -C $(CONTIG_ALLOC_PATH) clean; \
 		$(MAKE) --quiet accelerators-driver-clean; \
 	fi;
 	@$(MAKE) --quiet accelerators-app-clean
@@ -675,6 +683,9 @@ linux-build:
 .PHONY: soft soft-clean soft-distclean linux linux-clean linux-distclean
 
 .PHONY: sysroot-update sysroot-clean sysroot-distclean
+
+# The following PHONY guarantees that we execute the program set by TEST_PROGRAM
+.PHONY: systest.bin ram.srec
 
 barec:
 	$(QUIET_MKDIR)mkdir -p $@
@@ -930,13 +941,22 @@ xcelium/xmready: xcelium/xilinx_lib check_all_srcs.old $(PKG_LIST)
 		echo $(SPACES)"$(XLOG) -work profpga -INCDIR ... $$rtl"; \
 		$(XLOG) -work profpga $(PROFPGA_INCDIR_XCELIUM) $$rtl || exit; \
 	done; \
-	echo $(SPACES)"### Compile VHDL packages ###"; \
 	grep --quiet "work" cds.lib; \
 	res=$$?; \
 	if [ $$res != 0 ]; then \
 		mkdir -p work; \
 		echo "DEFINE work $(DESIGN_PATH)/xcelium/work" >> cds.lib; \
 	fi; \
+	echo $(SPACES)"### Compile Ariane source files ###"; \
+	rtl=$(ESP_ROOT)/socs/common/ariane_soc_pkg.sv; \
+	echo $(SPACES)"$(XLOG) -work work $(ARIANE_XLOGOPT) $$rtl"; \
+	$(XLOG) -work work $(ARIANE_XLOGOPT) $$rtl || exit; \
+	for ver in $(VERILOG_ARIANE); do \
+		rtl=$(ARIANE)/$$ver; \
+		echo $(SPACES)"$(XLOG) -work work $(ARIANE_XLOGOPT) $$rtl"; \
+		$(XLOG) -work work $(ARIANE_XLOGOPT) $$rtl || exit; \
+	done; \
+	echo $(SPACES)"### Compile VHDL packages ###"; \
 	for vhd in $(SLDGEN_VHDL_RTL_PKGS); do \
 		rtl=$$vhd; \
 		echo $(SPACES)"$(XCOM) -work work $$rtl"; \
@@ -970,8 +990,13 @@ xcelium/xmready: xcelium/xilinx_lib check_all_srcs.old $(PKG_LIST)
 		done; \
 	echo $(SPACES)"### Compile Verilog source files ###"; \
 		for rtl in $(VLOG_SRCS); do \
-			echo $(SPACES)"$(XLOG) -work work -INCDIR ... $$rtl"; \
-			$(XLOG) -INCDIR $(ESP_ROOT)/rtl/src/opencores/ge_1000baseX -work work $$rtl || exit; \
+			echo $(SPACES)"$(XLOG) $$rtl"; \
+			$(XLOG) -work work $(THIRDPARTY_INCDIR_XCELIUM) $$rtl || exit; \
+		done; \
+	echo $(SPACES)"### Compile SystemVerilog source files ###"; \
+		for rtl in $(SVLOG_SRCS); do \
+			echo $(SPACES)"$(XLOG) -SV $$rtl"; \
+			$(XLOG) -SV -work work $(THIRDPARTY_INCDIR_XCELIUM) $$rtl || exit; \
 		done; \
 	echo $(SPACES)"### Compile IPs simulation files ###"; \
 	echo $(SPACES)"$(XLOG) -work work $(XILINX_VIVADO)/data/verilog/src/glbl.v"; \
@@ -1010,7 +1035,7 @@ xmsim-clean:
 	$(QUIET_CLEAN)
 
 xmsim-distclean: xmsim-clean
-	$(QUIET_CLEAN) $(RM) xcelium
+	$(QUIET_CLEAN) $(RM) xcelium INCA_libs xcelium.d
 
 .PHONY: xmsim xmsim-gui xmsim-compile xmsim-clean xmsim-distclean
 
@@ -1019,6 +1044,7 @@ xmsim-distclean: xmsim-clean
 
 incisive/ncready: incisive/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	$(QUIET_MKDIR)mkdir -p incisive
+	@echo $(SPACES)"WARNING: The source code for Ariane cannot be compiled with Incisive!!! If you need Ariane, please switch to Modelsim or Xcelium";
 	@cd incisive; \
 	echo $(SPACES)"### Compile proFPGA source files ###"; \
 	grep --quiet "profpga" cds.lib; \
@@ -1037,13 +1063,13 @@ incisive/ncready: incisive/xilinx_lib check_all_srcs.old $(PKG_LIST)
 		echo $(SPACES)"$(NCLOG) -work profpga -INCDIR ... $$rtl"; \
 		$(NCLOG) -work profpga $(PROFPGA_INCDIR_INCISIVE) $$rtl || exit; \
 	done; \
-	echo $(SPACES)"### Compile VHDL packages ###"; \
 	grep --quiet "work" cds.lib; \
 	res=$$?; \
 	if [ $$res != 0 ]; then \
 		mkdir -p work; \
 		echo "DEFINE work $(DESIGN_PATH)/incisive/work" >> cds.lib; \
 	fi; \
+	echo $(SPACES)"### Compile VHDL packages ###"; \
 	for vhd in $(SLDGEN_VHDL_RTL_PKGS); do \
 		rtl=$$vhd; \
 		echo $(SPACES)"$(NCCOM) -work work $$rtl"; \
@@ -1077,8 +1103,19 @@ incisive/ncready: incisive/xilinx_lib check_all_srcs.old $(PKG_LIST)
 		done; \
 	echo $(SPACES)"### Compile Verilog source files ###"; \
 		for rtl in $(VLOG_SRCS); do \
-			echo $(SPACES)"$(NCLOG) -work work -INCDIR ... $$rtl"; \
-			$(NCLOG) -INCDIR $(ESP_ROOT)/rtl/src/opencores/ge_1000baseX -work work $$rtl || exit; \
+			echo $(SPACES)"$(NCLOG) $$rtl"; \
+			$(NCLOG) -work work $(THIRDPARTY_INCDIR_INCISIVE) $$rtl || exit; \
+		done; \
+	echo $(SPACES)"### Compile SystemVerilog source files ###"; \
+		for rtl in $(SVLOG_SRCS); do \
+			echo $$rtl | grep --quiet "ariane"; \
+			res=$$?; \
+			if [ $$res == 0 ]; then \
+				echo $(SPACES)"### Skip Ariane source files ###"; \
+			else \
+				echo $(SPACES)"$(NCLOG) -SV $$rtl"; \
+				$(NCLOG) -SV -work work $(THIRDPARTY_INCDIR_INCISIVE) $$rtl || exit; \
+			fi; \
 		done; \
 	echo $(SPACES)"### Compile IPs simulation files ###"; \
 	echo $(SPACES)"$(NCLOG) -work work $(XILINX_VIVADO)/data/verilog/src/glbl.v"; \
@@ -1297,6 +1334,15 @@ endif
 		fi; \
 		echo "import_ip -files ./mig/mig.xci" >> $@; \
 		echo "generate_target  all [get_ips mig] -force " >> $@; \
+	elif test -r $(ESP_ROOT)/constraints/$(BOARD)/mig.tcl; then \
+		echo $(SPACES)"INFO including MIG IP"; \
+		mkdir -p vivado/mig; \
+		cp $(ESP_ROOT)/constraints/$(BOARD)/mig.tcl ./vivado/mig; \
+		if test -r $(ESP_ROOT)/constraints/$(BOARD)/mig.csv; then \
+			cp $(ESP_ROOT)/constraints/$(BOARD)/mig.csv ./vivado/mig; \
+		fi; \
+		echo "source ./mig/mig.tcl" >> $@; \
+		echo "generate_target  all [get_ips mig] -force " >> $@; \
 	else \
 		echo $(SPACES)"WARNING: no MIG IP was found"; \
 	fi;
@@ -1328,15 +1374,19 @@ vivado/syn.tcl: vivado
 	@echo "open_project $(DESIGN).xpr" > $@
 	@echo "update_ip_catalog" >> $@
 	@echo "update_compile_order -fileset sources_1" >> $@
-	@echo "synth_design -rtl -name rtl_1" >> $@
+	@echo "reset_run impl_1" >> $@
+	@echo "reset_run synth_1" >> $@
+#	@echo "synth_design -rtl -name rtl_1" >> $@
 #	@echo "synth_design -directive runtimeoptimize -resource_sharing off -keep_equivalent_registers -no_lc -rtl -name rtl_1" >> $@
 #	@echo "synth_design -resource_sharing off -keep_equivalent_registers -no_lc -rtl -name rtl_1" >> $@
-	@echo "launch_runs synth_1" >> $@
+	@echo "launch_runs synth_1 -jobs 12" >> $@
 	@echo "get_ips" >> $@
 	@echo "wait_on_run -timeout 360 synth_1" >> $@
 	@echo "set_msg_config -suppress -id {Drc 23-20}" >> $@
-	@echo "launch_runs impl_1 -to_step write_bitstream" >> $@
+	@echo "launch_runs impl_1 -jobs 12" >> $@
 	@echo "wait_on_run -timeout 360 impl_1" >> $@
+	@echo "launch_runs impl_1 -to_step write_bitstream" >> $@
+	@echo "wait_on_run -timeout 60 impl_1" >> $@
 
 vivado/program.tcl: vivado
 	$(QUIET_INFO)echo "generating programming script for $(PART)"
@@ -1414,6 +1464,23 @@ vivado-syn: vivado-setup
 	else \
 		echo $(SPACES)"ERROR: bistream not found; synthesis failed"; \
 	fi; \
+
+vivado-update: vivado vivado/syn.tcl
+	$(QUIET_INFO)echo "Updating implementaiton with Vivado"
+	@cd vivado; \
+	if ! test -r $(DESIGN).xpr; then \
+		echo -n $(SPACES)"Error: Vivado project \"$(DESIGN)\" does not exist. Please run 'make vivado-syn' first"; \
+	else \
+		vivado $(VIVADO_BATCH_OPT) -source syn.tcl | tee ../vivado_syn.log; \
+		cd ../; \
+		bit=vivado/$(DESIGN).runs/impl_1/$(TOP).bit; \
+		if test -r $$bit; then \
+			rm -rf $(TOP).bit; \
+			ln -s $$bit; \
+		else \
+			echo $(SPACES)"ERROR: bistream not found; synthesis failed"; \
+		fi; \
+	fi;
 
 vivado-prog-fpga: vivado/program.tcl
 	@cd vivado; \
@@ -1524,21 +1591,21 @@ espmon-distclean: espmon-clean
 ifneq ($(findstring profpga, $(BOARD)),)
 fpga-program: profpga-prog-fpga
 	$(QUIET_INFO) echo "Waiting for DDR calibration..."
-	@sleep 3
+	@sleep 5
 else
 fpga-program: vivado-prog-fpga
 	$(QUIET_INFO) echo "Waiting for DDR calibration..."
-	@sleep 3
+	@sleep 5
 endif
 
 
-fpga-run: esplink
+fpga-run: esplink soft
 	@./esplink --reset
 	@./esplink --brom -i prom.bin
 	@./esplink --dram -i systest.bin
 	@./esplink --reset
 
-fpga-run-linux: esplink
+fpga-run-linux: esplink fpga-program soft
 	@./esplink --reset
 	@./esplink --brom -i prom.bin
 	@./esplink --dram -i linux.bin
@@ -1581,3 +1648,54 @@ distclean:	check_all_srcs-distclean 	\
 
 
 .PHONY: clean distclean
+
+
+### Utils ###
+
+ifneq ($(UART_IP),)
+ifeq ($(UART_PORT),)
+$(error Please define both UART_IP and UART_PORT or neither)
+endif
+
+ttyV0:
+	@socat pty,link=ttyV0,waitslave,mode=777 tcp:$(UART_IP):$(UART_PORT) &
+	@sleep 1
+
+uart: ttyV0
+	@VIRTUAL_DEVICE=$$(readlink ttyV0); minicom -p $$VIRTUAL_DEVICE;
+
+ifneq ($(DISPLAY),)
+xuart: ttyV0
+	@VIRTUAL_DEVICE=$$(readlink ttyV0); (xterm -e "minicom -p $$VIRTUAL_DEVICE" &);
+else
+xuart:
+	$(MAKE) uart
+endif
+
+else
+uart:
+	@echo "*** UART_IP and UART_PORT are not defined. Open a serial console manually on the target UART device ***"
+	@echo "*** If the FPGA board is connected to your computer, connect to the corresponding '/dev/ttyUSBx' device ***"
+
+xuart: uart
+endif
+
+
+ifneq ($(SSH_IP),)
+
+ifeq ($(SSH_PORT),)
+SSH_PORT = 22
+endif
+
+ssh:
+	@ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p $(SSH_PORT) root@$(SSH_IP)
+
+else
+
+ssh:
+	@echo "*** SSH_IP and SSH_PORT are not defined. Look for the IP addressed leased to the ESP instance at the end of the boot process ***"
+	@echo "*** If you are on the same network as the FPGA boar, the default SSH_PORT is 22 ***"
+
+endif
+
+.PHONY: uart xuart ssh

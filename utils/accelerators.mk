@@ -44,6 +44,7 @@ THIRDPARTY_VHDL       = $(foreach acc, $(THIRDPARTY_ACCELERATORS), $(foreach rtl
 
 THIRDPARTY_INCDIR_MODELSIM = $(foreach dir, $(THIRDPARTY_INCDIR), +incdir+$(dir))
 THIRDPARTY_INCDIR_XCELIUM  = $(foreach dir, $(THIRDPARTY_INCDIR), -INCDIR $(dir))
+THIRDPARTY_INCDIR_XCELIUM += -INCDIR $(ESP_ROOT)/rtl/src/opencores/ge_1000baseX
 THIRDPARTY_INCDIR_INCISIVE = $(THIRDPARTY_INCDIR_XCELIUM)
 
 
@@ -71,11 +72,11 @@ $(CHISEL_ACCELERATORS):
 	$(QUIET_BUILD)
 	@if ! test -e $(CHISEL_PATH)/build/$@; then \
 		$(MAKE) sbt-run && rm -rf $(ESP_ROOT)/tech/$(TECHLIB)/acc/$@; \
-		cp -r $(CHISEL_PATH)/build/$@ $(ESP_ROOT)/tech/$(TECHLIB)/acc/; \
 	fi;
 	@if test -e $(ESP_ROOT)/tech/$(TECHLIB)/acc/installed.log; then \
 		sed -i '/$@/d' $(ESP_ROOT)/tech/$(TECHLIB)/acc/installed.log; \
 	fi; \
+	cp -r $(CHISEL_PATH)/build/$@ $(ESP_ROOT)/tech/$(TECHLIB)/acc/; \
 	echo "$@" >> $(ESP_ROOT)/tech/$(TECHLIB)/acc/installed.log;
 
 chisel-accelerators: $(CHISEL_ACCELERATORS)
@@ -264,6 +265,17 @@ sldgen-distclean: sldgen-clean
 .PHONY: sldgen-clean sldgen-distclean
 
 ## Device Drivers ##
+
+### Configuration-dependent CFLAGS ###
+
+#### FFT Accelerator
+FFT_FX_WIDTH=$(shell cat .esp_config | grep "acc FFT " | cut -d " " -f 9 | cut -d "_" -f 2 | sed 's/fx//g')
+ifeq ($(FFT_FX_WIDTH),)
+FFT_FX_WIDTH=32
+endif
+
+EXTRA_CFLAGS += -DFFT_FX_WIDTH=$(FFT_FX_WIDTH)
+
 $(ACCELERATORS-driver): sysroot linux-build/vmlinux
 	@if test -e $(DRIVERS)/$(@:-driver=)/linux/$(@:-driver=).c; then \
 		echo '   ' MAKE $@; mkdir -p sysroot/opt/drivers; \
@@ -284,7 +296,7 @@ $(ACCELERATORS-driver-clean):
 $(ACCELERATORS-app): sysroot
 	@if [ `ls -1 $(DRIVERS)/$(@:-app=)/app/*.c 2>/dev/null | wc -l ` -gt 0 ]; then \
 		echo '   ' MAKE $@; mkdir -p sysroot/applications/test/; \
-		CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) -C $(DRIVERS)/$(@:-app=)/app; \
+		CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) EXTRA_CFLAGS=$(EXTRA_CFLAGS) -C $(DRIVERS)/$(@:-app=)/app; \
 		if [ `ls -1 $(DRIVERS)/$(@:-app=)/app/*.exe 2>/dev/null | wc -l ` -gt 0 ]; then \
 			echo '   ' CP $@; cp $(DRIVERS)/$(@:-app=)/app/*.exe sysroot/applications/test/; \
 		else \
@@ -300,7 +312,7 @@ $(ACCELERATORS-app-clean):
 $(ACCELERATORS-barec): barec
 	@if [ `ls -1 $(DRIVERS)/$(@:-barec=)/barec/*.c 2>/dev/null | wc -l ` -gt 0 ]; then \
 		echo '   ' MAKE $@; \
-		CROSS_COMPILE=$(CROSS_COMPILE_ELF) DESIGN_PATH=$(DESIGN_PATH) $(MAKE) -C $(DRIVERS)/$(@:-barec=)/barec; \
+		CROSS_COMPILE=$(CROSS_COMPILE_ELF) DESIGN_PATH=$(DESIGN_PATH) $(MAKE) EXTRA_CFLAGS=$(EXTRA_CFLAGS) -C $(DRIVERS)/$(@:-barec=)/barec; \
 		if [ `ls -1 $(DRIVERS)/$(@:-barec=)/barec/*.bin 2>/dev/null | wc -l ` -gt 0 ]; then \
 			echo '   ' CP $@; cp $(DRIVERS)/$(@:-barec=)/barec/*.bin barec; \
 		fi; \
@@ -325,7 +337,7 @@ accelerators-driver-clean: $(ACCELERATORS-driver-clean) contig-clean esp-clean e
 
 accelerators-app: $(ACCELERATORS-app)
 
-accelerators-app-clean: $(ACCELERATORS-app-clean) test-clean
+accelerators-app-clean: $(ACCELERATORS-app-clean) test-clean libesp-clean
 
 accelerators-barec: $(ACCELERATORS-barec)
 
@@ -346,4 +358,7 @@ probe-clean:
 test-clean:
 	$(QUIET_CLEAN) CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) -C $(DRIVERS)/test clean
 
-.PHONY: accelerators-driver accelerators-driver-clean accelerators-app accelerators-app-clean accelerators-barec accelerators-barec-clean probe-clean contig-clean esp-clean esp-cache-clean test-clean
+libesp-clean:
+	$(QUIET_CLEAN) CROSS_COMPILE=$(CROSS_COMPILE_LINUX) $(MAKE) -C $(DRIVERS)/libesp clean
+
+.PHONY: accelerators-driver accelerators-driver-clean accelerators-app accelerators-app-clean accelerators-barec accelerators-barec-clean probe-clean contig-clean esp-clean esp-cache-clean test-clean libesp-clean
