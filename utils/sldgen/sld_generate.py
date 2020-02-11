@@ -420,7 +420,34 @@ def write_acc_signals(f, dma_width):
   f.write("    data_out        : out std_logic_vector(width-1 downto 0));\n")
   f.write("end component;\n")
   f.write("\n")
-
+  # add attribute 'keep' to fix a bug with Vivado HLS accelerators
+  f.write('attribute keep : string;\n')
+  f.write('attribute keep of start_state : signal is "true";\n')
+  f.write('attribute keep of ap_start_reg : signal is "true";\n')
+  f.write('attribute keep of acc_done_int : signal is "true";\n')
+  f.write('attribute keep of load_ctrl_write   : signal is "true";\n')
+  f.write('attribute keep of load_ctrl_full_n  : signal is "true";\n')
+  f.write('attribute keep of load_ctrl_din     : signal is "true";\n')
+  f.write('attribute keep of store_ctrl_write  : signal is "true";\n')
+  f.write('attribute keep of store_ctrl_full_n : signal is "true";\n')
+  f.write('attribute keep of store_ctrl_din    : signal is "true";\n')
+  f.write('attribute keep of dma_read_ctrl_data : signal is "true";\n')
+  f.write('attribute keep of dma_write_ctrl_data : signal is "true";\n')
+  f.write('attribute keep of dma_read_ctrl_valid_n : signal is "true";\n')
+  f.write('attribute keep of dma_write_ctrl_valid_n : signal is "true";\n')
+  f.write('attribute keep of dma_read_chnl_ready_n : signal is "true";\n')
+  f.write('attribute keep of dma_write_chnl_valid_n : signal is "true";\n')
+  f.write('attribute keep of load_ctrl_full : signal is "true";\n')
+  f.write('attribute keep of store_ctrl_full : signal is "true";\n')
+  f.write('attribute keep of load_chnl_empty : signal is "true";\n')
+  f.write('attribute keep of store_chnl_full : signal is "true";\n')
+  f.write('attribute keep of load_chnl_empty_n : signal is "true";\n')
+  f.write('attribute keep of load_chnl_read    : signal is "true";\n')
+  f.write('attribute keep of load_chnl_data    : signal is "true";\n')
+  f.write('attribute keep of store_chnl_write  : signal is "true";\n')
+  f.write('attribute keep of store_chnl_full_n : signal is "true";\n')
+  f.write('attribute keep of store_chnl_data   : signal is "true";\n')
+  f.write('\n')
 
 def write_acc_port_map(f, acc, dma_width, rst, is_noc_interface, is_vivadohls_if):
 
@@ -994,14 +1021,14 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
         f.write("begin  -- mapping\n\n")
         for impl in acc.hlscfg:
           f.write("\n")
-          f.write("  " + impl.name + "_gen: if hls_conf = HLSCFG_" + acc.name.upper() + "_" + impl.name.upper() + " generate\n")
+          f.write("  impl_" + impl.name + "_gen: if hls_conf = HLSCFG_" + acc.name.upper() + "_" + impl.name.upper() + " generate\n")
           if acc.hls_tool == 'stratus_hls':
             f.write("    " + acc.name + "_" + impl.name + "_i: " + acc.name + "_" + impl.name + "\n")
             write_acc_port_map(f, acc, dma_width, "rst", False, False)
           else:
             f.write("    " + acc.name + "_" + impl.name + "_top_i: " + acc.name + "_" + impl.name + "_top\n")
             write_acc_port_map(f, acc, dma_width, "rst", False, True)
-          f.write("  end generate " +  impl.name + "_gen;\n\n")
+          f.write("  end generate impl_" +  impl.name + "_gen;\n\n")
         f.write("end mapping;\n\n")
   f.close()
   ftemplate.close()
@@ -1428,6 +1455,9 @@ for acc in accelerators:
     else:
       print("    ERROR: Missing memory footprint (MB) for " + acc)
       sys.exit(1)
+    if accd.data == 0:
+      print("    WARNING: memory footprint (MB) for " + acc + " is 0; defaulting to 4")
+      accd.data = 4
     if "device_id" in xmlacc.attrib:
       accd.device_id = xmlacc.get('device_id')
     else:
@@ -1440,8 +1470,8 @@ for acc in accelerators:
         print("    ERROR: Wrong HLS tool for " + acc)
         sys.exit(1)
     else:
-      print("    ERROR: Missing HLS tool for " + acc)
-      sys.exit(1)
+      # Default to stratus_hls for Chisel, because the interface matches the Stratus HLS flow
+      accd.hls_tool = 'stratus_hls'
 
     reg = 16
     for xmlparam in xmlacc.findall('param'):

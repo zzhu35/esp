@@ -540,6 +540,7 @@ package tile is
       axitran     : integer range 0 to 1 := 0;
       little_end  : integer range 0 to 1 := 0;
       eth_dma     : integer range 0 to 1 := 0;
+      narrow_noc  : integer range 0 to 1 := 0;
       cacheline   : integer;
       l2_cache_en : integer := 0);
     port (
@@ -642,6 +643,19 @@ package tile is
       interrupt_data_in : out misc_noc_flit_type;
       interrupt_full    : in  std_ulogic);
   end component;
+
+  component fixen_64to32 is
+    port (
+      clk         : in  std_ulogic;
+      rstn        : in  std_ulogic;
+      bypass_i    : in  std_ulogic;
+      in_data_i   : in  std_logic_vector(ARCH_BITS - 1 downto 0);
+      in_valid_i  : in  std_ulogic;
+      in_ready_o  : out std_ulogic;
+      out_data_o  : out std_logic_vector(ARCH_BITS - 1 downto 0);
+      out_valid_o : out std_ulogic;
+      out_ready_i : in  std_ulogic);
+  end component fixen_64to32;
 
   component tile_dvfs
     generic (

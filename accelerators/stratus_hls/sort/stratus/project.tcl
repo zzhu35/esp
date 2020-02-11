@@ -30,6 +30,12 @@ if {$TECH eq "zynq7000"} {
     set SIM_CLOCK_PERIOD 10000.0
     set_attr default_input_delay      0.1
 }
+if {$TECH eq "virtexu"} {
+    # Library is in ns, but simulation uses ps!
+    set CLOCK_PERIOD 8
+    set SIM_CLOCK_PERIOD 8000.0
+    set_attr default_input_delay      0.1
+}
 if {$TECH eq "virtexup"} {
     # Library is in ns, but simulation uses ps!
     set CLOCK_PERIOD 6.4
@@ -62,7 +68,7 @@ define_system_module tb ../tb/system.cpp ../tb/sc_main.cpp
 ######################################################################
 set DEFAULT_ARGV "1024 16"
 
-foreach dma [list 32] {
+foreach dma [list 32 64] {
     define_io_config * IOCFG_DMA$dma -DDMA_WIDTH=$dma
 
     define_system_config tb TESTBENCH_DMA$dma -io_config IOCFG_DMA$dma

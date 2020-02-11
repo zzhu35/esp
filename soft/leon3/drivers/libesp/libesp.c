@@ -10,7 +10,7 @@ unsigned DMA_WORD_PER_BEAT(unsigned _st)
 	return (sizeof(void *) / _st);
 }
 
-static contig_handle_t *contig;
+static contig_handle_t contig;
 static pthread_t *thread;
 
 void *accelerator_thread( void *ptr )
@@ -23,6 +23,15 @@ void *accelerator_thread( void *ptr )
 	gettime(&th_start);
 	switch (info->type) {
 	// <<--esp-ioctl-->>
+	case fftaccelerator :
+		rc = ioctl(info->fd, FFTACCELERATOR_IOC_ACCESS, info->desc.fftaccelerator_desc);
+		break;
+	case adderaccelerator :
+		rc = ioctl(info->fd, ADDERACCELERATOR_IOC_ACCESS, info->desc.adderaccelerator_desc);
+		break;
+	case fft :
+		rc = ioctl(info->fd, FFT_IOC_ACCESS, info->desc.fft_desc);
+		break;
 	case adder :
 		rc = ioctl(info->fd, ADDER_IOC_ACCESS, info->desc.adder_desc);
 		break;
@@ -57,16 +66,14 @@ void *accelerator_thread( void *ptr )
 	return NULL;
 }
 
-void esp_alloc(contig_handle_t *handle, void *swbuf, size_t size, size_t in_size)
+void *esp_alloc(size_t size)
 {
-	contig = handle;
-	contig_alloc(size, contig);
-	contig_copy_to(*contig, 0, swbuf, in_size);
+	return contig_alloc(size, &contig);
 }
 
 static void esp_prepare(struct esp_access *esp)
 {
-	esp->contig = contig_to_khandle(*contig);
+	esp->contig = contig_to_khandle(contig);
 	esp->run = true;
 }
 
@@ -81,6 +88,15 @@ static void esp_config(esp_thread_info_t cfg[], unsigned nacc)
 
 		switch (info->type) {
 		// <<--esp-prepare-->>
+		case fftaccelerator :
+			esp_prepare(&info->desc.fftaccelerator_desc.esp);
+			break;
+		case adderaccelerator :
+			esp_prepare(&info->desc.adderaccelerator_desc.esp);
+			break;
+		case fft :
+			esp_prepare(&info->desc.fft_desc.esp);
+			break;
 		case adder:
 			esp_prepare(&info->desc.adder_desc.esp);
 			break;
@@ -106,7 +122,7 @@ static void esp_config(esp_thread_info_t cfg[], unsigned nacc)
 			esp_prepare(&info->desc.vitbfly2_desc.esp);
 			break;
 		default :
-			contig_free(*contig);
+			contig_free(contig);
 			die("Error: accelerator type specified for accelerator %s not supported\n", info->devname);
 			break;
 		}
@@ -140,7 +156,7 @@ void esp_run(esp_thread_info_t cfg[], unsigned nacc)
 		const char *prefix = "/dev/";
 
 		if (strlen(info->devname) > 64) {
-			contig_free(*contig);
+			contig_free(contig);
 			die("Error: device name %s exceeds maximum length of 64 characters\n", info->devname);
 		}
 
@@ -148,7 +164,7 @@ void esp_run(esp_thread_info_t cfg[], unsigned nacc)
 
 		info->fd = open(path, O_RDWR, 0);
 		if (info->fd < 0) {
-			contig_free(*contig);
+			contig_free(contig);
 			die_errno("fopen failed\n");
 		}
 	}
@@ -185,12 +201,7 @@ void esp_run(esp_thread_info_t cfg[], unsigned nacc)
 }
 
 
-void esp_dump(void *swbuf, size_t offset, size_t size)
-{
-	contig_copy_from(swbuf, *contig, offset, size);
-}
-
 void esp_cleanup()
 {
-	contig_free(*contig);
+	contig_free(contig);
 }

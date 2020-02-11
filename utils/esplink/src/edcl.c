@@ -1,14 +1,14 @@
 #include "edcl.h"
 
 // Helper functions
-static void print_progress(u32 progress, u32 total, const char *prefix)
+static void print_progress(u64 progress, u64 total, const char *prefix)
 {
 	const u32 symbols = 40;
 	int i;
 
-	u32 percent = progress * 100 / total;
+	u64 percent = progress * 100 / total;
 
-	u32 fraction = progress * symbols / total;
+	u64 fraction = progress * symbols / total;
 
 	printf("%s: [", prefix);
 
@@ -17,7 +17,7 @@ static void print_progress(u32 progress, u32 total, const char *prefix)
 		printf("%c", c);
 	}
 
-	printf("] %d%%", percent);
+	printf("] %lld%%", percent);
 	if (progress == total)
 		printf("\n");
 	else
@@ -232,7 +232,7 @@ void die(char *s)
 
 void connect_edcl(const char *server)
 {
-	printf("Connect ESPLink\n");
+	/* printf("Connect ESPLink\n"); */
 
 	// Open socket
 	if ( (s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)

@@ -69,6 +69,9 @@ AHB2APB_HADDR = dict()
 AHB2APB_HADDR["leon3"] = 0x800
 AHB2APB_HADDR["ariane"] = 0x600
 
+# RISC-V CPU Local Interruptor index
+RISCV_CLINT_HINDEX = 2
+
 # Memory controller slave index
 DDR_HINDEX = [4, 5, 6, 7]
 
@@ -87,7 +90,7 @@ FB_HINDEX = 12
 DVFS_PINDEX = [5, 6, 7, 8]
 
 # private cache physical interrupt line
-L2_CACHE_PIRQ = 4
+L2_CACHE_PIRQ = 3
 
 # Private cache I/O-bus slave indices (more indices can be reserved if necessary)
 L2_CACHE_PINDEX = [9, 10, 11, 12]
@@ -128,7 +131,7 @@ class acc_info:
   vendor = ""
   id = -1
   idx = -1
-  irq = 3
+  irq = 5
 
 class cache_info:
   id = -1
@@ -200,6 +203,7 @@ class soc_config:
   def __init__(self, soc):
     #components
     self.tech = soc.TECH
+    self.linux_mac = soc.LINUX_MAC
     self.cpu_arch = soc.CPU_ARCH.get()
     self.ncpu = soc.noc.get_cpu_num(soc)
     self.nmem = soc.noc.get_mem_num(soc)
@@ -244,6 +248,10 @@ class soc_config:
     mem_id = 0
     # Accelerator/DMA ID assigned dynamically to each accelerator tile
     acc_id = 0
+    # Accelerator interrupt dynamically to each accelerator tile because RISC-V PLIC does not work properly with shared lines
+    acc_irq = 3
+    if self.cpu_arch == "ariane":
+      acc_irq = 5
 
     for x in range(soc.noc.rows):
       for y in range(soc.noc.cols):
@@ -299,11 +307,17 @@ class soc_config:
           acc.uppercase_name = selection
           acc.lowercase_name = selection.lower()
           acc.id = acc_id
+          acc.irq = acc_irq
           acc.idx = SLD_APB_PINDEX + acc_id
           acc.vendor = soc.noc.topology[x][y].vendor
           self.tiles[t].acc = acc
           self.accelerators.append(acc)
           acc_id = acc_id + 1
+          if self.cpu_arch == "ariane":
+            acc_irq = acc_irq + 1
+            # Skip interrupt lines reserved to Ethernet
+            if acc_irq == 11:
+              acc_irq = 13
 
           if self.coherence and (self.tiles[t].has_l2 == 1):
             l2 = cache_info()
@@ -541,7 +555,17 @@ def print_mapping(fp, esp_config):
   fp.write("    others => zero32);\n\n")
 
   #
-  fp.write("  -- Debbug access points proxy index\n")
+  fp.write("  -- RISC-V CLINT\n")
+  fp.write("  constant clint_hindex  : integer := " + str(RISCV_CLINT_HINDEX) + ";\n")
+  fp.write("  constant clint_haddr   : integer := 16#020#;\n")
+  fp.write("  constant clint_hmask   : integer := 16#fff#;\n")
+  fp.write("  constant clint_hconfig : ahb_config_type := (\n")
+  fp.write("    0 => ahb_device_reg ( VENDOR_SIFIVE, SIFIVE_CLINT0, 0, 0, 0),\n")
+  fp.write("    4 => ahb_membar(clint_haddr, '0', '0', clint_hmask),\n")
+  fp.write("    others => zero32);\n\n")
+
+  #
+  fp.write("  -- Debug access points proxy index\n")
   fp.write("  constant dbg_remote_ahb_hindex : integer := 3;\n\n")
 
   #
@@ -609,6 +633,8 @@ def print_mapping(fp, esp_config):
   fp.write("  constant fixed_ahbso_hconfig : ahb_slv_config_vector := (\n")
   fp.write("    " + str(AHBROM_HINDEX) + " => ahbrom_hconfig,\n")
   fp.write("    " + str(AHB2APB_HINDEX) + " => ahb2apb_hconfig,\n")
+  if esp_config.cpu_arch == "ariane":
+    fp.write("    " + str(RISCV_CLINT_HINDEX) + " => clint_hconfig,\n")
   for i in range(0, esp_config.nmem):
     fp.write("    " + str(DDR_HINDEX[i]) + " => mig7_hconfig(" + str(i) + "),\n")
   fp.write("    " + str(FB_HINDEX) + " => fb_hconfig,\n")
@@ -620,6 +646,8 @@ def print_mapping(fp, esp_config):
   fp.write("  constant cpu_tile_fixed_ahbso_hconfig : ahb_slv_config_vector := (\n")
   fp.write("    " + str(AHBROM_HINDEX) + " => ahbrom_hconfig,\n")
   fp.write("    " + str(AHB2APB_HINDEX) + " => ahb2apb_hconfig,\n")
+  if esp_config.cpu_arch == "ariane":
+    fp.write("    " + str(RISCV_CLINT_HINDEX) + " => clint_hconfig,\n")
   fp.write("    " + str(DDR_HINDEX[0]) + " => cpu_tile_mig7_hconfig,\n")
   fp.write("    " + str(FB_HINDEX) + " => fb_hconfig,\n")
   fp.write("    others => hconfig_none);\n\n")
@@ -1305,6 +1333,8 @@ def print_tiles(fp, esp_config):
       fp.write("    " + str(i) + " => (\n")
       fp.write("      " + str(AHBROM_HINDEX) + "  => '1',\n")
       fp.write("      " + str(AHB2APB_HINDEX) + "  => '1',\n")
+      if esp_config.cpu_arch == "ariane":
+        fp.write("      " + str(RISCV_CLINT_HINDEX) + "  => '1',\n")
       fp.write("      " + str(FB_HINDEX) + "  => to_std_logic(CFG_SVGA_ENABLE),\n")
       fp.write("      others => '0'),\n")
     if t.type == "cpu":
@@ -1480,8 +1510,9 @@ def print_ariane_devtree(fp, esp_config):
   fp.write("      device_type = \"network\";\n")
   fp.write("      interrupt-parent = <&PLIC0>;\n")
   fp.write("      interrupts = <13 0>;\n")
-  # TODO Generate random mac address
-  fp.write("      local-mac-address = [00 20 3e 02 e3 77];\n")
+  # Use randomly generated MAC address
+  mac = " ".join(esp_config.linux_mac[i:i+2] for i in range(0, len(esp_config.linux_mac), 2))
+  fp.write("      local-mac-address = [" + mac + "];\n")
   fp.write("      reg = <0x0 0x" + format(AHB2APB_HADDR[esp_config.cpu_arch], '03X') + "80000 0x0 0x10000>;\n")
   fp.write("      phy-handle = <&phy0>;\n")
   fp.write("      phy-connection-type = \"sgmii\";\n")
@@ -1500,19 +1531,20 @@ def print_ariane_devtree(fp, esp_config):
   for i in range(esp_config.nacc):
     acc = esp_config.accelerators[i]
     if acc.vendor == "sld":
-      address = format(SLD_APB_ADDR + acc.idx, "03X")
+      address = format(SLD_APB_ADDR + acc.idx, "03x")
       size = "0x100"
     else:
-      address = format(THIRDPARTY_APB_ADDR[acc.lowercase_name], "03X")
+      address = format(THIRDPARTY_APB_ADDR[acc.lowercase_name], "03x")
       size = hex(THIRDPARTY_APB_ADDR_SIZE[acc.lowercase_name])
-    fp.write("    " + acc.lowercase_name + "@" + format(AHB2APB_HADDR[esp_config.cpu_arch], '03X') + str(address) + "00 {\n")
+    fp.write("    " + acc.lowercase_name + "@" + format(AHB2APB_HADDR[esp_config.cpu_arch], '03x') + str(address) + "00 {\n")
     fp.write("      compatible = \"" + acc.vendor + "," + acc.lowercase_name + "\";\n")
     fp.write("      reg = <0x0 0x" + format(AHB2APB_HADDR[esp_config.cpu_arch], '03X') + str(address) + "00 0x0 " + size + ">;\n")
     fp.write("      interrupt-parent = <&PLIC0>;\n")
-    fp.write("      interrupts = <4>;\n")
+    fp.write("      interrupts = <" + str(acc.irq + 1) + ">;\n")
     fp.write("      reg-shift = <2>; // regs are spaced on 32 bit boundary\n")
     fp.write("      reg-io-width = <4>; // only 32-bit access are supported\n")
-    fp.write("      memory-region = <&" + acc.lowercase_name + "_reserved>;\n")
+    if acc.vendor != "sld":
+      fp.write("      memory-region = <&" + acc.lowercase_name + "_reserved>;\n")
     fp.write("    };\n")
   fp.write("  };\n")
   fp.write("};\n")

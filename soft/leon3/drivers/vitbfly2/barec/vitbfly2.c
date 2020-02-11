@@ -5,7 +5,9 @@
  */
 
 
+#ifndef __riscv
 #include <stdio.h>
+#endif
 #include <stdlib.h>
 
 #include <esp_accelerator.h>
@@ -20,7 +22,7 @@
 #define VITBFLY2_BUF_SIZE (ROWS * COLS * sizeof(unsigned))
 
 /* Size of the contiguous chunks for scatter/gather */
-#define CHUNK_SHIFT 8
+#define CHUNK_SHIFT 20
 #define CHUNK_SIZE BIT(CHUNK_SHIFT)
 #define NCHUNK ((VITBFLY2_BUF_SIZE % CHUNK_SIZE == 0) ?		\
 			(VITBFLY2_BUF_SIZE / CHUNK_SIZE) :		\
@@ -50,7 +52,13 @@ int main(int argc, char * argv[])
 	}
 
 	for (n = 0; n < ndev; n++) {
-		for (coherence = ACC_COH_NONE; coherence <= ACC_COH_NONE; coherence++) {
+#ifndef __riscv
+		for (coherence = ACC_COH_NONE; coherence <= ACC_COH_FULL; coherence++) {
+#else
+		{
+			/* TODO: Restore full test once ESP caches are integrated */
+			coherence = ACC_COH_NONE;
+#endif
 			struct esp_device *dev = &espdevs[n];
 			int done;
 			int i, j;

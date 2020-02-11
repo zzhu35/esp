@@ -11,7 +11,7 @@ TECHLIB  = virtex7
 BOARD    = profpga-xc7v2000t
 DESIGN   = esp-$(BOARD)
 LINUX_SMP = 1
-LEON3_BASE_FREQ_MHZ ?= 80
+LEON3_BASE_FREQ_MHZ ?= 50
 LEON3_STACK ?= 0x5bfffff0
 
 
@@ -45,6 +45,22 @@ TOP_VLOG_SIM_SRCS +=
 ### Xilinx Vivado hw_server ###
 FPGA_HOST ?= localhost
 XIL_HW_SERVER_PORT ?= 3121
+
+
+# IP address or host name of the host connected to the FPGA
+UART_IP ?=
+UART_PORT ?=
+
+# SSH IP address or host name of the ESP Linux instance or gateway
+SSH_IP ?=
+SSH_PORT ?= 22
+
+# ESPLink IP address or gateway (DO NOT USE HOST NAME)
+ESPLINK_IP ?=
+ESPLINK_PORT ?= 46392
+
+# MAC address for Linux if using IP address reservation (e.g. 00aabb33cc77)
+# LINUX_MAC ?=
 
 
 ### Include global Makefile ###
