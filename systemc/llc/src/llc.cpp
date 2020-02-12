@@ -1376,7 +1376,7 @@ void llc::ctrl()
                 // send response
                 {
                         HLS_DEFINE_PROTOCOL("send_rsp_1330");
-                        send_fwd_out(FWD_WB_ACK, req_in.addr, lines_buf[way], req_in.req_id, 0, 0, 0);
+                        send_fwd_out(FWD_WB_ACK, req_in.addr, 0, req_in.req_id);
 
                 }
                 for (int i = 0; i < WORDS_PER_LINE; i++) {
