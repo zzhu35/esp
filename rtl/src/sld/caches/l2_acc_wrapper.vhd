@@ -115,6 +115,7 @@ architecture rtl of l2_acc_wrapper is
   signal req_out_data_hprot     : hprot_t;
   signal req_out_data_addr      : line_addr_t;
   signal req_out_data_line      : line_t;
+  signal req_out_data_word_mask : word_mask_t;
   signal rsp_out_ready          : std_ulogic;
   signal rsp_out_valid          : std_ulogic;
   signal rsp_out_data_coh_msg   : coh_msg_t;
@@ -122,18 +123,21 @@ architecture rtl of l2_acc_wrapper is
   signal rsp_out_data_to_req    : std_logic_vector(1 downto 0);
   signal rsp_out_data_addr      : line_addr_t;
   signal rsp_out_data_line      : line_t;
+  signal rsp_out_data_word_mask : word_mask_t;
   -- NoC to cache
   signal fwd_in_ready           : std_ulogic;
   signal fwd_in_valid           : std_ulogic;
   signal fwd_in_data_coh_msg    : mix_msg_t;
   signal fwd_in_data_addr       : line_addr_t;
   signal fwd_in_data_req_id     : cache_id_t;
+  signal fwd_in_data_word_mask  : word_mask_t;
   signal rsp_in_valid           : std_ulogic;
   signal rsp_in_ready           : std_ulogic;
   signal rsp_in_data_coh_msg    : coh_msg_t;
   signal rsp_in_data_addr       : line_addr_t;
   signal rsp_in_data_line       : line_t;
   signal rsp_in_data_invack_cnt : invack_cnt_t;
+  signal rsp_in_data_word_mask  : word_mask_t;
   -- debug
   --signal asserts                : asserts_t;
   --signal bookmark               : bookmark_t;
@@ -412,6 +416,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_req_out_data_hprot     => req_out_data_hprot,
       l2_req_out_data_addr      => req_out_data_addr,
       l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
       l2_rsp_out_ready          => rsp_out_ready,
       l2_rsp_out_valid          => rsp_out_valid,
       l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
@@ -419,17 +424,20 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_out_data_to_req    => rsp_out_data_to_req,
       l2_rsp_out_data_addr      => rsp_out_data_addr,
       l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
       -- NoC to cache
       l2_fwd_in_ready           => fwd_in_ready,
       l2_fwd_in_valid           => fwd_in_valid,
       l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
       l2_rsp_in_data_addr       => rsp_in_data_addr,
       l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
       l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
       flush_done                => flush_done,
       -- debug
@@ -761,7 +769,7 @@ begin  -- architecture rtl of l2_acc_wrapper
                                                  mem_num, req_out_data_hprot,
                                                  req_out_data_addr, local_x, local_y,
                                                  '0', req_id,
-                                                 cache_x, cache_y);
+                                                 cache_x, cache_y, req_out_data_word_mask);
 
             reg.state := send_addr;
 
@@ -775,7 +783,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           coherence_req_wrreq <= '1';
 
-          if '0' & reg.coh_msg = REQ_PUTM then
+          if '0' & reg.coh_msg = REQ_WB then
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -833,6 +841,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -871,7 +880,7 @@ begin  -- architecture rtl of l2_acc_wrapper
                                                      mem_num, hprot, rsp_out_data_addr, local_x,
                                                      local_y, rsp_out_data_to_req(0),
                                                      rsp_out_data_req_id,
-                                                     cache_x, cache_y);
+                                                     cache_x, cache_y, rsp_out_data_word_mask);
 
             reg.state := send_addr;
 
@@ -884,21 +893,16 @@ begin  -- architecture rtl of l2_acc_wrapper
         if coherence_rsp_snd_full = '0' then
 
           coherence_rsp_snd_wrreq <= '1';
+          mix_msg := '0' & reg.coh_msg;
 
-          if '0' & reg.coh_msg = RSP_DATA then
+          case mix_msg is
 
-            coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-            coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-            reg.state                 := send_data;
-            reg.word_cnt              := 0;
-
-          else
-
-            coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-            coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-            reg.state                 := send_header;
-
-          end if;
+            when RSP_O | RSP_S | RSP_Odata =>
+              coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.word_cnt := 0;
+            when others =>
+              coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+          end case;
         end if;
 
       -- SEND DATA
@@ -1056,7 +1060,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       when rcv_addr =>
         if coherence_rsp_rcv_empty = '0' then
 
-          if ('0' & reg.coh_msg = RSP_INV_ACK) then
+          if ('0' & reg.coh_msg = RSP_INV_ACK_SPDX) then
 
             if rsp_in_ready = '1' then
 

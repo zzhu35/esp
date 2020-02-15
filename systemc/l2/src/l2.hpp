@@ -96,6 +96,10 @@ public:
     line_t	 line_buf[L2_WAYS];
     l2_way_t	 evict_way;
 
+#if (USE_SPANDEX == 1)
+    coh_msg_t orig_spdx_msg;
+#endif
+
     // Constructor
     SC_CTOR(l2)
 	: clk("clk")

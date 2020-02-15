@@ -56,8 +56,8 @@ package cachepackage is
 
   -- Cache data types width
   constant CPU_MSG_TYPE_WIDTH : integer := 2;
-  constant COH_MSG_TYPE_WIDTH : integer := 2;
-  constant MIX_MSG_TYPE_WIDTH : integer := 3;
+  constant COH_MSG_TYPE_WIDTH : integer := 4;
+  constant MIX_MSG_TYPE_WIDTH : integer := 5;
 
   constant HSIZE_WIDTH           : integer := 3;
   constant HPROT_WIDTH           : integer := 2;
@@ -128,7 +128,7 @@ package cachepackage is
   subtype hprot_t is std_logic_vector(HPROT_WIDTH - 1 downto 0);
   subtype word_t is std_logic_vector(BITS_PER_WORD - 1 downto 0);
   subtype line_t is std_logic_vector(BITS_PER_LINE - 1 downto 0);
-  subtype word_mask_t is std_logic_vector(BITS_PER_LINE / BITS_PER_WORD - 1 downto 0);
+  subtype word_mask_t is std_logic_vector(WORDS_PER_LINE - 1 downto 0);
   subtype coh_msg_t is std_logic_vector(COH_MSG_TYPE_WIDTH - 1 downto 0);
   subtype mix_msg_t is std_logic_vector(MIX_MSG_TYPE_WIDTH - 1 downto 0);
   -- subtype l2_set_t is std_logic_vector(SET_BITS - 1 downto 0);
@@ -170,7 +170,8 @@ package cachepackage is
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;
                         cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-                        cache_y       : yx_vec(0 to 2**NL2_MAX_LOG2 - 1))
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
     return noc_flit_type;
 
   function get_owner_bits (ncpu_bits : integer)
@@ -411,12 +412,14 @@ package body cachepackage is
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;
                         cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1))
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
     return noc_flit_type is
 
     variable header         : noc_flit_type;
     variable dest_x, dest_y : local_yx;
     variable dest_init      : integer;
+    variable reserved       : std_logic_vector(RESERVED_WIDTH-1 downto 0);
 
   begin
 
@@ -448,8 +451,8 @@ package body cachepackage is
     end if;
 
     -- compose header
-    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg,
-                            std_logic_vector(resize(unsigned(hprot), RESERVED_WIDTH)));
+    reserved := word_mask & std_logic_vector(resize(unsigned(hprot), RESERVED_WIDTH - WORDS_PER_LINE));
+    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg, reserved);
 
     return header;
 

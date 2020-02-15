@@ -350,9 +350,14 @@ void l2::ctrl()
 		{
 		    FWD_HIT_SMADX;
 
-		    if (fwd_in.coh_msg == FWD_INV)
+		    if (fwd_in.coh_msg == FWD_INV) {
+#if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+#else
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+#endif
 
+			}
 		    reqs[reqs_hit_i].state -= 4; // TODO remove hardcoding, also in other places
 
 		    break;
@@ -365,6 +370,7 @@ void l2::ctrl()
 		    if (fwd_in.coh_msg == FWD_GETS) {
 
 			for (int i = 0; i < 2; i++) {
+				// same rsp_s in spdx
 			    send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
 					 fwd_in.addr, reqs[reqs_hit_i].line);
 			    wait();
@@ -374,10 +380,15 @@ void l2::ctrl()
 
 		    } else {
 
- 			if (fwd_in.coh_msg == FWD_GETM)
- 			    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr,
- 					 reqs[reqs_hit_i].line); // to requestor
+ 			if (fwd_in.coh_msg == FWD_GETM) {
+#if (USE_SPANDEX == 0)
+ 			    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
+#else
+ 			    send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
+#endif
+			}
  			else
+			 // non coherent dma
  			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr,
  					 reqs[reqs_hit_i].line); // to LLC
 
@@ -392,9 +403,15 @@ void l2::ctrl()
 		{
 		    FWD_HIT_SIA;
 
-		    if (fwd_in.coh_msg == FWD_INV)
-			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+		    if (fwd_in.coh_msg == FWD_INV) {
 
+#if (USE_SPANDEX == 0)
+			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+#else
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+#endif
+
+			}
 		    reqs[reqs_hit_i].state = IIA;
 
 		    break;
@@ -413,6 +430,7 @@ void l2::ctrl()
 		    // FWD_NOHIT_GETS;
 
 		    for (int i = 0; i < 2; i++) {
+			// same rsp_s in spdx
 			send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
 				     fwd_in.addr, line_buf[way_hit]);
 			wait();
@@ -430,7 +448,11 @@ void l2::ctrl()
 		    if (!ongoing_flush)
 			send_inval(fwd_in.addr);
 
+#if (USE_SPANDEX == 0)
 		    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
+#else
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // to requestor
+#endif
 
 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -444,7 +466,11 @@ void l2::ctrl()
 		    if (!ongoing_flush)
 			send_inval(fwd_in.addr);
 
+#if (USE_SPANDEX == 0)
 		    send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+#else
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+#endif
 
 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -458,6 +484,8 @@ void l2::ctrl()
  		    if (!ongoing_flush)
  			send_inval(fwd_in.addr);
 
+
+			// @TODO no worries for now
  		    if (state_buf[way_hit] == EXCLUSIVE)
  			send_rsp_out(RSP_INVACK, 0, 0, fwd_in.addr, 0);
  		    else
@@ -1020,6 +1048,7 @@ inline void l2::reset_io()
     ongoing_flush = false;
     flush_set = 0;
     flush_way = 0;
+	orig_spdx_msg = 0;
 }
 
 
@@ -1038,7 +1067,35 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 
     l2_fwd_in.nb_get(fwd_in);
 
-    // @TODO TU translation
+#if (USE_SPANDEX == 1)
+    // switch (fwd_in.coh_msg)
+    // {
+    //     case FWD_REQ_V:
+    //         // @TODO
+    //         break;
+    //     // case FWD_REQ_S:
+    //     //     fwd_in.coh_msg = FWD_GETS;
+    //     //     break;
+    //     // case FWD_REQ_O:
+    //     case FWD_REQ_Odata:
+    //         fwd_in.coh_msg = FWD_GETM;
+    //         break;
+    //     case FWD_RVK_O:
+    //         // same as inv for MESI
+    //     // case FWD_INV_SPDX:
+    //     //     fwd_in.coh_msg = FWD_INV;
+    //     //     break;
+    //     // case FWD_WB_ACK:
+    //     //     fwd_in.coh_msg = FWD_PUTACK;
+    //     //     break;
+    //     default:
+    //         break;
+
+    // }
+	orig_spdx_msg = fwd_in.coh_msg;
+	if (fwd_in.coh_msg == FWD_REQ_Odata) fwd_in.coh_msg = FWD_REQ_O;
+	else if (fwd_in.coh_msg == FWD_RVK_O) fwd_in.coh_msg = FWD_INV_SPDX;
+#endif
 }
 
 void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
@@ -1047,7 +1104,25 @@ void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
 
     l2_rsp_in.nb_get(rsp_in);
 
-    // @TODO TU translation
+#if (USE_SPANDEX == 1)
+    // switch (rsp_in.coh_msg)
+    // {
+    //     // case RSP_S:
+    //     //     rsp_in.coh_msg = RSP_DATA;
+    //     //     break;
+    //     case RSP_O:
+    //         rsp_in.coh_msg = RSP_DATA;
+    //         break;
+    //     case RSP_Odata:
+    //         rsp_in.coh_msg = RSP_DATA;
+    //         break;
+    //     defaut:
+    //         break;
+    // }
+	orig_spdx_msg = rsp_in.coh_msg;
+	if (rsp_in.coh_msg == RSP_O || rsp_in.coh_msg == RSP_Odata) rsp_in.coh_msg = RSP_DATA;
+
+#endif
 }
 
 bool l2::get_flush()
@@ -1094,7 +1169,27 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.addr = line_addr;
     req_out.line = line;
 
-    // @TODO TU translation
+#if (USE_SPANDEX == 1)
+	req_out.word_mask = 15; // 0b1111
+	if (req_out.coh_msg == REQ_PUTS) return;
+    // switch (req_out.coh_msg)
+    // {
+    //     // case REQ_GETS:
+    //     //     req_out.coh_msg = REQ_S;
+    //     //     break;
+    //     // case REQ_GETM:
+    //     //     req_out.coh_msg = REQ_O;
+	// 	// 	break;
+    //     case REQ_PUTS:
+    //         // silent eviction
+    //         return;
+    //     // case REQ_PUTM:
+    //     //     req_out.coh_msg = REQ_WB;
+	// 	// 	break;
+    //     default:
+    //         break;
+    // }
+#endif
 
     while (!l2_req_out.nb_can_put()) wait();
 
@@ -1113,7 +1208,20 @@ void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_ad
     rsp_out.addr    = line_addr;
     rsp_out.line    = line;
 
-    // @TODO TU translation
+// #if USE_SPANDEX == 1
+// 	switch (rsp_out.coh_msg)
+//     {
+//         case RSP_DATA:
+//             // @TODO check what type of request that has data?
+//             break;
+//         case RSP_INVACK:
+//             // @TODO inv_ack or rsp_rvko?
+//             rsp_out.coh_msg = RSP_INV_ACK_SPDX;
+//             break;
+//         default:
+//             break;
+//     }
+// #endif
 
     while (!l2_rsp_out.nb_can_put()) wait();
 

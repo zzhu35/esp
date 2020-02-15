@@ -11,6 +11,8 @@
 #include "cache_consts.hpp"
 #include "cache_types.hpp"
 
+#define USE_SPANDEX 1
+
 #define CACHE_REPORT_INFO(text)						\
     cerr << "Info:  " << sc_object::basename() << ".\t " << text << endl;
 
@@ -89,7 +91,7 @@ inline word_t read_word(line_t line, word_offset_t w_off)
 inline void rand_wait()
 {
     int waits = rand() % 5;
-    
+
     for (int i=0; i < waits; i++) wait();
 }
 
@@ -123,7 +125,7 @@ inline word_t rand_word()
     return word;
 }
 
-inline line_t line_of_addr(addr_t addr) 
+inline line_t line_of_addr(addr_t addr)
 {
     line_t line;
 

@@ -59,7 +59,7 @@
 
 // Cache data types width
 #define CPU_MSG_TYPE_WIDTH	2
-#define COH_MSG_TYPE_WIDTH	2
+#define COH_MSG_TYPE_WIDTH	4
 #define DMA_MSG_TYPE_WIDTH      1
 #define MIX_MSG_TYPE_WIDTH	(COH_MSG_TYPE_WIDTH + DMA_MSG_TYPE_WIDTH)
 #define HSIZE_WIDTH		3
@@ -255,41 +255,41 @@ original ESP messages
 #define RSP_DATA_DMA    3
 
 /******************
-original ESP messages
+end original ESP messages
 *****************/
 
 
 // requests (L2/TU to L3)
-#define REQ_V          0
-#define REQ_S          1
+#define REQ_S          0 // same as gets
+#define REQ_O          1 // same as getm
 #define REQ_WT         2
-#define REQ_O          3
+#define REQ_WB         3 // same as putm
 #define REQ_WTdata     4
 #define REQ_Odata      5
-#define REQ_WB         6
+#define REQ_V          6
 
 /* DMA currently not used by Spandex */
 
 
 // forwards (L3 to L2/TU)
-#define FWD_REQ_V      0
-#define FWD_REQ_S      1
-#define FWD_REQ_O      2
-#define FWD_REQ_Odata  3
+#define FWD_REQ_S      0 // same as fwd_gets
+#define FWD_REQ_O      1 // same as fwd_getm
+#define FWD_INV_SPDX   2 // same as fwd_inv
+#define FWD_WB_ACK     3 // same as fwd_putack
 #define FWD_RVK_O      4
-#define FWD_INV_SPDX   5
+#define FWD_REQ_V      5
+#define FWD_REQ_Odata  6
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
-#define RSP_V          0
-#define RSP_S          1
-#define RSP_O          2
-#define RSP_Odata      3
-#define RSP_RVK_O      4
-#define RSP_INV_ACK_SPDX    5
-#define RSP_NACK       6
-#define RSP_WB         7
-#define RSP_WT         8
-#define RSP_WTdata     9
+#define RSP_S          0
+#define RSP_O          1 // same as fwd_req_odata
+#define RSP_INV_ACK_SPDX    2 // same as fwd_inv_spdx
+#define RSP_NACK       3
+#define RSP_RVK_O      4 // same as fwd_rvk_o
+#define RSP_V          5
+#define RSP_Odata      6 // same as fwd_req_odata
+#define RSP_WT         7
+#define RSP_WTdata     8
 
 
 // DMA burst not currently supported in Spandex
