@@ -59,7 +59,7 @@
 
 // Cache data types width
 #define CPU_MSG_TYPE_WIDTH	2
-#define COH_MSG_TYPE_WIDTH	2
+#define COH_MSG_TYPE_WIDTH	4
 #define DMA_MSG_TYPE_WIDTH      1
 #define MIX_MSG_TYPE_WIDTH	(COH_MSG_TYPE_WIDTH + DMA_MSG_TYPE_WIDTH)
 #define HSIZE_WIDTH		3

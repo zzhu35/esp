@@ -1170,6 +1170,7 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.line = line;
 
 #if (USE_SPANDEX == 1)
+	req_out.word_mask = 15; // 0b1111
 	if (req_out.coh_msg == REQ_PUTS) return;
     // switch (req_out.coh_msg)
     // {

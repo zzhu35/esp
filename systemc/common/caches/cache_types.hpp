@@ -157,34 +157,40 @@ public:
     mix_msg_t	coh_msg; // fwd-gets, fwd-getm, fwd-invalidate
     line_addr_t	addr;
     cache_id_t  req_id;
+	word_mask_t word_mask;
 
     l2_fwd_in_t() :
 	coh_msg(0),
 	addr(0),
-	req_id(0)
+	req_id(0),
+	word_mask(0)
     { }
 
     inline l2_fwd_in_t& operator  = (const l2_fwd_in_t& x) {
 	coh_msg = x.coh_msg;
 	addr    = x.addr;
 	req_id  = x.req_id;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const l2_fwd_in_t& x) const {
 	return (x.coh_msg == coh_msg	&&
 		x.addr    == addr       &&
-		x.req_id  == req_id);
+		x.req_id  == req_id &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_fwd_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg , name + ".coh_msg ");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.req_id,     name + ".req_id");
+	sc_trace(tf, x.word_mask,     name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const l2_fwd_in_t& x) {
 	os << hex << "("
 	   << "coh_msg: " << x.coh_msg
 	   << ", addr: "  << x.addr
-	   << ", req_id: "  << x.req_id << ")";
+	   << ", req_id: "  << x.req_id
+	   << ", word_mask:" << x.word_mask << ")";
 	return os;
     }
 };
@@ -198,12 +204,14 @@ public:
     coh_msg_t		coh_msg;	// data, e-data, inv-ack, put-ack
     line_addr_t		addr;
     line_t		line;
+	word_mask_t 	word_mask;
     invack_cnt_t	invack_cnt;
 
     l2_rsp_in_t() :
 	coh_msg(0),
 	addr(0),
 	line(0),
+	word_mask(0),
 	invack_cnt(0)
     {}
 
@@ -211,6 +219,7 @@ public:
 	coh_msg    = x.coh_msg;
 	addr       = x.addr;
 	line       = x.line;
+	word_mask  = x.word_mask;
 	invack_cnt = x.invack_cnt;
 	return *this;
     }
@@ -218,12 +227,14 @@ public:
 	return (x.coh_msg    == coh_msg &&
 		x.addr       == addr    &&
 		x.line      == line   &&
+		x.word_mask == word_mask &&
 		x.invack_cnt == invack_cnt);
     }
     inline friend void sc_trace(sc_trace_file	*tf, const l2_rsp_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg ,   name + ".cpu_msg ");
 	sc_trace(tf, x.addr,       name + ".addr");
 	sc_trace(tf, x.line,      name + ".line");
+	sc_trace(tf, x.word_mask,      name + ".word_mask");
 	sc_trace(tf, x.invack_cnt, name + ".invack_cnt");
     }
     inline friend ostream & operator<<(ostream& os, const l2_rsp_in_t& x) {
@@ -235,6 +246,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 		os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask: " << x.word_mask;
 	os << ", invack_cnt: " << x.invack_cnt << ")";
 	return os;
     }
@@ -252,6 +264,7 @@ public:
     cache_id_t          req_id;
     cache_id_t          dest_id;
     word_offset_t       word_offset;
+	word_mask_t word_mask;
 
     llc_rsp_out_t() :
 	coh_msg(0),
@@ -260,7 +273,8 @@ public:
 	invack_cnt(0),
 	req_id(0),
 	dest_id(0),
-        word_offset(0)
+        word_offset(0),
+		word_mask(0)
     {}
 
     inline llc_rsp_out_t& operator  = (const llc_rsp_out_t& x) {
@@ -271,6 +285,7 @@ public:
 	req_id      = x.req_id;
 	dest_id     = x.dest_id;
         word_offset = x.word_offset;
+		word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator     == (const llc_rsp_out_t& x) const {
@@ -280,7 +295,8 @@ public:
 		x.invack_cnt  == invack_cnt &&
 		x.req_id      == req_id     &&
 		x.dest_id     == dest_id    &&
-		x.word_offset == word_offset);
+		x.word_offset == word_offset &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file	*tf, const llc_rsp_out_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg ,    name + ".cpu_msg ");
@@ -290,6 +306,7 @@ public:
 	sc_trace(tf, x.req_id,      name + ".req_id");
 	sc_trace(tf, x.dest_id,     name + ".dest_id");
 	sc_trace(tf, x.word_offset, name + ".word_offset");
+	sc_trace(tf, x.word_mask, name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_rsp_out_t& x) {
 	os << hex << "(coh_msg: ";
@@ -309,6 +326,7 @@ public:
 	os << ", invack_cnt: " << x.invack_cnt
 	   << ", req_id: " << x.req_id
 	   << ", dest_id: " << x.dest_id
+	   << ", word_mask: " << x.word_mask
 	   << ", word_offset: " << x.word_offset << ")";
 	return os;
     }
@@ -323,12 +341,14 @@ public:
     line_addr_t		addr;
     cache_id_t          req_id;
     cache_id_t          dest_id;
+	word_mask_t word_mask;
 
     llc_fwd_out_t() :
 	coh_msg(0),
 	addr(0),
 	req_id(0),
-	dest_id(0)
+	dest_id(0),
+	word_mask(0)
     {}
 
     inline llc_fwd_out_t& operator  = (const llc_fwd_out_t& x) {
@@ -336,19 +356,22 @@ public:
 	addr       = x.addr;
 	req_id     = x.req_id;
 	dest_id    = x.dest_id;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator     == (const llc_fwd_out_t& x) const {
 	return (x.coh_msg    == coh_msg &&
 		x.addr       == addr    &&
 		x.req_id     == req_id &&
-		x.dest_id    == dest_id);
+		x.dest_id    == dest_id &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file	*tf, const llc_fwd_out_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg ,   name + ".cpu_msg ");
 	sc_trace(tf, x.addr,       name + ".addr");
 	sc_trace(tf, x.req_id, name + ".req_id");
 	sc_trace(tf, x.dest_id, name + ".dest_id");
+	sc_trace(tf, x.word_mask, name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_fwd_out_t& x) {
 	os << hex << "(coh_msg: ";
@@ -363,6 +386,7 @@ public:
         }
         os << ", addr: "       << x.addr
 	   << ", req_id: " << x.req_id
+	   << ", word_mask" << x.word_mask
 	   << ", dest_id: " << x.dest_id << ")";
 	return os;
     }
@@ -380,12 +404,14 @@ public:
     hprot_t	hprot;
     line_addr_t	addr;
     line_t	line;
+	word_mask_t word_mask;
 
     l2_req_out_t() :
 	coh_msg(coh_msg_t(0)),
 	hprot(0),
 	addr(0),
-	line(0)
+	line(0),
+	word_mask(0)
     {}
 
     inline l2_req_out_t& operator  = (const l2_req_out_t& x) {
@@ -393,19 +419,22 @@ public:
 	hprot   = x.hprot;
 	addr    = x.addr;
 	line    = x.line;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const l2_req_out_t& x) const {
 	return (x.coh_msg == coh_msg	&&
 		x.hprot   == hprot	&&
 		x.addr    == addr	&&
-		x.line	  == line);
+		x.line	  == line &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_req_out_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg , name + ".coh_msg ");
 	sc_trace(tf, x.hprot,    name + ".hprot");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.line,    name + ".line");
+	sc_trace(tf, x.word_mask,    name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const l2_req_out_t& x) {
 	os << hex << "("
@@ -417,6 +446,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask: " << x.word_mask;
 	os << ")";
 	return os;
     }
@@ -503,6 +533,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask: " << x.word_mask;
 	os << ")";
 	return os;
     }
@@ -519,13 +550,15 @@ public:
     sc_uint<2>  to_req;
     line_addr_t	addr;
     line_t	line;
+	word_mask_t word_mask;
 
     l2_rsp_out_t() :
 	coh_msg(coh_msg_t(0)),
 	req_id(0),
 	to_req(0),
 	addr(0),
-	line(0)
+	line(0),
+	word_mask(0)
     {}
 
     inline l2_rsp_out_t& operator  = (const l2_rsp_out_t& x) {
@@ -534,6 +567,7 @@ public:
 	to_req   = x.to_req;
 	addr    = x.addr;
 	line    = x.line;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const l2_rsp_out_t& x) const {
@@ -541,7 +575,8 @@ public:
 		x.req_id   == req_id	&&
 		x.to_req   == to_req	&&
 		x.addr    == addr	&&
-		x.line	  == line);
+		x.line	  == line &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_rsp_out_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg , name + ".coh_msg ");
@@ -549,6 +584,7 @@ public:
 	sc_trace(tf, x.to_req,    name + ".to_req");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.line,    name + ".line");
+	sc_trace(tf, x.word_mask,    name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const l2_rsp_out_t& x) {
 	os << hex << "("
@@ -561,6 +597,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask " << x.word_mask;
 	os << ")";
 	return os;
     }
@@ -575,12 +612,14 @@ public:
     line_addr_t	addr;
     line_t	line;
     cache_id_t  req_id;
+	word_mask_t word_mask;
 
     llc_rsp_in_t() :
 	coh_msg(0),
 	addr(0),
 	line(0),
-	req_id(0)
+	req_id(0),
+	word_mask(0)
     {}
 
     inline llc_rsp_in_t& operator  = (const llc_rsp_in_t& x) {
@@ -588,19 +627,22 @@ public:
 	addr    = x.addr;
 	line    = x.line;
 	req_id  = x.req_id;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator  == (const llc_rsp_in_t& x) const {
 	return (x.coh_msg == coh_msg	&&
 		x.addr    == addr	&&
 		x.line	  == line       &&
-		x.req_id  == req_id);
+		x.req_id  == req_id &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const llc_rsp_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg,  name + ".coh_msg");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.line,     name + ".line");
 	sc_trace(tf, x.req_id,   name + ".req_id");
+	sc_trace(tf, x.word_mask, name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_rsp_in_t& x) {
 	os << hex << "("
@@ -612,6 +654,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask: " << x.word_mask;
 	os << ")";
 	return os;
     }
@@ -804,6 +847,7 @@ public:
     invack_cnt_calc_t	invack_cnt;
     word_t		word;
     line_t		line;
+	word_mask_t word_mask;
 
     llc_reqs_buf_t() :
 	msg(0),
@@ -817,7 +861,8 @@ public:
 	hprot(0),
 	invack_cnt(0),
     	word(0),
-    	line(0)
+    	line(0),
+		word_mask(0)
     {}
 
     inline llc_reqs_buf_t& operator = (const llc_reqs_buf_t& x) {
@@ -833,6 +878,7 @@ public:
 	invack_cnt		= x.invack_cnt;
 	word			= x.word;
 	line			= x.line;
+	word_mask = x.word_mask;
 	return *this;
     }
     inline bool operator     == (const llc_reqs_buf_t& x) const {
@@ -847,7 +893,8 @@ public:
 		x.hprot	     == hprot		&&
 		x.invack_cnt == invack_cnt	&&
 		x.word	     == word		&&
-		x.line	     == line);
+		x.line	     == line &&
+		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const llc_reqs_buf_t& x, const std::string & name) {
 	sc_trace(tf, x.msg , name + ".msg ");
@@ -862,6 +909,7 @@ public:
 	sc_trace(tf, x.invack_cnt , name + ".invack_cnt");
 	sc_trace(tf, x.word , name + ".word");
 	sc_trace(tf, x.line , name + ".line");
+	sc_trace(tf, x.word_mask, name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_reqs_buf_t& x) {
 	os << hex << "("
@@ -881,6 +929,7 @@ public:
 	    int base = i*BITS_PER_WORD;
 	    os << x.line.range(base + BITS_PER_WORD - 1, base) << " ";
 	}
+	os << ", word_mask: " << x.word_mask;
 	os << ")";
 	return os;
     }
