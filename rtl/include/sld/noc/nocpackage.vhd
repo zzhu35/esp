@@ -424,13 +424,13 @@ package body nocpackage is
     header(flit_sz - 1 downto
            flit_sz - PREAMBLE_WIDTH) := PREAMBLE_HEADER;
     header(flit_sz - PREAMBLE_WIDTH - 1 downto
-           flit_sz - PREAMBLE_WIDTH - YX_WIDTH) := "00" & local_y;
+           flit_sz - PREAMBLE_WIDTH - YX_WIDTH) := local_y;
     header(flit_sz - PREAMBLE_WIDTH - YX_WIDTH - 1 downto
-           flit_sz - PREAMBLE_WIDTH - 2*YX_WIDTH) := "00" & local_x;
+           flit_sz - PREAMBLE_WIDTH - 2*YX_WIDTH) := local_x;
     header(flit_sz - PREAMBLE_WIDTH - 2*YX_WIDTH - 1 downto
-           flit_sz - PREAMBLE_WIDTH - 3*YX_WIDTH) := "00" & remote_y;
+           flit_sz - PREAMBLE_WIDTH - 3*YX_WIDTH) := remote_y;
     header(flit_sz - PREAMBLE_WIDTH - 3*YX_WIDTH - 1 downto
-           flit_sz - PREAMBLE_WIDTH - 4*YX_WIDTH) := "00" & remote_x;
+           flit_sz - PREAMBLE_WIDTH - 4*YX_WIDTH) := remote_x;
     header(flit_sz - PREAMBLE_WIDTH - 4*YX_WIDTH - 1 downto
            flit_sz - PREAMBLE_WIDTH - 4*YX_WIDTH - MSG_TYPE_WIDTH) := msg_type;
     header(flit_sz - PREAMBLE_WIDTH - 4*YX_WIDTH - MSG_TYPE_WIDTH - 1 downto
