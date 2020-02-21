@@ -8,9 +8,9 @@
 int main(int argc, char **argv)
 {
 #ifdef __riscv
-	print_uart("Hello from ESP!\n");
 #else
-	printf("Hello from ESP!\n");
+	printf("Leon3 on ESP\n");
+	printf("Spandex Inside\n");
 #endif
 
 	return 0;
