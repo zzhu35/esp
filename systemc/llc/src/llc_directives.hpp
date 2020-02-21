@@ -25,7 +25,7 @@
     HLS_MAP_TO_MEMORY(dirty_bits, IMP_MEM_NAME_STRING(llc, dirty_bits, LLC_SETS, LLC_WAYS)); \
     HLS_MAP_TO_MEMORY(evict_ways, IMP_MEM_NAME_STRING(llc, evict_ways, LLC_SETS, LLC_WAYS))
 
-#ifdef LLC_DEBUG
+#ifdef LLC_DEBUG_TURN_OFF_HERE
 
 #define LLC_RESET_STATES						\
     bookmark_tmp |= BM_LLC_RESET_STATES;				\
@@ -213,8 +213,6 @@
     bookmark_tmp |= BM_DMA_WRITE_NOTSD
 
 #define PRESERVE_SIGNALS						\
-    HLS_PRESERVE_SIGNAL(dbg_asserts, true);                             \
-    HLS_PRESERVE_SIGNAL(dbg_bookmark, true);				\
     HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_req_to_get, true);			\
@@ -238,7 +236,6 @@
     HLS_PRESERVE_SIGNAL(dbg_req_in_stalled, true);			\
     HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_tag, true);			\
     HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_set, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_length, true);				\
     HLS_PRESERVE_SIGNAL(dbg_dma_length, true);				\
     HLS_PRESERVE_SIGNAL(dbg_dma_done, true);				\
     HLS_PRESERVE_SIGNAL(dbg_dma_addr, true);				\

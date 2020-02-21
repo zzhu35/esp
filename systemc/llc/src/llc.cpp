@@ -199,8 +199,8 @@ inline void llc::reset_state()
 
 
 #ifdef LLC_DEBUG
-    dbg_asserts.write(0);
-    dbg_bookmark.write(0);
+//     dbg_asserts.write(0);
+//     dbg_bookmark.write(0);
 
     dbg_is_rst_to_get.write(0);
     dbg_is_rsp_to_get.write(0);
@@ -222,7 +222,7 @@ inline void llc::reset_state()
     dbg_req_in_stalled_tag.write(0);
     dbg_req_in_stalled_set.write(0);
 
-    dbg_length.write(0);
+//     dbg_length.write(0);
 #endif
 
     wait();
@@ -751,8 +751,6 @@ void llc::ctrl()
 	dbg_is_rsp_to_get.write(is_rsp_to_get);
 	dbg_is_req_to_get.write(is_req_to_get);
 
-	bookmark_tmp = 0;
-	asserts_tmp = 0;
 #endif
 
         // -----------------------------

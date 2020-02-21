@@ -29,8 +29,8 @@ public:
 
 #ifdef LLC_DEBUG
     // Debug signals
-    sc_signal< sc_bv<LLC_ASSERT_WIDTH> > dbg_asserts;
-    sc_signal< sc_bv<LLC_BOOKMARK_WIDTH> > dbg_bookmark;
+    // sc_signal< sc_bv<LLC_ASSERT_WIDTH> > dbg_asserts;
+    // sc_signal< sc_bv<LLC_BOOKMARK_WIDTH> > dbg_bookmark;
 
     sc_signal<bool>	dbg_is_rst_to_get;
     sc_signal<bool>	dbg_is_rsp_to_get;
@@ -58,19 +58,19 @@ public:
     sc_signal<llc_tag_t>	dbg_req_in_stalled_tag;
     sc_signal<llc_set_t>	dbg_req_in_stalled_set;
 
-    sc_signal<dma_length_t>	dbg_length;
-    sc_signal<dma_length_t>	dbg_dma_length;
+    // sc_signal<dma_length_t>	dbg_length;
+    // sc_signal<dma_length_t>	dbg_dma_length;
     sc_signal<bool>		dbg_dma_done;
     sc_signal<addr_t>		dbg_dma_addr;
 
-    sc_signal<llc_tag_t>	dbg_tag_buf[LLC_WAYS];
-    sc_signal<llc_state_t>	dbg_state_buf[LLC_WAYS];
-    sc_signal<hprot_t>		dbg_hprot_buf[LLC_WAYS];
-    sc_signal<line_t>		dbg_line_buf[LLC_WAYS];
+    sc_signal<llc_tag_t>	dbg_tags_buf[LLC_WAYS];
+    sc_signal<llc_state_t>	dbg_states_buf[LLC_WAYS];
+    sc_signal<hprot_t>		dbg_hprots_buf[LLC_WAYS];
+    sc_signal<line_t>		dbg_lines_buf[LLC_WAYS];
     sc_signal<sharers_t>	dbg_sharers_buf[LLC_WAYS];
-    sc_signal<owner_t>		dbg_owner_buf[LLC_WAYS];
-    sc_signal<sc_uint<2> >      dbg_dirty_bit_buf[LLC_WAYS];
-    sc_signal<llc_way_t>	dbg_evict_way_buf;
+    sc_signal<owner_t>		dbg_owners_buf[LLC_WAYS];
+    sc_signal<sc_uint<2> >      dbg_dirty_bits_buf[LLC_WAYS];
+    sc_signal<llc_way_t>	dbg_evict_ways_buf;
 #endif
 
     // Input ports
@@ -212,8 +212,8 @@ private:
 
 #ifdef LLC_DEBUG
     // debug
-    sc_bv<LLC_ASSERT_WIDTH>   asserts_tmp;
-    sc_bv<LLC_BOOKMARK_WIDTH> bookmark_tmp;
+    // sc_bv<LLC_ASSERT_WIDTH>   asserts_tmp;
+    // sc_bv<LLC_BOOKMARK_WIDTH> bookmark_tmp;
 #endif
 
     bool set_conflict;
