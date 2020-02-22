@@ -199,8 +199,8 @@ inline void llc::reset_state()
 
 
 #ifdef LLC_DEBUG
-    dbg_asserts.write(0);
-    dbg_bookmark.write(0);
+//     dbg_asserts.write(0);
+//     dbg_bookmark.write(0);
 
     dbg_is_rst_to_get.write(0);
     dbg_is_rsp_to_get.write(0);
@@ -222,7 +222,7 @@ inline void llc::reset_state()
     dbg_req_in_stalled_tag.write(0);
     dbg_req_in_stalled_set.write(0);
 
-    dbg_length.write(0);
+//     dbg_length.write(0);
 #endif
 
     wait();
@@ -751,8 +751,6 @@ void llc::ctrl()
 	dbg_is_rsp_to_get.write(is_rsp_to_get);
 	dbg_is_req_to_get.write(is_req_to_get);
 
-	bookmark_tmp = 0;
-	asserts_tmp = 0;
 #endif
 
         // -----------------------------
@@ -1118,13 +1116,28 @@ void llc::ctrl()
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_DEFINE_PROTOCOL("send_fwd_1116");
                                 if (sharers_buf[way] & (1 << i)) {
-                                        send_fwd_out(FWD_INV_SPDX, req_in.addr, req_in.req_id, i, req_in.word_mask);
-                                        cnt ++;
+                                        if (req_in.req_id == i)
+                                        {
+                                                // upgrade
+                                        }
+                                        else
+                                        {
+                                                send_fwd_out(FWD_INV_SPDX, req_in.addr, req_in.req_id, i, req_in.word_mask);
+                                                cnt ++;
+                                        }
                                 }
                                 wait();
                         }
-                        fill_reqs(req_in.coh_msg, addr_br, 0, way, LLC_SO, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                        reqs[reqs_hit_i].invack_cnt = cnt;
+                        if (cnt == 0) {
+                                // only upgrade
+                                send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                        }
+                        else
+                        {
+                                // wait for invack
+                                fill_reqs(req_in.coh_msg, addr_br, 0, way, LLC_SO, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
+                                reqs[reqs_hit_i].invack_cnt = cnt;  
+                        }
 		    }
 		    break;
 

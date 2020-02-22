@@ -166,6 +166,7 @@ llc_evict_ways_1024sets_16ways 1024 4 1w:0r 0w:1r
 #llc_evict_ways_8192sets_8ways 8192 3 1w:0r 0w:1r
 #llc_evict_ways_8192sets_16ways 8192 4 1w:0r 0w:1r
 #llc_evict_ways_8192sets_32ways 8192 5 1w:0r 0w:1r
+llc_owners_1024sets_16ways 16384 4 1w:0r 0w:16r
 llc_RAM_4X4_1 4 4 1w:0r 0w:4r
 llc_RAM_4X18_3 4 18 1w:0r 0w:4r
 llc_RAM_4X10_2 4 10 1w:0r 0w:4r

@@ -313,8 +313,8 @@ end original ESP messages
  * Debug and report (currently not in use)
  */
 
-// #define L2_DEBUG 1
-// #define LLC_DEBUG 1
+#define L2_DEBUG 1
+#define LLC_DEBUG 1
 
 #define STATS_ENABLE 1
 

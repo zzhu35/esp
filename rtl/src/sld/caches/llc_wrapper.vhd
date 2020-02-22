@@ -954,6 +954,7 @@ begin  -- architecture rtl
             llc_req_in_data_addr    <= coherence_req_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
             llc_req_in_data_hprot   <= reg.hprot;
             llc_req_in_data_req_id  <= reg.req_id;
+            llc_req_in_data_word_mask    <= reg.word_mask;
 
             reg.state := rcv_header;
 
@@ -979,6 +980,7 @@ begin  -- architecture rtl
               llc_req_in_data_addr    <= reg.addr;
               llc_req_in_data_line    <= reg.line;
               llc_req_in_data_req_id  <= reg.req_id;
+              llc_req_in_data_word_mask    <= reg.word_mask;
             end if;
 
           else
@@ -1244,6 +1246,7 @@ begin  -- architecture rtl
               llc_rsp_in_data_coh_msg <= reg.coh_msg(COH_MSG_TYPE_WIDTH - 1 downto 0);
               llc_rsp_in_data_addr    <= reg.addr;
               llc_rsp_in_data_req_id  <= reg.req_id;
+              llc_rsp_in_data_word_mask <= reg.word_mask;
 
               if llc_rsp_in_ready = '1' then
 
@@ -1266,6 +1269,7 @@ begin  -- architecture rtl
         llc_rsp_in_data_coh_msg <= reg.coh_msg(COH_MSG_TYPE_WIDTH - 1 downto 0);
         llc_rsp_in_data_addr    <= reg.addr;
         llc_rsp_in_data_req_id  <= reg.req_id;
+        llc_rsp_in_data_word_mask <= reg.word_mask;
 
         if llc_rsp_in_ready = '1' then
 
@@ -1292,7 +1296,8 @@ begin  -- architecture rtl
               llc_rsp_in_data_addr    <= reg.addr;
               llc_rsp_in_data_line    <= reg.line;
               llc_rsp_in_data_req_id  <= reg.req_id;
-            end if;
+              llc_rsp_in_data_word_mask <= reg.word_mask;
+              end if;
 
           else
 
