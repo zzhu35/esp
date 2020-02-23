@@ -86,6 +86,7 @@ endif
 
 VCOMOPT  +=
 VLOGOPT  += -suppress 2275
+VLOGOPT  += -suppress 2583
 VSIMOPT  +=
 XMCOMOPT  +=
 XMLOGOPT  +=

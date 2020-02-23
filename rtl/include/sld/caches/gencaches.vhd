@@ -12,6 +12,7 @@ package gencaches is
 
   component l2
     generic (
+      use_rtl : integer;
       sets : integer;
       ways : integer
       );
@@ -74,6 +75,7 @@ package gencaches is
 
   component llc
     generic (
+      use_rtl : integer;
       sets : integer;
       ways : integer
       );

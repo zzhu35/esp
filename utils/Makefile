@@ -185,15 +185,15 @@ include $(ESP_ROOT)/utils/sc_components.mk
 ### SoC configuration for ESP ###
 
 .esp_config:
-	$(QUIET_CP)cp ../defconfig/esp_$(BOARD)_defconfig $@
+	$(QUIET_CP)cp $(ESP_ROOT)/socs/defconfig/esp_$(BOARD)_defconfig $@
 
-esp-defconfig: ../defconfig/esp_$(BOARD)_defconfig
+esp-defconfig: $(ESP_ROOT)/socs/defconfig/esp_$(BOARD)_defconfig
 	$(QUIET_CP)cp $< .esp_config
 	$(QUIET_MAKE)$(MAKE) esp-config
 
 socmap.vhd: .esp_config grlib_config.vhd top.vhd
 	$(QUIET_DIFF)echo "checking .esp_config..."
-	@/usr/bin/diff .esp_config ../defconfig/esp_$(BOARD)_defconfig -q > /dev/null; \
+	@/usr/bin/diff .esp_config $(ESP_ROOT)/socs/defconfig/esp_$(BOARD)_defconfig -q > /dev/null; \
 	if test $$? = "0"; then \
 		echo $(SPACES)"INFO Using default configuration file for ESP"; \
 	else \
@@ -264,9 +264,13 @@ VIVADO_BATCH_OPT = -mode batch -quiet -notrace
 
 ### proFPGA include paths ###
 PROFPGA_INCDIR = $(PROFPGA)/hdl/generic_hdl $(PROFPGA)/hdl/mmi64 $(PROFPGA)/hdl/profpga_user $(PROFPGA)/hdl/pd_muxdemux2
-PROFPGA_INCDIR_MODELSIM = $(foreach dir, $(PROFPGA_INCDIR), +incdir+$(dir))
-PROFPGA_INCDIR_XCELIUM = $(foreach dir, $(PROFPGA_INCDIR), -INCDIR $(dir))
-PROFPGA_INCDIR_INCISIVE = $(PROFPGA_INCDIR_XCELIUM)
+
+### RTL caches include paths ###
+ESP_CACHES_INCDIR = $(ESP_ROOT)/rtl/src/sld/caches/esp-caches/common/defs $(DESIGN_PATH)
+
+INCDIR_MODELSIM = $(foreach dir, $(PROFPGA_INCDIR) $(ESP_CACHES_INCDIR), +incdir+$(dir))
+INCDIR_XCELIUM = $(foreach dir, $(PROFPGA_INCDIR) $(ESP_CACHES_INCDIR), -INCDIR $(dir))
+INCDIR_INCISIVE = $(INCDIR_XCELIUM)
 
 ### Patsh shortcuts ###
 UTILS_GRLIB = $(ESP_ROOT)/utils/grlib
@@ -703,9 +707,9 @@ TKCONFIG_DEP  += $(wildcard $(TKCONFIG)/in/*.in.help)
 TKCONFIG_DEP  += grlib_config.in
 
 .grlib_config:
-	$(QUIET_CP)cp ../defconfig/grlib_$(BOARD)_defconfig $@
+	$(QUIET_CP)cp $(ESP_ROOT)/socs/defconfig/grlib_$(BOARD)_defconfig $@
 
-grlib-defconfig: ../defconfig/grlib_$(BOARD)_defconfig
+grlib-defconfig: $(ESP_ROOT)/socs/defconfig/grlib_$(BOARD)_defconfig
 	$(QUIET_CP)cp $< .grlib_config
 	$(QUIET_MAKE)$(MAKE) grlib_config.vhd
 
@@ -732,7 +736,7 @@ lconfig.tk: main.tk $(TKCONFIG_DEP) grlib_config.in
 
 grlib_config.vhd: lconfig.tk .grlib_config
 	$(QUIET_DIFF)echo "checking .grlib_config..."
-	@/usr/bin/diff .grlib_config ../defconfig/grlib_$(BOARD)_defconfig -q > /dev/null; \
+	@/usr/bin/diff .grlib_config $(ESP_ROOT)/socs/defconfig/grlib_$(BOARD)_defconfig -q > /dev/null; \
 	if test $$? = "0"; then \
 		echo $(SPACES)"INFO Using default configuration file for GRLIB"; \
 	else \
@@ -939,7 +943,7 @@ xcelium/xmready: xcelium/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	for ver in $(VERILOG_PROFPGA); do \
 		rtl=$(PROFPGA)/hdl/$$ver; \
 		echo $(SPACES)"$(XLOG) -work profpga -INCDIR ... $$rtl"; \
-		$(XLOG) -work profpga $(PROFPGA_INCDIR_XCELIUM) $$rtl || exit; \
+		$(XLOG) -work profpga $(INCDIR_XCELIUM) $$rtl || exit; \
 	done; \
 	grep --quiet "work" cds.lib; \
 	res=$$?; \
@@ -1061,7 +1065,7 @@ incisive/ncready: incisive/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	for ver in $(VERILOG_PROFPGA); do \
 		rtl=$(PROFPGA)/hdl/$$ver; \
 		echo $(SPACES)"$(NCLOG) -work profpga -INCDIR ... $$rtl"; \
-		$(NCLOG) -work profpga $(PROFPGA_INCDIR_INCISIVE) $$rtl || exit; \
+		$(NCLOG) -work profpga $(INCDIR_INCISIVE) $$rtl || exit; \
 	done; \
 	grep --quiet "work" cds.lib; \
 	res=$$?; \
@@ -1178,7 +1182,7 @@ modelsim/vsim.mk: modelsim/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	for ver in $(VERILOG_PROFPGA); do \
 		rtl=$(PROFPGA)/hdl/$$ver; \
 		echo $(SPACES)"$(VLOG) -work profpga +incdir+... $$rtl"; \
-		$(VLOG) -work profpga $(PROFPGA_INCDIR_MODELSIM) $$rtl || exit; \
+		$(VLOG) -work profpga $(INCDIR_MODELSIM) $$rtl || exit; \
 	done; \
 	vlib -type directory work; \
 	echo $(SPACES)"### Compile Ariane source files ###"; \
@@ -1234,7 +1238,7 @@ modelsim/vsim.mk: modelsim/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	echo $(SPACES)"### Compile SystemVerilog source files ###"; \
 		for rtl in $(SVLOG_SRCS); do \
 			echo $(SPACES)"$(VLOG) -sv $$rtl"; \
-			$(VLOG) -sv $(THIRDPARTY_INCDIR_MODELSIM) $$rtl || exit; \
+			$(VLOG) -sv  $(INCDIR_MODELSIM) $(THIRDPARTY_INCDIR_MODELSIM) $$rtl || exit; \
 		done; \
 	echo $(SPACES)"### Compile IPs simulation files ###"; \
 	echo $(SPACES)"$(VLOG) $(XILINX_VIVADO)/data/verilog/src/glbl.v"; \
@@ -1316,9 +1320,9 @@ vivado/setup.tcl: vivado $(XDC) $(BOARD_FILES)
 	@echo "create_project $(DESIGN) -part ${DEVICE} -force" > $@
 	@echo "set_property target_language verilog [current_project]" >> $@
 ifneq ($(findstring profpga, $(BOARD)),)
-	@echo "set_property include_dirs {$(PROFPGA_INCDIR) $(THIRDPARTY_INCDIR) $(ARIANE)/src/common_cells/include} [get_filesets {sim_1 sources_1}]" >> $@
+	@echo "set_property include_dirs {$(ESP_CACHES_INCDIR) $(PROFPGA_INCDIR) $(THIRDPARTY_INCDIR) $(ARIANE)/src/common_cells/include} [get_filesets {sim_1 sources_1}]" >> $@
 else
-	@echo "set_property include_dirs {$(THIRDPARTY_INCDIR) $(ARIANE)/src/common_cells/include} [get_filesets {sim_1 sources_1}]" >> $@
+	@echo "set_property include_dirs {$(ESP_CACHES_INCDIR) $(THIRDPARTY_INCDIR) $(ARIANE)/src/common_cells/include} [get_filesets {sim_1 sources_1}]" >> $@
 endif
 	@echo "set_property verilog_define {WT_DCACHE=1} [get_filesets {sim_1 sources_1}]" >> $@
 	@echo "source ./srcs.tcl" >> $@
