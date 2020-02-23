@@ -37,7 +37,8 @@ class Components():
     self.VENDOR = {}
 
     tech_dir = TECH
-    acc_dir = "../../tech/" + tech_dir + "/acc"
+    ESP_ROOT = os.path.realpath(os.path.dirname(os.path.realpath(__file__)) + "/../../")
+    acc_dir = ESP_ROOT + "/tech/" + tech_dir + "/acc"
     dirs = get_immediate_subdirectories(acc_dir)
     dirs = sorted(dirs, key=str.upper)
     for acc in dirs:
@@ -60,7 +61,7 @@ class Components():
       if len(self.POINTS[acc.upper()]) != 0:
         self.ACCELERATORS.append(acc.upper())
 
-    acc_dir = "../../third-party/accelerators/dma" + str(DMA_WIDTH)
+    acc_dir = ESP_ROOT + "/third-party/accelerators/dma" + str(DMA_WIDTH)
     dirs = get_immediate_subdirectories(acc_dir)
     dirs = sorted(dirs, key=str.upper)
     for acc in dirs:
@@ -139,6 +140,11 @@ class SoC_Config():
       self.cache_en.set(1)
     else:
       self.cache_en.set(0)
+    line = fp.readline()
+    if line.find("CONFIG_CACHE_RTL = y") != -1:
+      self.cache_rtl.set(1)
+    else:
+      self.cache_rtl.set(0)
     line = fp.readline()
     item = line.split()
     self.l2_sets.set(int(item[2]))
@@ -229,6 +235,10 @@ class SoC_Config():
       fp.write("CONFIG_CACHE_EN = y\n")
     else:
       fp.write("#CONFIG_CACHE_EN is not set\n")
+    if self.cache_rtl.get() == 1:
+      fp.write("CONFIG_CACHE_RTL = y\n")
+    else:
+      fp.write("#CONFIG_CACHE_RTL is not set\n")
     fp.write("CONFIG_CPU_CACHES = " + str(self.l2_sets.get()) + " " + str(self.l2_ways.get()) + " " + str(self.llc_sets.get()) + " " + str(self.llc_ways.get()) + "\n")
     fp.write("CONFIG_ACC_CACHES = " + str(self.acc_l2_sets.get()) + " " + str(self.acc_l2_ways.get()) + "\n")
     if self.noc.monitor_ddr.get() == 1:
@@ -379,5 +389,6 @@ class SoC_Config():
     # CPU architecture
     self.CPU_ARCH = StringVar()
     self.cache_en = IntVar()
+    self.cache_rtl = IntVar()
     self.update_list_of_ips()
 
