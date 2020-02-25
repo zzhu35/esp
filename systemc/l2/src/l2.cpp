@@ -62,7 +62,7 @@ void l2::ctrl()
             } else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended)) {
+            } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) || spdx_tu_fake_putack_valid) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
@@ -1065,6 +1065,17 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 {
     L2_GET_FWD_IN;
 
+
+#if (USE_SPANDEX == 1)
+// fake putack
+	if (spdx_tu_fake_putack_valid)
+	{
+		fwd_in = spdx_tu_fake_putack;
+		spdx_tu_fake_putack_valid = 0;
+		return;
+	}
+#endif
+
     l2_fwd_in.nb_get(fwd_in);
 
 #if (USE_SPANDEX == 1)
@@ -1171,7 +1182,15 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
 
 #if (USE_SPANDEX == 1)
 	req_out.word_mask = 15; // 0b1111
-	if (req_out.coh_msg == REQ_PUTS) return;
+	if (req_out.coh_msg == REQ_PUTS)
+	{
+		spdx_tu_fake_putack.coh_msg = FWD_PUTACK;
+		spdx_tu_fake_putack.addr = line_addr;
+		spdx_tu_fake_putack.req_id = 0;
+		spdx_tu_fake_putack.word_mask = 0xF;
+		spdx_tu_fake_putack_valid = 1;
+		return;
+	}
     // switch (req_out.coh_msg)
     // {
     //     // case REQ_GETS:

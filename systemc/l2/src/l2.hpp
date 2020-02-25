@@ -98,6 +98,8 @@ public:
 
 #if (USE_SPANDEX == 1)
     coh_msg_t orig_spdx_msg;
+    l2_fwd_in_t spdx_tu_fake_putack;
+    bool spdx_tu_fake_putack_valid;
 #endif
 
     // Constructor
