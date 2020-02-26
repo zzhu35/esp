@@ -173,18 +173,13 @@ inline void llc::reset_io()
     evict_ways.port2.reset();
 
     reqs_cnt = LLC_N_REQS;
+    set_conflict = false;
 
     wait();
 }
 
 inline void llc::reset_state()
 {
-    req_stall = false;
-    req_in_stalled_valid = false;
-    req_in_stalled_tag = 0;
-    req_in_stalled_set = 0;
-
-
     for (int i = 0; i < LLC_WAYS; i++) {
 	HLS_UNROLL_LOOP(ON, "reset-bufs");
 
@@ -216,11 +211,6 @@ inline void llc::reset_state()
     dbg_evict_valid.write(0);
     dbg_evict_way_not_sd.write(0);
     dbg_evict_addr.write(0);
-
-    dbg_req_stall.write(0);
-    dbg_req_in_stalled_valid.write(0);
-    dbg_req_in_stalled_tag.write(0);
-    dbg_req_in_stalled_set.write(0);
 
 //     dbg_length.write(0);
 #endif
@@ -717,32 +707,27 @@ void llc::ctrl()
                 // Response
                 is_rsp_to_get = true;
 
-        } else if (((can_get_req_in || set_conflict) && !req_stall) || (!req_stall && req_in_stalled_valid)) {
-                // New request
-
-            if (req_in_stalled_valid) {
-                    req_in_stalled_valid = false;
-                    req_in = req_in_stalled;
-            } else if (set_conflict) {
+        } else if (can_get_req_in || set_conflict) {
+            if (set_conflict) {
                     req_in = llc_req_conflict;
             } else {
                     do_get_req = true;
             }
 
-                is_req_to_get = true;
+            is_req_to_get = true;
 
-            }
+        }
 
 
-            if (is_rsp_to_get) {
-                LLC_GET_RSP_IN;
-                llc_rsp_in.nb_get(rsp_in);
-            }
+        if (is_rsp_to_get) {
+        LLC_GET_RSP_IN;
+        llc_rsp_in.nb_get(rsp_in);
+        }
 
-            if (do_get_req) {
-                GET_REQ_IN;
-                llc_req_in.nb_get(req_in);
-            }
+        if (do_get_req) {
+        GET_REQ_IN;
+        llc_req_in.nb_get(req_in);
+        }
 
 
         }
@@ -763,10 +748,6 @@ void llc::ctrl()
                 line_br.llc_line_breakdown(rsp_in.addr);
                 set = line_br.set;
 
-                if ((req_stall == true) && (line_br.tag == req_in_stalled_tag)
-                && (line_br.set == req_in_stalled_set)) {
-                req_stall = false;
-                }
         } else if (is_req_to_get) {
                 line_br.llc_line_breakdown(req_in.addr);
                 set = line_br.set;
@@ -920,14 +901,12 @@ void llc::ctrl()
             if (evict) {
                 LLC_EVICT;
 
-                // @TODO implement evict?
                 if (way == evict_ways_buf) {
                     update_evict_ways = true;
                     evict_ways_buf++;
                 }
 
 
-                // @TODO ? how to implement recall?
                 if (states_buf[way] == LLC_V) {
                     EVICT_V;
 
@@ -1399,7 +1378,11 @@ void llc::ctrl()
                         if (word_owner_mask & (1 << i)) {
                                 // found a mathcing bit in mask
                                 if (req_in.req_id == lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD)) // if owner id == req id
+                                {
                                         lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                                        owners_buf[way] = owners_buf[way] & (~ (1 << i)); // clear owner bit
+                                        dirty_bits_buf[way] = 1;
+                                }
                         }
                 }
                 break;

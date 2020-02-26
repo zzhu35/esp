@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// #define SEQUENCE   'a'
+#define BYTE_MAGIC '*'
 #define BLOCK_SIZE 32
 #define GOOD_MAGIC 0x600D600D
 #define BAD_MAGIC  0x0BAD0BAD
@@ -54,12 +54,33 @@ int test_fib()
 	return -1;
 }
 
+/*
+	LLC eviction
+*/
+int test_llc_evict()
+{
+	int llc_size = 1024 * 16 * 128 / 8;
+	int i;
+	void* buf = malloc(2 * llc_size);
+	int num_long = 2 * llc_size / sizeof(long);
+	for (i = 0; i < num_long; i++)
+	{
+		printf("%d\n", i);
+		((long*)buf)[i] = GOOD_MAGIC;
+	}
+	return 0;
+	
+}
+
 int main(int argc, char **argv)
 {
 	printf("Leon3 on ESP\n");
 	printf("Spandex Inside\n");
 	printf("Test #0\n%s\n", (test_for_loop()) ? "FAIL" : "PASS");
 	printf("Test #1\n%s\n", (test_fib()) ? "FAIL" : "PASS");
+	printf("Test #2\n%s\n", (test_llc_evict()) ? "FAIL" : "PASS");
+
+
 
 	return 0;
 }

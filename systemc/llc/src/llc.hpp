@@ -52,14 +52,6 @@ public:
     sc_signal<llc_set_t>	dbg_flush_set;
     sc_signal<llc_way_t>	dbg_flush_way;
 
-    sc_signal<bool>		dbg_req_stall;
-    sc_signal<bool>		dbg_req_in_stalled_valid;
-    sc_signal<llc_req_in_t>	dbg_req_in_stalled;
-    sc_signal<llc_tag_t>	dbg_req_in_stalled_tag;
-    sc_signal<llc_set_t>	dbg_req_in_stalled_set;
-
-    // sc_signal<dma_length_t>	dbg_length;
-    // sc_signal<dma_length_t>	dbg_dma_length;
     sc_signal<bool>		dbg_dma_done;
     sc_signal<addr_t>		dbg_dma_addr;
 
@@ -219,12 +211,6 @@ private:
     bool set_conflict;
     llc_req_in_t llc_req_conflict;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
-    llc_set_t rst_flush_stalled_set;
-    bool req_stall;
-    bool req_in_stalled_valid;
-    llc_req_in_t req_in_stalled;
-    llc_tag_t req_in_stalled_tag;
-    llc_set_t req_in_stalled_set;
 };
 
 #endif /* __LLC_HPP__ */
