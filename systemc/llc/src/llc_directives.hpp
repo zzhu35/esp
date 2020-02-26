@@ -231,11 +231,6 @@
     HLS_PRESERVE_SIGNAL(dbg_evict_addr, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_set, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_way, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_req_stall, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_valid, true);		\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_tag, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_set, true);			\
     HLS_PRESERVE_SIGNAL(dbg_dma_length, true);				\
     HLS_PRESERVE_SIGNAL(dbg_dma_done, true);				\
     HLS_PRESERVE_SIGNAL(dbg_dma_addr, true);				\
