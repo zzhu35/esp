@@ -59,15 +59,18 @@ int test_fib()
 */
 int test_llc_evict()
 {
-	int llc_size = 1024 * 16 * 128 / 8;
 	int i;
-	void* buf = malloc(2 * llc_size);
-	int num_long = 2 * llc_size / sizeof(long);
-	for (i = 0; i < num_long; i++)
+	int llc_ways = 16;
+	size_t stride = 1 << 14;
+	unsigned long base = 0x80000000 >> 14;
+	for (i = 0; i < llc_ways << 1; i++)
 	{
-		printf("%d\n", i);
-		((long*)buf)[i] = GOOD_MAGIC;
+		void* ptr = (void*)((base + i) << 14);
+		*(long*)ptr = base + i;
+		printf("%x -> %d\n", ptr, *(long*)ptr);
+
 	}
+
 	return 0;
 	
 }
@@ -79,7 +82,7 @@ int main(int argc, char **argv)
 	printf("Test #0\n%s\n", (test_for_loop()) ? "FAIL" : "PASS");
 	printf("Test #1\n%s\n", (test_fib()) ? "FAIL" : "PASS");
 	printf("Test #2\n%s\n", (test_llc_evict()) ? "FAIL" : "PASS");
-
+	printf("---------- End of Program ----------\n");
 
 
 	return 0;

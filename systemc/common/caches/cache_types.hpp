@@ -836,6 +836,7 @@ class llc_reqs_buf_t
 public:
 
     mix_msg_t           msg;
+	cache_id_t 		req_id;
     llc_tag_t		tag;
     llc_tag_t            tag_estall;
     llc_set_t		set;
