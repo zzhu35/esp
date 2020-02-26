@@ -180,18 +180,23 @@ inline void llc::reset_io()
 
 inline void llc::reset_state()
 {
-    for (int i = 0; i < LLC_WAYS; i++) {
-	HLS_UNROLL_LOOP(ON, "reset-bufs");
+        for (int i = 0; i < LLC_WAYS; i++) {
+                HLS_UNROLL_LOOP(ON, "reset-bufs");
 
-	tags_buf[i] = 0;
-	states_buf[i] = 0;
-	lines_buf[i] = 0;
-	sharers_buf[i] = 0;
-	owners_buf[i] = 0;
-	dirty_bits_buf[i] = 0;
-	hprots_buf[i] = 0;
-    }
-
+                tags_buf[i] = 0;
+                states_buf[i] = 0;
+                lines_buf[i] = 0;
+                sharers_buf[i] = 0;
+                owners_buf[i] = 0;
+                dirty_bits_buf[i] = 0;
+                hprots_buf[i] = 0;
+        }
+        wait();
+        for (int i = 0; i < LLC_N_REQS; i++)
+        {
+                reqs[i].state = LLC_I;
+                wait();
+        }
 
 #ifdef LLC_DEBUG
 //     dbg_asserts.write(0);
@@ -909,10 +914,10 @@ void llc::ctrl()
     	    sc_uint<LLC_REQS_BITS> reqs_hit_i;
     	    addr_br.breakdown(req_in.addr);
 
-            set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
+            set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i) || reqs_cnt == 0;
             evict_stall = false;
 
-            if (set_conflict || reqs_cnt == 0) // optimize
+            if (set_conflict) // optimize
             {
                     llc_req_conflict = req_in;
             } else {
