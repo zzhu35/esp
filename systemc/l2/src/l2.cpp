@@ -489,7 +489,11 @@ void l2::ctrl()
  		    if (state_buf[way_hit] == EXCLUSIVE)
  			send_rsp_out(RSP_INVACK, 0, 0, fwd_in.addr, 0);
  		    else
+#if (USE_SPANDEX == 0)
  			send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, line_buf[way_hit]);
+#else
+ 			send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]);
+#endif
 
  		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -1105,7 +1109,6 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
     // }
 	orig_spdx_msg = fwd_in.coh_msg;
 	if (fwd_in.coh_msg == FWD_REQ_Odata) fwd_in.coh_msg = FWD_REQ_O;
-	else if (fwd_in.coh_msg == FWD_RVK_O) fwd_in.coh_msg = FWD_INV_SPDX;
 #endif
 }
 

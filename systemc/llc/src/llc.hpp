@@ -189,13 +189,14 @@ public:
     inline void get_mem_rsp(line_t &line);
     inline void send_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id, cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset, word_mask_t word_mask);
     inline void send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id, word_mask_t word_mask);
+    // returns if any fwd was sent
     inline bool send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data);
+    // returns number of incack to expect
+    inline int send_inv_with_sharer_list(line_addr_t addr, sharers_t sharer_list);
 
     /* Functions to move around buffered lines */
-    void fill_reqs(mix_msg_t msg, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
+    void fill_reqs(mix_msg_t msg, cache_id_t req_id, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
 		   llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line, word_mask_t word_mask, sc_uint<LLC_REQS_BITS> reqs_i);
-    void put_reqs(llc_set_t set, llc_way_t way, llc_tag_t tag, line_t line, hprot_t hprot, llc_state_t state,
-		  sc_uint<LLC_REQS_BITS> reqs_i);
     void reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
 		     sc_uint<LLC_REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
@@ -209,7 +210,9 @@ private:
 #endif
 
     bool set_conflict;
+    bool evict_stall;
     llc_req_in_t llc_req_conflict;
+    llc_req_in_t llc_req_stall;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
 };
 
