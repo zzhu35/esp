@@ -29,13 +29,13 @@ define_system_module tb  ../tb/l2_tb.cpp ../tb/system.cpp ../tb/sc_main.cpp
 
 #     foreach ways [list 1 2 4 8] {
 
-foreach sets [list 512] {
+foreach sets [list 32] {
 
-    foreach ways [list 4] {
+    foreach ways [list 2] {
 
-	foreach wbits [list 1 2] {
+	foreach wbits [list 2] {
 
-	    foreach bbits [list 2 3] {
+	    foreach bbits [list 2] {
 
 		foreach abits [list 32] {
 
