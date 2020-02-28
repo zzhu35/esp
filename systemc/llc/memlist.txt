@@ -6,7 +6,3 @@ llc_sharers_32sets_4ways 128 16 1w:0r 0w:16r
 llc_dirty_bits_32sets_4ways 128 1 1w:0r 0w:16r
 llc_evict_ways_32sets_4ways 32 2 1w:0r 0w:1r
 llc_owners_32sets_4ways 128 4 1w:0r 0w:16r
-llc_RAM_4X4_1 4 4 1w:0r 0w:4r
-llc_RAM_4X18_3 4 23 1w:0r 0w:4r
-llc_RAM_4X10_2 4 10 1w:0r 0w:4r
-llc_RAM_4X128_1 4 128 1w:0r 0w:4r

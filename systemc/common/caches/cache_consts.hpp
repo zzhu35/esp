@@ -56,7 +56,7 @@
 #define BITS_PER_HALFWORD	(BITS_PER_WORD >> 1)
 #define BITS_PER_LINE		(BITS_PER_WORD * WORDS_PER_LINE)
 #define WORDS_PER_LINE		(1 << WORD_BITS)
-#define WORD_MASK_ALL       (1 << WORDS_PER_LINE - 1)
+#define WORD_MASK_ALL       ((1 << WORDS_PER_LINE) - 1)
 
 // Cache data types width
 #define CPU_MSG_TYPE_WIDTH	2
@@ -194,7 +194,6 @@
 #define LLC_S       2
 
 // LLC unstable states
-#define LLC_O       0
 #define LLC_IV      1
 #define LLC_IS      2
 #define LLC_IO      3

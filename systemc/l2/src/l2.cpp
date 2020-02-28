@@ -1184,13 +1184,13 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.line = line;
 
 #if (USE_SPANDEX == 1)
-	req_out.word_mask = 15; // 0b1111
+	req_out.word_mask = WORD_MASK_ALL; // 0b1111
 	if (req_out.coh_msg == REQ_PUTS)
 	{
 		spdx_tu_fake_putack.coh_msg = FWD_PUTACK;
 		spdx_tu_fake_putack.addr = line_addr;
 		spdx_tu_fake_putack.req_id = 0;
-		spdx_tu_fake_putack.word_mask = 0xF;
+		spdx_tu_fake_putack.word_mask = WORD_MASK_ALL;
 		spdx_tu_fake_putack_valid = 1;
 		return;
 	}
@@ -1229,6 +1229,7 @@ void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_ad
     rsp_out.to_req  = to_req;
     rsp_out.addr    = line_addr;
     rsp_out.line    = line;
+	rsp_out.word_mask = WORD_MASK_ALL;
 
 // #if USE_SPANDEX == 1
 // 	switch (rsp_out.coh_msg)

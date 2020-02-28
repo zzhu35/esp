@@ -114,6 +114,10 @@ public:
     sc_uint<2>   dirty_bits_buf[LLC_WAYS];
     llc_way_t	 evict_ways_buf;
 
+    word_mask_t fwd_coal_word_mask[WORDS_PER_LINE];
+    cache_id_t fwd_coal_temp_dest[WORDS_PER_LINE];
+    int fwd_coal_send_count;
+
     // Constructor
     SC_CTOR(llc)
         : clk("clk")
@@ -210,7 +214,7 @@ private:
 #endif
 
     bool set_conflict;
-    bool evict_stall;
+    bool evict_stall, evict_resume;
     llc_req_in_t llc_req_conflict;
     llc_req_in_t llc_req_stall;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;

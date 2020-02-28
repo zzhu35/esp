@@ -115,7 +115,7 @@ int test_atomic()
 */
 int test_llc_write_large()
 {
-	int llc_size = 1024 * 16 * 128 / 8;
+	int llc_size = 32 * 4 * 128 / 8;
 	int i;
 	void* buf = malloc(2 * llc_size);
 	int num_long = 2 * llc_size / sizeof(long);

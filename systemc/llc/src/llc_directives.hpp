@@ -13,7 +13,10 @@
     HLS_FLATTEN_ARRAY(hprots_buf);		\
     HLS_FLATTEN_ARRAY(sharers_buf);		\
     HLS_FLATTEN_ARRAY(owners_buf);		\
-    HLS_FLATTEN_ARRAY(dirty_bits_buf)
+    HLS_FLATTEN_ARRAY(dirty_bits_buf);   \
+    HLS_FLATTEN_ARRAY(reqs);            \
+    HLS_FLATTEN_ARRAY(fwd_coal_word_mask); \
+    HLS_FLATTEN_ARRAY(fwd_coal_temp_dest)
 
 #define LLC_MAP_MEMORY                                                                       \
     HLS_MAP_TO_MEMORY(tags, IMP_MEM_NAME_STRING(llc, tags, LLC_SETS, LLC_WAYS));             \

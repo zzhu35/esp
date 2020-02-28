@@ -1236,7 +1236,7 @@ begin  -- architecture rtl
 
           case reg.coh_msg is
 
-            when RSP_O | RSP_S | RSP_Odata =>
+            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
             
               reg.word_cnt := 0;
               reg.state    := rcv_data;
