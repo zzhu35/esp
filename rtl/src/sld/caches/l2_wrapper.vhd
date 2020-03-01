@@ -1311,7 +1311,7 @@ begin  -- architecture rtl of l2_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata =>
+            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
 
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;

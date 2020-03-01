@@ -97,6 +97,9 @@ int test_llc_evict()
 	
 }
 
+/*
+	atomic swap test
+*/
 int test_atomic()
 {
 	long lock = 0;
@@ -107,6 +110,25 @@ int test_atomic()
 	return 0;
 }
 
+/*
+	LLC write test
+*/
+int test_llc_write_large()
+{
+	int llc_size = 32 * 4 * 128 / 8;
+	int i;
+	void* buf = malloc(2 * llc_size);
+	int num_long = 2 * llc_size / sizeof(long);
+	for (i = 0; i < num_long; i++)
+	{
+		printf("%d\t0x%x\t->\t0x%x\n", i, &((long*)buf)[i], ((long*)buf)[i]);
+		((long*)buf)[i] = GOOD_MAGIC;
+	}
+	return 0;
+
+}
+
+
 int main(int argc, char **argv)
 {
 	printf("Leon3 on ESP\n");
@@ -115,6 +137,7 @@ int main(int argc, char **argv)
 	printf("Test #1\t%s\n", (test_fib()) ? "FAIL" : "PASS");
 	printf("Test #2\t%s\n", (test_llc_evict()) ? "FAIL" : "PASS");
 	printf("Test #3\t%s\n", (test_atomic()) ? "FAIL" : "PASS");
+	printf("Test #4\t%s\n", (test_llc_write_large()) ? "FAIL" : "PASS");
 
 	printf("---------- End of Program ----------\n");
 

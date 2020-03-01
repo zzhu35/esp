@@ -63,6 +63,12 @@ public:
     sc_signal<owner_t>		dbg_owners_buf[LLC_WAYS];
     sc_signal<sc_uint<2> >      dbg_dirty_bits_buf[LLC_WAYS];
     sc_signal<llc_way_t>	dbg_evict_ways_buf;
+    sc_signal<llc_reqs_buf_t> reqs_dbg[N_REQS];
+    sc_signal<bool>		dbg_evict_stall;
+    sc_signal<bool>		dbg_evict_inprogress;
+    sc_signal<bool>		dbg_set_conflict;
+
+
 #endif
 
     // Input ports
@@ -113,6 +119,10 @@ public:
     word_mask_t  owners_buf[LLC_WAYS];
     sc_uint<2>   dirty_bits_buf[LLC_WAYS];
     llc_way_t	 evict_ways_buf;
+
+    word_mask_t fwd_coal_word_mask[WORDS_PER_LINE];
+    cache_id_t fwd_coal_temp_dest[WORDS_PER_LINE];
+    int fwd_coal_send_count;
 
     // Constructor
     SC_CTOR(llc)
@@ -210,7 +220,7 @@ private:
 #endif
 
     bool set_conflict;
-    bool evict_stall;
+    bool evict_stall, evict_inprogress;
     llc_req_in_t llc_req_conflict;
     llc_req_in_t llc_req_stall;
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
