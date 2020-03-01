@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 	printf("Test #1\t%s\n", (test_fib()) ? "FAIL" : "PASS");
 	printf("Test #2\t%s\n", (test_llc_evict()) ? "FAIL" : "PASS");
 	printf("Test #3\t%s\n", (test_atomic()) ? "FAIL" : "PASS");
-	printf("Test #3\t%s\n", (test_llc_write_large()) ? "FAIL" : "PASS");
+	printf("Test #4\t%s\n", (test_llc_write_large()) ? "FAIL" : "PASS");
 
 	printf("---------- End of Program ----------\n");
 

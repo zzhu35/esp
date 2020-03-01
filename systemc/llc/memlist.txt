@@ -1,8 +1,9 @@
-llc_tags_32sets_4ways 128 23 1w:0r 0w:16r
-llc_states_32sets_4ways 128 2 1w:0r 0w:16r
-llc_hprots_32sets_4ways 128 2 1w:0r 0w:16r
-llc_lines_32sets_4ways 128 128 1w:0r 0w:16r
-llc_sharers_32sets_4ways 128 16 1w:0r 0w:16r
-llc_dirty_bits_32sets_4ways 128 1 1w:0r 0w:16r
+llc_tags_32sets_4ways 128 23 1w:0r 0w:4r
+llc_states_32sets_4ways 128 2 1w:0r 0w:4r
+llc_hprots_32sets_4ways 128 2 1w:0r 0w:4r
+llc_lines_32sets_4ways 128 128 1w:0r 0w:4r
+llc_sharers_32sets_4ways 128 16 1w:0r 0w:4r
+llc_dirty_bits_32sets_4ways 128 1 1w:0r 0w:4r
 llc_evict_ways_32sets_4ways 32 2 1w:0r 0w:1r
-llc_owners_32sets_4ways 128 4 1w:0r 0w:16r
+llc_owners_32sets_4ways 128 4 1w:0r 0w:4r
+llc_debug_32sets_4ways 128 16 1w:0r 0w:16r

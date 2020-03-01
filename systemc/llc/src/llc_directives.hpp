@@ -219,9 +219,6 @@
     HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_req_to_get, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_read_to_resume, true);               \
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true);              \
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true);                   \
     HLS_PRESERVE_SIGNAL(dbg_tag_hit, true);				\
     HLS_PRESERVE_SIGNAL(dbg_hit_way, true);				\
     HLS_PRESERVE_SIGNAL(dbg_empty_way_found, true);			\
@@ -234,17 +231,19 @@
     HLS_PRESERVE_SIGNAL(dbg_evict_addr, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_set, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_way, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_length, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_done, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_addr, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_tag_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_state_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_hprot_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_line_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_tags_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_states_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hprots_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_lines_buf, true);				\
     HLS_PRESERVE_SIGNAL(dbg_sharers_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_owner_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dirty_bit_buf, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_evict_way_buf, true)
+    HLS_PRESERVE_SIGNAL(dbg_owners_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_dirty_bits_buf, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_ways_buf, true);           \
+    HLS_PRESERVE_SIGNAL(reqs_dbg, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_stall, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_inprogress, true); \
+    HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
+
 
 #else
 
@@ -399,7 +398,34 @@
 
 #define DMA_WRITE_NOTSD
 
-#define PRESERVE_SIGNALS
+#define PRESERVE_SIGNALS \
+    HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_is_req_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_tag_hit, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hit_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_empty_way_found, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_empty_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_way, true);					\
+    HLS_PRESERVE_SIGNAL(dbg_llc_addr, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict_valid, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict_way_not_sd, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_addr, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_flush_set, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_flush_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_tags_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_states_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hprots_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_lines_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_sharers_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_owners_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_dirty_bits_buf, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_ways_buf, true);           \
+    HLS_PRESERVE_SIGNAL(reqs_dbg, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_stall, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_inprogress, true); \
+    HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
 
 #endif
 

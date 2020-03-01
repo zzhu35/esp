@@ -261,11 +261,11 @@ end original ESP messages
 
 // requests (L2/TU to L3)
 #define REQ_S          0 // same as gets
-#define REQ_O          1 // same as getm
+#define REQ_Odata      1 // same as getm
 #define REQ_WT         2
 #define REQ_WB         3 // same as putm
 #define REQ_WTdata     4
-#define REQ_Odata      5
+#define REQ_O      5
 #define REQ_V          6
 
 /* DMA currently not used by Spandex */
@@ -282,12 +282,12 @@ end original ESP messages
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
 #define RSP_S          0
-#define RSP_O          1 // same as fwd_req_odata
+#define RSP_Odata      1 // same as fwd_req_odata
 #define RSP_INV_ACK_SPDX    2 // same as fwd_inv_spdx
 #define RSP_NACK       3
 #define RSP_RVK_O      4 // same as fwd_rvk_o
 #define RSP_V          5
-#define RSP_Odata      6 // same as fwd_req_odata
+#define RSP_O          6 // same as fwd_req_o
 #define RSP_WT         7
 #define RSP_WTdata     8
 
