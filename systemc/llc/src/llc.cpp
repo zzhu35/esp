@@ -1198,7 +1198,6 @@ void llc::ctrl()
                         // REQO_S;
                         // invalidate
                         int cnt = 0;
-                        owners_buf[way] = 0;
                         // special case, cannot call inline helper
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_DEFINE_PROTOCOL("send_fwd_1116");
@@ -1206,8 +1205,6 @@ void llc::ctrl()
                                         if (req_in.req_id == i)
                                         {
                                                 // upgrade
-                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
-                                                owners_buf[way] |= (1 << i);
                                         }
                                         else
                                         {
@@ -1222,6 +1219,13 @@ void llc::ctrl()
                                 HLS_DEFINE_PROTOCOL("send_rsp_1198");
                                 send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
                                 states_buf[way] = LLC_V;
+                                for (int i = 0; i < WORDS_PER_LINE; i++)
+                                {
+                                        HLS_UNROLL_LOOP(ON, "set-ownermask");
+                                        if (req_in.word_mask & (1 << i))
+                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
+                                }
+                                owners_buf[way] = req_in.word_mask;
                         }
                         else
                         {
@@ -1368,7 +1372,6 @@ void llc::ctrl()
                         // invalidate
                         int cnt = 0;
                         line_t temp = lines_buf[way];
-                        owners_buf[way] = 0;
                         // special case, cannot call inline helper
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_DEFINE_PROTOCOL("send_fwd_1116");
@@ -1376,8 +1379,6 @@ void llc::ctrl()
                                         if (req_in.req_id == i)
                                         {
                                                 // upgrade
-                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
-                                                owners_buf[way] |= (1 << i);
                                         }
                                         else
                                         {
@@ -1392,6 +1393,13 @@ void llc::ctrl()
                                 HLS_DEFINE_PROTOCOL("send_rsp_1198");
                                 send_rsp_out(RSP_Odata, req_in.addr, temp, req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
                                 states_buf[way] = LLC_V;
+                                for (int i = 0; i < WORDS_PER_LINE; i++)
+                                {
+                                        HLS_UNROLL_LOOP(ON, "set-ownermask");
+                                        if (req_in.word_mask & (1 << i))
+                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
+                                }
+                                owners_buf[way] = req_in.word_mask;
                         }
                         else
                         {
