@@ -1,146 +1,41 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "defines.h"
 
-#define BYTE_MAGIC '*'
-#define BLOCK_SIZE 32
-#define GOOD_MAGIC 0x600D600D
-#define BAD_MAGIC  0x0BAD0BAD
-#define BASE_ADDR  0x80000000
+#define NCPU 2
 
-/*
-	atomic inline assembly that swaps data
-*/
-long _atomic_swap(long val, long* addr)
-{
-	asm volatile (
-	" swap [%2], %0 ;"
-	: "=&r"(val)
-	: "0" (val), "r"(addr)
-	: "memory"
-	);
-	return val;
-}
+#define RUN_AND_REPORT(PROGRAM, ...) { PROGRAM(__VA_ARGS__); printf("[TEST] "#PROGRAM" complete\n");}
 
-/*
-	test malloc, continuous read and write
-*/
-int test_for_loop()
-{
-	int i, j;
-	char* arr[8] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-	// write
-	for (i = 0; i < 4; i++)
-	{
-		char* temp = (char*)malloc(BLOCK_SIZE * sizeof(char));
-		for (j = 0; j < BLOCK_SIZE; j++)
-		{
-			temp[j] = i;
-		}
-		arr[i] = temp;
-	}
-	// read and compare
-	for (i = 0; i < 4; i++)
-	{
-		char* temp = arr[i];
-		for (j = 0; j < BLOCK_SIZE; j++)
-		{
-			if (temp[i] != i) 
-			{
-				return -1;
-			}
-		}
-	}
-	return 0;
-}
 
-/*
-	Fibonacci recursion test
-*/
-int test_fib_helper(int i)
-{
-	if (i == 0) return 0;
-	if (i == 1) return 1;
-	return test_fib_helper(i - 1) + test_fib_helper(i - 2);
-}
-int test_fib()
-{
-	if (3 == test_fib_helper(4)) return 0;
-	return -1;
-}
-
-/*
-	LLC eviction
-*/
-int test_llc_evict()
-{
-	int i;
-	int llc_ways = 16;
-	size_t stride = 1 << 14;
-	unsigned long base = BASE_ADDR >> 14;
-	unsigned long set = 1;
-	for (i = 0; i < llc_ways << 1; i++)
-	{
-		void* ptr = (void*)(((base + i) << 14) | set << 4);
-		*(long*)ptr = base + i;
-	}
-
-	for (i = 0; i < llc_ways << 1; i++)
-	{
-		void* ptr = (void*)(((base + i) << 14) | set << 4);
-		*(long*)ptr = base + i;
-		int ret = *(long*)ptr == base + i;
-		if (!ret) return -1;
-	}
-
-	return 0;
-	
-}
-
-/*
-	atomic swap test
-*/
-int test_atomic()
-{
-	long lock = 0;
-	long ret = _atomic_swap(1, &lock);
-	if (ret != 0) return -1;
-	ret = _atomic_swap(2, &lock);
-	if (ret != 1) return -1;
-	return 0;
-}
-
-/*
-	LLC write test
-*/
-int test_llc_write_large()
-{
-	int llc_size = 32 * 4 * 128 / 8;
-	int i;
-	void* buf = malloc(2 * llc_size);
-	int num_long = 2 * llc_size / sizeof(long);
-	for (i = 0; i < num_long; i++)
-	{
-		printf("%d\t0x%x\t->\t0x%x\n", i, &((long*)buf)[i], ((long*)buf)[i]);
-		((long*)buf)[i] = GOOD_MAGIC;
-	}
-	return 0;
-
-}
+static arch_spinlock_t uart_lock;
+static int barrier[2];
 
 
 int main(int argc, char **argv)
 {
-	printf("Leon3 on ESP\n");
+	mptest_start(0x80000200);
+	int id = get_pid();
+
+	arch_spin_lock(&uart_lock);
+
+	printf("Leon3 #%d on ESP\n", id);
 	printf("Spandex Inside\n");
-	printf("Test #0\t%s\n", (test_for_loop()) ? "FAIL" : "PASS");
-	printf("Test #1\t%s\n", (test_fib()) ? "FAIL" : "PASS");
-	printf("Test #2\t%s\n", (test_llc_evict()) ? "FAIL" : "PASS");
-	printf("Test #3\t%s\n", (test_atomic()) ? "FAIL" : "PASS");
-	printf("Test #4\t%s\n", (test_llc_write_large()) ? "FAIL" : "PASS");
 
-	printf("---------- End of Program ----------\n");
+	// RUN_AND_REPORT(test_lock, 4, NCPU);
+	// RUN_AND_REPORT(divtest);
+	// RUN_AND_REPORT(multest);
+	// RUN_AND_REPORT(leon3_test, 0, NULL, 0, NCPU);
+	// RUN_AND_REPORT(cache_fill, L2_WAYS, NCPU, 32);
+	// RUN_AND_REPORT(false_sharing, 4, NCPU);
+	// RUN_AND_REPORT(fputest);
 
+	// test_lock(1, NCPU);
+	printf("---------- End of Test %d ----------\n", id);
+
+	arch_spin_unlock(&uart_lock);
+
+	psync(barrier, id, NCPU);
 
 	return 0;
 }

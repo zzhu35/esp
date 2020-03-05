@@ -198,7 +198,7 @@ inline void llc::reset_state()
         set_conflict = false;
         evict_stall = false;
         evict_inprogress = false;
-        
+
         for (int i = 0; i < WORDS_PER_LINE; i++)
         {
                 fwd_coal_word_mask[i] = 0;
@@ -851,7 +851,6 @@ void llc::ctrl()
                                                                 HLS_DEFINE_PROTOCOL("send-rsp-804");
                                                                 send_rsp_out(RSP_Odata, rsp_in.addr, reqs[reqs_hit_i].line, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
                                                         }
-                                                        // @TODO update owner in buf
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
                                                 }
@@ -995,7 +994,7 @@ void llc::ctrl()
                         // because any request conflict in unstable buffer has been blocked by set_conflict
                         case LLC_V:
                         {
-                                if (owners_buf[way] == 0) 
+                                if (owners_buf[way] == 0)
                                 {
                                         if (dirty_bits_buf[way])
                                         {
@@ -1031,7 +1030,7 @@ void llc::ctrl()
             {
                     llc_req_stall = req_in;
             } else {
-                    
+
             switch (req_in.coh_msg) {
 
             case REQ_V:
@@ -1195,6 +1194,7 @@ void llc::ctrl()
 
                 case LLC_S :
 		    {
+                        // assume word_mask > 0
                         // REQO_S;
                         // invalidate
                         int cnt = 0;
@@ -1214,24 +1214,26 @@ void llc::ctrl()
                                 }
                                 wait();
                         }
+
+                        states_buf[way] = LLC_V;
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                                HLS_UNROLL_LOOP(ON, "set-ownermask");
+                                if (req_in.word_mask & (1 << i))
+                                        lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
+                        }
+                        owners_buf[way] = req_in.word_mask;
+
                         if (cnt == 0) {
                                 // only upgrade
                                 HLS_DEFINE_PROTOCOL("send_rsp_1198");
                                 send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                                states_buf[way] = LLC_V;
-                                for (int i = 0; i < WORDS_PER_LINE; i++)
-                                {
-                                        HLS_UNROLL_LOOP(ON, "set-ownermask");
-                                        if (req_in.word_mask & (1 << i))
-                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
-                                }
-                                owners_buf[way] = req_in.word_mask;
                         }
                         else
                         {
                                 // wait for invack
                                 fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                                reqs[reqs_hit_i].invack_cnt = cnt;  
+                                reqs[reqs_hit_i].invack_cnt = cnt;
                         }
 		    }
 		    break;
@@ -1346,8 +1348,14 @@ void llc::ctrl()
     		    {
     			// REQO_V;
                             word_owner_mask = owners_buf[way] & req_in.word_mask;
+                            // @TODO more complicated for word granularity accs
                             if (word_owner_mask) {
-                                    send_fwd_with_owner_mask(FWD_REQ_O, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
+                                    send_fwd_with_owner_mask(FWD_REQ_Odata, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
+                            }
+                            else
+                            {
+                                    HLS_DEFINE_PROTOCOL("send_rsp_1249");
+                                    send_rsp_out(RSP_Odata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
                             }
                             // update owner
                             for (int i = 0; i < WORDS_PER_LINE; i++) {
@@ -1357,11 +1365,6 @@ void llc::ctrl()
                                     }
                             }
                             owners_buf[way] |= req_in.word_mask;
-                            {
-                                    HLS_DEFINE_PROTOCOL("send_rsp_1249");
-                                    send_rsp_out(RSP_Odata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-
-                            }
 
     		    }
     		    break;
@@ -1388,24 +1391,26 @@ void llc::ctrl()
                                 }
                                 wait();
                         }
+
+                        states_buf[way] = LLC_V;
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                                HLS_UNROLL_LOOP(ON, "set-ownermask");
+                                if (req_in.word_mask & (1 << i))
+                                        lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
+                        }
+                        owners_buf[way] = req_in.word_mask;
+
                         if (cnt == 0) {
                                 // only upgrade
                                 HLS_DEFINE_PROTOCOL("send_rsp_1198");
                                 send_rsp_out(RSP_Odata, req_in.addr, temp, req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                                states_buf[way] = LLC_V;
-                                for (int i = 0; i < WORDS_PER_LINE; i++)
-                                {
-                                        HLS_UNROLL_LOOP(ON, "set-ownermask");
-                                        if (req_in.word_mask & (1 << i))
-                                                lines_buf[way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD) = req_in.req_id;
-                                }
-                                owners_buf[way] = req_in.word_mask;
                         }
                         else
                         {
                                 // wait for invack
                                 fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, temp, req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                                reqs[reqs_hit_i].invack_cnt = cnt;  
+                                reqs[reqs_hit_i].invack_cnt = cnt;
                         }
     		    }
     		    break;
