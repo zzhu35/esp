@@ -369,12 +369,22 @@ void l2::ctrl()
 
 		    if (fwd_in.coh_msg == FWD_GETS) {
 
+#if (USE_SPANDEX == 0)
 			for (int i = 0; i < 2; i++) {
 				// same rsp_s in spdx
 			    send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
 					 fwd_in.addr, reqs[reqs_hit_i].line);
 			    wait();
 			}
+#else
+                        {
+                                HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
+                                send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
+                                wait();
+                                send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
+                                wait();
+                        }
+#endif
 
 			reqs[reqs_hit_i].state = SIA;
 
@@ -429,13 +439,22 @@ void l2::ctrl()
 		{
 		    // FWD_NOHIT_GETS;
 
+#if (USE_SPANDEX == 0)
 		    for (int i = 0; i < 2; i++) {
 			// same rsp_s in spdx
 			send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
 				     fwd_in.addr, line_buf[way_hit]);
 			wait();
 		    }
-
+#else
+                    {
+                            HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
+                            send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]); // to llc
+                            wait();
+                            send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // same as rsp_s
+                            wait();
+                    }
+#endif
 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = SHARED;
 
 		    break;
