@@ -14,6 +14,7 @@ static int barrier[2];
 
 int main(int argc, char **argv)
 {
+	printf("barrier addresss: 0x%x\n", barrier);
 	mptest_start(0x80000200);
 	int id = get_pid();
 

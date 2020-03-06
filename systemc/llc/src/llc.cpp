@@ -903,10 +903,28 @@ void llc::ctrl()
 
                         case RSP_RVK_O:
                         {
+                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                        HLS_UNROLL_LOOP(ON, "rvk-wb");
+                                        if (owners_buf[reqs[reqs_hit_i].way] & (1 << i)) {
+                                                // found a mathcing bit in mask
+                                                if (rsp_in.req_id.to_int() == lines_buf[reqs[reqs_hit_i].way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int()) // if owner id == req id
+                                                {
+                                                        lines_buf[reqs[reqs_hit_i].way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                                                        owners_buf[reqs[reqs_hit_i].way] = owners_buf[reqs[reqs_hit_i].way] & (~ (1 << i)); // clear owner bit
+                                                        dirty_bits_buf[reqs[reqs_hit_i].way] = 1;
+                                                }
+                                        }
+                                }
                                 switch (reqs[reqs_hit_i].state) {
                                         case LLC_OS:
                                         {
-                                                // @TODO FWD_REQ_S or RVK_O ?
+                                                if (owners_buf[reqs[reqs_hit_i].way] == 0)
+                                                {
+                                                        // change state
+                                                        states_buf[reqs[reqs_hit_i].way] = LLC_S;
+                                                        reqs[reqs_hit_i].state = LLC_I;
+                                                        reqs_cnt++;
+                                                }
                                         }
                                         break;
                                         case LLC_OV:
@@ -916,18 +934,6 @@ void llc::ctrl()
                                         break;
                                         case LLC_OWB:
                                         {
-                                                for (int i = 0; i < WORDS_PER_LINE; i++) {
-                                                        HLS_UNROLL_LOOP(ON, "rvk-wb");
-                                                        if (owners_buf[reqs[reqs_hit_i].way] & (1 << i)) {
-                                                                // found a mathcing bit in mask
-                                                                if (rsp_in.req_id.to_int() == lines_buf[reqs[reqs_hit_i].way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int()) // if owner id == req id
-                                                                {
-                                                                        lines_buf[reqs[reqs_hit_i].way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
-                                                                        owners_buf[reqs[reqs_hit_i].way] = owners_buf[reqs[reqs_hit_i].way] & (~ (1 << i)); // clear owner bit
-                                                                        dirty_bits_buf[reqs[reqs_hit_i].way] = 1;
-                                                                }
-                                                        }
-                                                }
                                                 if (owners_buf[reqs[reqs_hit_i].way] == 0)
                                                 {
                                                         // wb and goto I
