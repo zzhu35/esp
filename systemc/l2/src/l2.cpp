@@ -1127,7 +1127,7 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 
     // }
 	orig_spdx_msg = fwd_in.coh_msg;
-	if (fwd_in.coh_msg == FWD_REQ_Odata) fwd_in.coh_msg = FWD_REQ_O;
+	if (fwd_in.coh_msg == FWD_REQ_O) fwd_in.coh_msg = FWD_REQ_Odata;
 #endif
 }
 
