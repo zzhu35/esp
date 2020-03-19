@@ -399,8 +399,11 @@ void l2::ctrl()
 			}
  			else
 			 // non coherent dma
- 			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr,
- 					 reqs[reqs_hit_i].line); // to LLC
+#if (USE_SPANDEX == 0)
+ 			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to LLC
+#else
+ 			    send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
+#endif
 
 			reqs[reqs_hit_i].state = IIA;
 
