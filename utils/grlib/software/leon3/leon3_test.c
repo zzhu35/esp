@@ -66,8 +66,8 @@ leon3_test(int domp, int *irqmp, int mtest)
     mesi_test(ncpu, 1);
 
 
-	if (!pid) data_structures_setup();
-    report_test(TEST_RAND_RW);
+	// if (!pid) data_structures_setup();
+    // report_test(TEST_RAND_RW);
     // rand_rw(200, ncpu);
     
     /* End of TESTS */
