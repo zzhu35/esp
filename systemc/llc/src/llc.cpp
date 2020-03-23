@@ -1497,13 +1497,13 @@ void llc::ctrl()
 
             case REQ_WB :
                 word_owner_mask = owners_buf[way] & req_in.word_mask;
-                if (word_owner_mask == 0) break; // in stable states, no owner, no need to do anything
                 // send response
                 {
                         HLS_DEFINE_PROTOCOL("send_rsp_1330");
                         send_fwd_out(FWD_WB_ACK, req_in.addr, 0, req_in.req_id, req_in.word_mask);
 
                 }
+                if (word_owner_mask == 0) break; // in stable states, no owner, no need to do anything
                 for (int i = 0; i < WORDS_PER_LINE; i++) {
                         HLS_UNROLL_LOOP(ON, "check-wb-ownermask");
                         if (word_owner_mask & (1 << i)) {
