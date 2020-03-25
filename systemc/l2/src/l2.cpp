@@ -354,7 +354,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 0, fwd_in.addr, 0); // send incack to llc for spandex
 #endif
 
 			}
