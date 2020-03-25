@@ -37,20 +37,17 @@ leon3_test(int domp, int *irqmp, int mtest)
     report_test(TEST_MUL);
     multest();
 
+    report_test(TEST_DIV);
+    divtest();
 
-    // report_test(TEST_DIV);
-    // divtest();
-
-    // report_test(TEST_FPU);
-    // fputest();
+    report_test(TEST_FPU);
+    fputest();
 
 	if (!pid) data_structures_setup();
     report_test(TEST_FILL_B);
     cache_fill(4, ncpu, BYTE);
-	if (!pid) data_structures_setup();
     report_test(TEST_FILL_HW);
     cache_fill(4, ncpu, HALFWORD);
-	if (!pid) data_structures_setup();
     report_test(TEST_FILL_W);
     cache_fill(4, ncpu, WORD);
     
@@ -59,16 +56,15 @@ leon3_test(int domp, int *irqmp, int mtest)
 
     // l2_cache_test(domp, irqmp);
 
-    // report_test(TEST_LOCK);
-    // test_lock(100, ncpu);
+    report_test(TEST_LOCK);
+    test_lock(100, ncpu);
 
     report_test(TEST_MESI);
     mesi_test(ncpu, 1);
 
 
-	// if (!pid) data_structures_setup();
-    // report_test(TEST_RAND_RW);
-    // rand_rw(200, ncpu);
+    report_test(TEST_RAND_RW);
+    rand_rw(200, ncpu);
     
     /* End of TESTS */
     
