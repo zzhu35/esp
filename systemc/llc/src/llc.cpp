@@ -872,14 +872,12 @@ void llc::ctrl()
                                                 break;
                                                 case LLC_SWB:
                                                 {
-                                                        if (dirty_bits_buf[way] == 1)
-                                                        {
-                                                                HLS_DEFINE_PROTOCOL("send-mem-821");
-                                                                send_mem_req(WRITE, rsp_in.addr, reqs[reqs_hit_i].hprot, reqs[reqs_hit_i].line);
-                                                        }
+                                                        HLS_DEFINE_PROTOCOL("send-mem-821");
+                                                        send_mem_req(WRITE, rsp_in.addr, reqs[reqs_hit_i].hprot, reqs[reqs_hit_i].line);
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_I;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
+                                                        evict_inprogress = false;
                                                 }
                                                 break;
                                                 case LLC_SI:
@@ -905,13 +903,14 @@ void llc::ctrl()
                         {
                                 for (int i = 0; i < WORDS_PER_LINE; i++) {
                                         HLS_UNROLL_LOOP(ON, "rvk-wb");
-                                        if (owners_buf[reqs[reqs_hit_i].way] & (1 << i)) {
-                                                // found a mathcing bit in mask
+                                        if (owners_buf[reqs[reqs_hit_i].way] & (1 << i) & rsp_in.word_mask) {
+                                                // found a matching bit in mask
                                                 if (rsp_in.req_id.to_int() == lines_buf[reqs[reqs_hit_i].way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int()) // if owner id == req id
                                                 {
                                                         lines_buf[reqs[reqs_hit_i].way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
                                                         owners_buf[reqs[reqs_hit_i].way] = owners_buf[reqs[reqs_hit_i].way] & (~ (1 << i)); // clear owner bit
                                                         dirty_bits_buf[reqs[reqs_hit_i].way] = 1;
+                                                        sharers_buf[reqs[reqs_hit_i].way] |= 1 << req_in.req_id;
                                                 }
                                         }
                                 }
@@ -924,6 +923,7 @@ void llc::ctrl()
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_S;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
+                                                        sharers_buf[reqs[reqs_hit_i].way] |= 1 << reqs[reqs_hit_i].req_id;
                                                 }
                                         }
                                         break;
@@ -1021,7 +1021,10 @@ void llc::ctrl()
                         case LLC_S:
                         {
                                 int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
-                                fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SI, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
+                                if (dirty_bits_buf[way])
+                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SWB, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
+                                else
+                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SI, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
                                 reqs[reqs_hit_i].invack_cnt = cnt;
                                 evict_stall = true;
                                 evict_inprogress = true;
@@ -1497,13 +1500,13 @@ void llc::ctrl()
 
             case REQ_WB :
                 word_owner_mask = owners_buf[way] & req_in.word_mask;
-                if (word_owner_mask == 0) break; // in stable states, no owner, no need to do anything
                 // send response
                 {
                         HLS_DEFINE_PROTOCOL("send_rsp_1330");
                         send_fwd_out(FWD_WB_ACK, req_in.addr, 0, req_in.req_id, req_in.word_mask);
 
                 }
+                if (word_owner_mask == 0) break; // in stable states, no owner, no need to do anything
                 for (int i = 0; i < WORDS_PER_LINE; i++) {
                         HLS_UNROLL_LOOP(ON, "check-wb-ownermask");
                         if (word_owner_mask & (1 << i)) {

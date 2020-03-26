@@ -354,7 +354,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 0, fwd_in.addr, 0); // send incack to llc for spandex
 #endif
 
 			}
@@ -399,8 +399,11 @@ void l2::ctrl()
 			}
  			else
 			 // non coherent dma
- 			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr,
- 					 reqs[reqs_hit_i].line); // to LLC
+#if (USE_SPANDEX == 0)
+ 			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to LLC
+#else
+ 			    send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
+#endif
 
 			reqs[reqs_hit_i].state = IIA;
 
@@ -1127,7 +1130,7 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 
     // }
 	orig_spdx_msg = fwd_in.coh_msg;
-	if (fwd_in.coh_msg == FWD_REQ_Odata) fwd_in.coh_msg = FWD_REQ_O;
+	if (fwd_in.coh_msg == FWD_REQ_O) fwd_in.coh_msg = FWD_REQ_Odata;
 #endif
 }
 
