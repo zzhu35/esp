@@ -180,6 +180,9 @@ include $(ESP_ROOT)/utils/accelerators.mk
 ### Include targets to generate caches RTL with HLS ###
 include $(ESP_ROOT)/utils/sc_components.mk
 
+### Include targets to compile example applications ###
+include $(ESP_ROOT)/utils/examples.mk
+
 .PHONY: all help
 
 ### SoC configuration for ESP ###
@@ -1136,6 +1139,9 @@ incisive/ncsim.in:
 	@echo set pack_assert_off { std_logic_arith numeric_std } >> $@
 
 ncsim-compile: sldgen check_all_srcs soft incisive/ncready incisive/ncsim.in
+	@for dat in $(DAT_SRCS); do \
+		cp $$dat incisive; \
+	done; \
 	$(QUIET_MAKE) \
 	cd incisive; \
 	echo $(SPACES)"$(NCUPDATE) $(SIMTOP)"; \
@@ -1252,6 +1258,9 @@ modelsim/vsim.mk: modelsim/xilinx_lib check_all_srcs.old $(PKG_LIST)
 	cd ../;
 
 sim-compile: sldgen check_all_srcs modelsim/vsim.mk soft
+	@for dat in $(DAT_SRCS); do \
+		cp $$dat modelsim; \
+	done;
 	$(QUIET_MAKE)make -C modelsim -f vsim.mk
 
 sim: sim-compile
@@ -1364,6 +1373,12 @@ ifeq ($(CONFIG_GRETH_ENABLE),y)
 endif
 	@if test -r $(UTILS_GRLIB)/netlists/$(TECHLIB); then \
 		echo "import_files $(UTILS_GRLIB)/netlists/$(TECHLIB)" >> $@; \
+	fi;
+	@if test -r $(DESIGN_PATH)/mem_tile_floorplanning.xdc; then \
+		echo "read_xdc  $(DESIGN_PATH)/mem_tile_floorplanning.xdc" >> $@; \
+	    echo "set_property used_in_synthesis true [get_files $(DESIGN_PATH)/mem_tile_floorplanning.xdc]" >> $@; \
+	    echo "set_property used_in_implementation true [get_files $(DESIGN_PATH)/mem_tile_floorplanning.xdc]" >> $@; \
+	echo "set_property strategy Congestion_SpreadLogic_high [get_runs impl_1]" >> $@; \
 	fi;
 	@for i in $(XDC); do \
 	  echo "read_xdc $$i" >> $@; \
@@ -1639,6 +1654,7 @@ distclean:	check_all_srcs-distclean 	\
 		soft-distclean 			\
 		linux-distclean			\
 		barec-distclean			\
+		examples-clean			\
 		xilinx_lib-distclean 		\
 		sim-distclean			\
 		ncsim-distclean			\
