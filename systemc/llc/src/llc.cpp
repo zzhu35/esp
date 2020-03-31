@@ -851,6 +851,7 @@ void llc::ctrl()
                                                                 HLS_DEFINE_PROTOCOL("send-rsp-804");
                                                                 send_rsp_out(RSP_Odata, rsp_in.addr, reqs[reqs_hit_i].line, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
                                                         }
+                                                        states_buf[reqs[reqs_hit_i].way] = LLC_V;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
                                                 }
@@ -910,7 +911,7 @@ void llc::ctrl()
                                                         lines_buf[reqs[reqs_hit_i].way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
                                                         owners_buf[reqs[reqs_hit_i].way] = owners_buf[reqs[reqs_hit_i].way] & (~ (1 << i)); // clear owner bit
                                                         dirty_bits_buf[reqs[reqs_hit_i].way] = 1;
-                                                        sharers_buf[reqs[reqs_hit_i].way] |= 1 << req_in.req_id;
+                                                        sharers_buf[reqs[reqs_hit_i].way] |= 1 << rsp_in.req_id;
                                                 }
                                         }
                                 }
@@ -966,13 +967,11 @@ void llc::ctrl()
         // Process new request
         else if (is_req_to_get) {
 
-            addr_breakdown_llc_t addr_br;
             addr_breakdown_llc_t addr_br_real;
     	    sc_uint<LLC_REQS_BITS> reqs_hit_i;
-    	    addr_br.breakdown(req_in.addr);
             addr_br_real.breakdown(req_in.addr << OFFSET_BITS);
 
-            set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i) || (reqs_cnt == 0);
+            set_conflict = reqs_peek_req(addr_br_real.set, reqs_hit_i) || (reqs_cnt == 0);
             evict_stall = evict_inprogress;
 
             if (evict_stall)

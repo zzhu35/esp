@@ -421,7 +421,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, 0);
+			send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, 0);
 #endif
 
 			}
@@ -432,6 +432,12 @@ void l2::ctrl()
 
 		default :
 		    FWD_HIT_DEFAULT;
+
+#if (USE_SPANDEX)
+			// spandex silent eviction makes it possible for L2 to receive unexpected FWD_INV, so ACK anyways
+			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
+			break;
+#endif
 		}
 
 	    } else {
@@ -492,8 +498,8 @@ void l2::ctrl()
 		    send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
 			send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, 0);
+			if (state_buf[way_hit] == SHARED) // ESP will not receive INV on E or M, so can transition anyway. However Spandex needs caution
 #endif
-
 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
 		    break;
@@ -522,6 +528,7 @@ void l2::ctrl()
  		    break;
  		}
 
+		// not happening after TU filter
  		case FWD_INV_LLC : // same as FWD_INV but don't send invack
  		{
  		    FWD_NOHIT_INV_LLC;
