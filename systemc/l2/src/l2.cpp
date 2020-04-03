@@ -267,7 +267,7 @@ void l2::ctrl()
 	} else if (do_fwd) {
 
 	    line_breakdown_t<l2_tag_t, l2_set_t> line_br;
-	    bool reqs_hit;
+	    bool reqs_hit, tag_hit;
 	    sc_uint<REQS_BITS> reqs_hit_i;
 
 	    fwd_stall_ended = false;
@@ -276,11 +276,17 @@ void l2::ctrl()
 
 	    l2_way_t way_hit;
 
-	    tag_lookup_fwd(line_br, way_hit);
+	    tag_lookup_fwd(line_br, tag_hit, way_hit);
 
 	    fwd_stall = reqs_peek_fwd(line_br, reqs_hit_i, reqs_hit, fwd_in.coh_msg);
 
-	    if (fwd_in.coh_msg == FWD_PUTACK) {
+#if (USE_SPANDEX)
+		if (!(tag_hit || reqs_hit)) {
+			if (fwd_in.coh_msg == FWD_INV) send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
+		} else
+#endif
+		
+		if (fwd_in.coh_msg == FWD_PUTACK) {
 
 		FWD_PUTACK_ALL;
 
@@ -343,6 +349,21 @@ void l2::ctrl()
 
 	    } else if (reqs_hit) {
 
+#if (USE_SPANDEX)
+		if (fwd_in.coh_msg == FWD_INV) {
+			switch (reqs[reqs_hit_i].state) {
+				case SMAD:
+				case SMADW:
+				case SIA:
+				break;
+				// send incack as long as not above 3
+				default:
+					send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
+				break;
+			}
+		}
+#endif
+
 		switch (reqs[reqs_hit_i].state) {
 
 		case SMAD :
@@ -354,7 +375,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 0, fwd_in.addr, 0); // send incack to llc for spandex
+			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // send incack to llc for spandex
 #endif
 
 			}
@@ -381,7 +402,7 @@ void l2::ctrl()
                                 HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
                                 send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
                                 wait();
-                                send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
+                                send_rsp_out(RSP_S, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
                                 wait();
                         }
 #endif
@@ -394,7 +415,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
  			    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
 #else
- 			    send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
+ 			    send_rsp_out(RSP_RVK_O, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
 #endif
 			}
  			else
@@ -402,7 +423,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
  			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to LLC
 #else
- 			    send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
+ 			    send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
 #endif
 
 			reqs[reqs_hit_i].state = IIA;
@@ -421,7 +442,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, 0);
+			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
 #endif
 
 			}
@@ -432,12 +453,6 @@ void l2::ctrl()
 
 		default :
 		    FWD_HIT_DEFAULT;
-
-#if (USE_SPANDEX)
-			// spandex silent eviction makes it possible for L2 to receive unexpected FWD_INV, so ACK anyways
-			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-			break;
-#endif
 		}
 
 	    } else {
@@ -497,8 +512,7 @@ void l2::ctrl()
 #if (USE_SPANDEX == 0)
 		    send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(orig_spdx_msg, 0, 0, fwd_in.addr, 0);
-			if (state_buf[way_hit] == SHARED) // ESP will not receive INV on E or M, so can transition anyway. However Spandex needs caution
+			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
 #endif
 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -1162,7 +1176,6 @@ void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
     //     defaut:
     //         break;
     // }
-	orig_spdx_msg = rsp_in.coh_msg;
 	if (rsp_in.coh_msg == RSP_O || rsp_in.coh_msg == RSP_Odata) rsp_in.coh_msg = RSP_DATA;
 
 #endif
@@ -1434,11 +1447,12 @@ void l2::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &way_hit, 
 #endif
 }
 
-void l2::tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, l2_way_t &way_hit)
+void l2::tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, bool &tag_hit, l2_way_t &way_hit)
 {
     TAG_LOOKUP;
 
     read_set(line_br.set);
+	tag_hit = false;
 
     for (int i = L2_WAYS-1; i >=0; --i) {
 	TAG_LOOKUP_LOOP;
@@ -1455,6 +1469,7 @@ void l2::tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, l2_way_t &
 
 	if (tag_buf[i] == line_br.tag && state_buf[i] != INVALID) {
 	    way_hit = i;
+		tag_hit = true;
 	}
     }
 

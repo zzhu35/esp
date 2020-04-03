@@ -971,8 +971,10 @@ void llc::ctrl()
 
             addr_breakdown_llc_t addr_br_real;
     	    sc_uint<LLC_REQS_BITS> reqs_hit_i, reqs_empty_i;
+            addr_breakdown_llc_t evict_addr_br;
+    	    evict_addr_br.breakdown(addr_evict_real);
             addr_br_real.breakdown(req_in.addr << OFFSET_BITS);
-            set_conflict = reqs_peek_req(addr_br_real, reqs_empty_i) || (reqs_cnt == 0);
+            set_conflict = reqs_peek_req(evict_addr_br, reqs_hit_i) || reqs_peek_req(addr_br_real, reqs_empty_i) || (reqs_cnt == 0);
             reqs_lookup(addr_br_real, reqs_hit_i);
             evict_stall = evict_inprogress;
 
@@ -1017,8 +1019,6 @@ void llc::ctrl()
                     update_evict_ways = true;
                     evict_ways_buf++;
                 }
-                addr_breakdown_llc_t evict_addr_br;
-    	        evict_addr_br.breakdown(addr_evict_real);
 
                 switch (states_buf[way])
                 {
