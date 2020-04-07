@@ -346,6 +346,12 @@ void l2::ctrl()
 		FWD_STALL_BEGIN;
 
 		fwd_in_stalled = fwd_in;
+#if (USE_SPANDEX)
+		if (reqs[reqs_hit_i].state == ISD && fwd_in.coh_msg == FWD_INV) {
+			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
+			fwd_stall = false;
+		}
+#endif
 
 	    } else if (reqs_hit) {
 
