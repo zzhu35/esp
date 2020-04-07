@@ -207,9 +207,8 @@ public:
     /* Functions to move around buffered lines */
     void fill_reqs(mix_msg_t msg, cache_id_t req_id, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
 		   llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line, word_mask_t word_mask, sc_uint<LLC_REQS_BITS> reqs_i);
-    void reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
-		     sc_uint<LLC_REQS_BITS> &reqs_hit_i);
-    bool reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i);
+    void reqs_lookup(addr_breakdown_llc_t br, sc_uint<LLC_REQS_BITS> &reqs_hit_i);
+    bool reqs_peek_req(addr_breakdown_llc_t br, sc_uint<LLC_REQS_BITS> &reqs_empty_i);
 
 private:
 

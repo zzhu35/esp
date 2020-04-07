@@ -621,15 +621,14 @@ void llc::fill_reqs(mix_msg_t msg, cache_id_t req_id, addr_breakdown_llc_t addr_
 
 
 // lookup reqs buf
-void llc::reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
-		    sc_uint<LLC_REQS_BITS> &reqs_hit_i)
+void llc::reqs_lookup(addr_breakdown_llc_t br, sc_uint<LLC_REQS_BITS> &reqs_hit_i)
 {
     LLC_REQS_LOOKUP;
 
     for (unsigned int i = 0; i < LLC_N_REQS; ++i) {
 	LLC_REQS_LOOKUP_LOOP;
 
-	if (reqs[i].tag == line_addr_br.tag && reqs[i].set == line_addr_br.set && reqs[i].state != LLC_I) {
+	if (reqs[i].tag == br.tag && reqs[i].set == br.set && reqs[i].state != LLC_I) {
 	    reqs_hit_i = i;
 	}
     }
@@ -642,7 +641,7 @@ void llc::reqs_lookup(line_breakdown_t<llc_tag_t, llc_set_t> line_addr_br,
     // REQS_LOOKUP_ASSERT;
 }
 
-bool llc::reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
+bool llc::reqs_peek_req(addr_breakdown_llc_t br, sc_uint<LLC_REQS_BITS> &reqs_empty_i)
 {
     LLC_REQS_PEEK_REQ;
 
@@ -652,9 +651,9 @@ bool llc::reqs_peek_req(llc_set_t set, sc_uint<LLC_REQS_BITS> &reqs_i)
 	LLC_REQS_PEEK_REQ_LOOP;
 
 	if (reqs[i].state == LLC_I)
-	    reqs_i = i;
+	    reqs_empty_i = i;
 
-	if (reqs[i].set == set && reqs[i].state != LLC_I)
+	if (reqs[i].tag == br.tag && reqs[i].set == br.set && reqs[i].state != LLC_I)
 	    set_conflict = true;
     }
 
@@ -832,14 +831,17 @@ void llc::ctrl()
         if (is_rsp_to_get) {
 
                 // @TODO handle responses
-                line_breakdown_t<llc_tag_t, llc_set_t> line_br;
+                addr_breakdown_llc_t addr_br_real;
                 sc_uint<LLC_REQS_BITS> reqs_hit_i;
-                line_br.llc_line_breakdown(rsp_in.addr);
-                reqs_lookup(line_br, reqs_hit_i);
+                addr_br_real.breakdown(rsp_in.addr << OFFSET_BITS);
+                reqs_lookup(addr_br_real, reqs_hit_i);
                 switch (rsp_in.coh_msg) {
                         case RSP_INV_ACK_SPDX:
                         {
-                                if (--reqs[reqs_hit_i].invack_cnt == 0) {
+                                reqs[reqs_hit_i].invack_cnt--;
+                                sharers_buf[reqs[reqs_hit_i].way] &= ~(1 << rsp_in.req_id); // clears sharer bit
+
+                                if (reqs[reqs_hit_i].invack_cnt == 0) {
                                         switch (reqs[reqs_hit_i].state) {
                                                 case LLC_SO:
                                                 {
@@ -968,19 +970,52 @@ void llc::ctrl()
         else if (is_req_to_get) {
 
             addr_breakdown_llc_t addr_br_real;
-    	    sc_uint<LLC_REQS_BITS> reqs_hit_i;
+    	    sc_uint<LLC_REQS_BITS> reqs_hit_i, reqs_empty_i;
+            addr_breakdown_llc_t evict_addr_br;
+    	    evict_addr_br.breakdown(addr_evict_real);
             addr_br_real.breakdown(req_in.addr << OFFSET_BITS);
-
-            set_conflict = reqs_peek_req(addr_br_real.set, reqs_hit_i) || (reqs_cnt == 0);
+            set_conflict = reqs_peek_req(evict_addr_br, reqs_hit_i) || reqs_peek_req(addr_br_real, reqs_empty_i) || (reqs_cnt == 0);
+            reqs_lookup(addr_br_real, reqs_hit_i);
             evict_stall = evict_inprogress;
 
-            if (evict_stall)
+            if (evict_stall || set_conflict) // optimize
             {
-                    llc_req_stall = req_in;
-            }
-            else if (set_conflict) // optimize
-            {
-                    llc_req_conflict = req_in;
+                    // attempt to resolve requests that hit in transient state
+                    switch (req_in.coh_msg) {
+                        case REQ_S:
+                        {
+                                if (sharers_buf[reqs[reqs_hit_i].way] & (1 << req_in.req_id)) { // only allow relaxed rsp_s if private cache has a pending inv
+                                        switch (reqs[reqs_hit_i].state) {
+                                                case LLC_SI: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
+                                                {
+                                                        HLS_DEFINE_PROTOCOL("deadlock-solver-1");
+                                                        send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                                        send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
+                                                        reqs[reqs_hit_i].invack_cnt++;
+                                                        evict_stall = false;
+                                                }
+                                                break;
+                                                case LLC_SO: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
+                                                {
+                                                        HLS_DEFINE_PROTOCOL("deadlock-solver-2");
+                                                        send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                                        send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
+                                                        reqs[reqs_hit_i].invack_cnt++;
+                                                        set_conflict = false;
+                                                }
+                                                break;
+                                                default:
+                                                break;
+                                        }
+                                }
+                        }
+                        break;
+                        default:
+                        break;
+                    }
+                    // failed to resolve request
+                    if (set_conflict) llc_req_conflict = req_in;
+                    if (evict_stall) llc_req_stall = req_in;
             } else {
 
             if (evict) {
@@ -990,8 +1025,6 @@ void llc::ctrl()
                     update_evict_ways = true;
                     evict_ways_buf++;
                 }
-                addr_breakdown_llc_t evict_addr_br;
-    	        evict_addr_br.breakdown(addr_evict_real);
 
                 switch (states_buf[way])
                 {
@@ -1011,7 +1044,7 @@ void llc::ctrl()
                                 else
                                 {
                                         (void)send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, req_in.req_id, owners_buf[way], lines_buf[way]);
-                                        fill_reqs(FWD_RVK_O, req_in.req_id, evict_addr_br, 0, way, LLC_OWB, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
+                                        fill_reqs(FWD_RVK_O, req_in.req_id, evict_addr_br, 0, way, LLC_OWB, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_empty_i); // save this request in reqs buffer
                                         evict_stall = true;
                                         evict_inprogress = true;
                                 }
@@ -1021,10 +1054,10 @@ void llc::ctrl()
                         {
                                 int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
                                 if (dirty_bits_buf[way])
-                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SWB, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
+                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SWB, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_empty_i); // save this request in reqs buffer
                                 else
-                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SI, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_hit_i); // save this request in reqs buffer
-                                reqs[reqs_hit_i].invack_cnt = cnt;
+                                        fill_reqs(FWD_INV_SPDX, req_in.req_id, evict_addr_br, 0, way, LLC_SI, hprots_buf[way], 0, lines_buf[way], owners_buf[way], reqs_empty_i); // save this request in reqs buffer
+                                reqs[reqs_empty_i].invack_cnt = cnt;
                                 evict_stall = true;
                                 evict_inprogress = true;
                         }
@@ -1065,7 +1098,7 @@ void llc::ctrl()
                                     if (word_owner_mask) {
                                             other_owner = send_fwd_with_owner_mask(FWD_REQ_V, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                             if (other_owner) {
-                                                    fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
+                                                    fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
                                                     break;
                                             }
                                     }
@@ -1116,7 +1149,7 @@ void llc::ctrl()
                         if (word_owner_mask) {
                                 other_owner = send_fwd_with_owner_mask(FWD_REQ_S, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                 if (other_owner) {
-                                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OS, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
+                                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OS, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
                                         break;
                                 }
                         }
@@ -1234,14 +1267,15 @@ void llc::ctrl()
 
                         if (cnt == 0) {
                                 // only upgrade
+                                // @TODO send original data
                                 HLS_DEFINE_PROTOCOL("send_rsp_1198");
                                 send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
                         }
                         else
                         {
                                 // wait for invack
-                                fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                                reqs[reqs_hit_i].invack_cnt = cnt;
+                                fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                                reqs[reqs_empty_i].invack_cnt = cnt;
                         }
 		    }
 		    break;
@@ -1311,8 +1345,8 @@ void llc::ctrl()
                             // REQWT_S;
                             // invalidate
                             int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
-                            fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                            reqs[reqs_hit_i].invack_cnt = cnt;
+                            fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                            reqs[reqs_empty_i].invack_cnt = cnt;
                         }
                         break;
 
@@ -1383,6 +1417,7 @@ void llc::ctrl()
                         // invalidate
                         int cnt = 0;
                         line_t temp = lines_buf[way];
+                        // @TODO optimize
                         // special case, cannot call inline helper
                         for (int i = 0; i < MAX_N_L2; i++) {
                                 HLS_DEFINE_PROTOCOL("send_fwd_1116");
@@ -1390,6 +1425,7 @@ void llc::ctrl()
                                         if (req_in.req_id == i)
                                         {
                                                 // upgrade
+                                                sharers_buf[way] &= ~(1 << i);
                                         }
                                         else
                                         {
@@ -1417,8 +1453,8 @@ void llc::ctrl()
                         else
                         {
                                 // wait for invack
-                                fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, temp, req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                                reqs[reqs_hit_i].invack_cnt = cnt;
+                                fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SO, req_in.hprot, 0, temp, req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                                reqs[reqs_empty_i].invack_cnt = cnt;
                         }
     		    }
     		    break;
@@ -1486,8 +1522,8 @@ void llc::ctrl()
                         // REQWT_S;
                         // invalidate
                         int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
-                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_hit_i); // save this request in reqs buffer
-                        reqs[reqs_hit_i].invack_cnt = cnt;
+                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                        reqs[reqs_empty_i].invack_cnt = cnt;
                     }
                     break;
 

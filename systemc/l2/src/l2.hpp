@@ -184,7 +184,7 @@ public:
     void read_set(l2_set_t set);
     void tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &way_hit, bool &empty_way_found,
 		    l2_way_t &empty_way);
-    void tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, l2_way_t &way_hit);
+    void tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, bool &tag_hit, l2_way_t &way_hit);
     void reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_addr_br,
 		     sc_uint<REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
