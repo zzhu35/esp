@@ -378,11 +378,11 @@ void l2::ctrl()
 		    FWD_HIT_SMADX;
 
 		    if (fwd_in.coh_msg == FWD_INV) {
+				send_inval(fwd_in.addr);
 #if (USE_SPANDEX == 0)
-			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+				send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 #else
-			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // send incack to llc for spandex
-			send_inval(fwd_in.addr);
+				send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // send incack to llc for spandex
 #endif
 
 			}
