@@ -100,6 +100,10 @@ public:
     coh_msg_t orig_spdx_msg;
     l2_fwd_in_t spdx_tu_fake_putack;
     bool spdx_tu_fake_putack_valid;
+    l2_fwd_in_t spdx_tu_pending_inv_action;
+    bool spdx_tu_pending_inv_action_valid;
+    l2_fwd_in_t spdx_tu_pending_inv[N_REQS];
+    bool spdx_tu_pending_inv_valid[N_REQS];
 #endif
 
     // Constructor
