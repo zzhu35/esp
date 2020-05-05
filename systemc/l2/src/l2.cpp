@@ -59,10 +59,14 @@ void l2::ctrl()
                 is_flush_all = get_flush();
                 ongoing_flush = true;
                 do_flush = true;
-            } else if (l2_rsp_in.nb_can_get()) {
+            } else if (spdx_tu_pending_inv_action_valid) {
+				fwd_in = spdx_tu_pending_inv_action;
+				spdx_tu_pending_inv_action_valid = false;
+				do_fwd = true;
+			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) || spdx_tu_fake_putack_valid || spdx_tu_pending_inv_action_valid ) {
+            } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) || spdx_tu_fake_putack_valid) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
@@ -1145,12 +1149,6 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 		return;
 	}
 
-	if (spdx_tu_pending_inv_action_valid)
-	{
-		fwd_in = spdx_tu_pending_inv_action;
-		spdx_tu_pending_inv_action_valid = false;
-		return;
-	}
 #endif
 
     l2_fwd_in.nb_get(fwd_in);
