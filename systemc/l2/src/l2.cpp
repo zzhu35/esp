@@ -59,10 +59,10 @@ void l2::ctrl()
                 is_flush_all = get_flush();
                 ongoing_flush = true;
                 do_flush = true;
-            } else if (spdx_tu_pending_inv_action_valid) {
-				fwd_in = spdx_tu_pending_inv_action;
-				spdx_tu_pending_inv_action_valid = false;
-				do_fwd = true;
+            // } else if (spdx_tu_pending_inv_action_valid) {
+			// 	fwd_in = spdx_tu_pending_inv_action;
+			// 	spdx_tu_pending_inv_action_valid = false;
+			// 	do_fwd = true;
 			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
@@ -154,15 +154,20 @@ void l2::ctrl()
 		    reqs_cnt++;
 
 			if (spdx_tu_pending_inv_valid[reqs_hit_i]) {
-				spdx_tu_pending_inv_action_valid = true;
-				spdx_tu_pending_inv_action = spdx_tu_pending_inv[reqs_hit_i];
+
+				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
+					rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
+					reqs_hit_i);
+			} else {
+
+				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
+					rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
+					reqs_hit_i);
+
 			}
 
 			spdx_tu_pending_inv_valid[reqs_hit_i] = false;
 
-		    put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-			     rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
-			     reqs_hit_i);
 		}
 
 		break;
@@ -362,7 +367,6 @@ void l2::ctrl()
 			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
 			fwd_stall = false;
 			spdx_tu_pending_inv_valid[reqs_hit_i] = true;
-			spdx_tu_pending_inv[reqs_hit_i] = fwd_in;
 		}
 #endif
 
@@ -1121,7 +1125,6 @@ inline void l2::reset_io()
         HLS_UNROLL_LOOP(ON, "reset-buf");
 		spdx_tu_pending_inv_valid[i] = false;
 	}
-	spdx_tu_pending_inv_action_valid = false;
 
 }
 

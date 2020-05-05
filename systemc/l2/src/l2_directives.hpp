@@ -6,7 +6,6 @@
 
 #define L2_FLATTEN_REGS				\
     HLS_FLATTEN_ARRAY(spdx_tu_pending_inv_valid);			\
-    HLS_FLATTEN_ARRAY(spdx_tu_pending_inv);			\
     HLS_FLATTEN_ARRAY(reqs);			\
     HLS_FLATTEN_ARRAY(tag_buf);			\
     HLS_FLATTEN_ARRAY(state_buf);		\
