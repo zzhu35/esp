@@ -156,7 +156,7 @@ void l2::ctrl()
 			if (spdx_tu_pending_inv_valid[reqs_hit_i]) {
 
 				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-					rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
+					rsp_in.line, reqs[reqs_hit_i].hprot, INVALID,
 					reqs_hit_i);
 			} else {
 
