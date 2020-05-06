@@ -59,7 +59,11 @@ void l2::ctrl()
                 is_flush_all = get_flush();
                 ongoing_flush = true;
                 do_flush = true;
-            } else if (l2_rsp_in.nb_can_get()) {
+            // } else if (spdx_tu_pending_inv_action_valid) {
+			// 	fwd_in = spdx_tu_pending_inv_action;
+			// 	spdx_tu_pending_inv_action_valid = false;
+			// 	do_fwd = true;
+			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
             } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) || spdx_tu_fake_putack_valid) {
@@ -149,9 +153,21 @@ void l2::ctrl()
 		    reqs[reqs_hit_i].state = INVALID;
 		    reqs_cnt++;
 
-		    put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-			     rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
-			     reqs_hit_i);
+			if (spdx_tu_pending_inv_valid[reqs_hit_i]) {
+
+				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
+					rsp_in.line, reqs[reqs_hit_i].hprot, INVALID,
+					reqs_hit_i);
+			} else {
+
+				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
+					rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
+					reqs_hit_i);
+
+			}
+
+			spdx_tu_pending_inv_valid[reqs_hit_i] = false;
+
 		}
 
 		break;
@@ -350,6 +366,7 @@ void l2::ctrl()
 		if (reqs[reqs_hit_i].state == ISD && fwd_in.coh_msg == FWD_INV) {
 			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
 			fwd_stall = false;
+			spdx_tu_pending_inv_valid[reqs_hit_i] = true;
 		}
 #endif
 
@@ -1102,7 +1119,13 @@ inline void l2::reset_io()
     ongoing_flush = false;
     flush_set = 0;
     flush_way = 0;
-	orig_spdx_msg = 0;
+	spdx_tu_fake_putack_valid = false;
+	for (int i = 0; i < N_REQS; i++)
+	{
+        HLS_UNROLL_LOOP(ON, "reset-buf");
+		spdx_tu_pending_inv_valid[i] = false;
+	}
+
 }
 
 
@@ -1125,9 +1148,10 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
 	if (spdx_tu_fake_putack_valid)
 	{
 		fwd_in = spdx_tu_fake_putack;
-		spdx_tu_fake_putack_valid = 0;
+		spdx_tu_fake_putack_valid = false;
 		return;
 	}
+
 #endif
 
     l2_fwd_in.nb_get(fwd_in);

@@ -984,30 +984,30 @@ void llc::ctrl()
                     switch (req_in.coh_msg) {
                         case REQ_S:
                         {
-                                if (sharers_buf[reqs[reqs_hit_i].way] & (1 << req_in.req_id)) { // only allow relaxed rsp_s if private cache has a pending inv
-                                        switch (reqs[reqs_hit_i].state) {
-                                                case LLC_SI: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
-                                                {
-                                                        HLS_DEFINE_PROTOCOL("deadlock-solver-1");
-                                                        send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                                                        send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
-                                                        reqs[reqs_hit_i].invack_cnt++;
-                                                        evict_stall = false;
-                                                }
-                                                break;
-                                                case LLC_SO: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
-                                                {
-                                                        HLS_DEFINE_PROTOCOL("deadlock-solver-2");
-                                                        send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                                                        send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
-                                                        reqs[reqs_hit_i].invack_cnt++;
-                                                        set_conflict = false;
-                                                }
-                                                break;
-                                                default:
-                                                break;
-                                        }
-                                }
+                                // if (sharers_buf[reqs[reqs_hit_i].way] & (1 << req_in.req_id)) { // only allow relaxed rsp_s if private cache has a pending inv
+                                //         switch (reqs[reqs_hit_i].state) {
+                                //                 case LLC_SI: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
+                                //                 {
+                                //                         HLS_DEFINE_PROTOCOL("deadlock-solver-1");
+                                //                         send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                //                         send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
+                                //                         reqs[reqs_hit_i].invack_cnt++;
+                                //                         evict_stall = false;
+                                //                 }
+                                //                 break;
+                                //                 case LLC_SO: // to solve reqs vs inv deadlock on LLC_SX due to silent ecivtion
+                                //                 {
+                                //                         HLS_DEFINE_PROTOCOL("deadlock-solver-2");
+                                //                         send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                //                         send_fwd_out(FWD_INV_SPDX, req_in.addr, 0, req_in.req_id, WORD_MASK_ALL);
+                                //                         reqs[reqs_hit_i].invack_cnt++;
+                                //                         set_conflict = false;
+                                //                 }
+                                //                 break;
+                                //                 default:
+                                //                 break;
+                                //         }
+                                // }
                         }
                         break;
                         default:
