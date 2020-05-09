@@ -8,7 +8,6 @@
 #include "l2_directives.hpp"
 
 #include EXP_MEM_INCLUDE_STRING(l2, tags, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2, states, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2, lines, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2, hprots, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2, evict_ways, L2_SETS, L2_WAYS)
@@ -82,7 +81,7 @@ public:
 
     // Local memory
     EXP_MEM_TYPE_STRING(l2, tags, L2_SETS, L2_WAYS)<l2_tag_t, L2_LINES> tags;
-    EXP_MEM_TYPE_STRING(l2, states, L2_SETS, L2_WAYS)<state_t, L2_LINES> states;
+    state_t states[L2_LINES]; // fast flush
     EXP_MEM_TYPE_STRING(l2, lines, L2_SETS, L2_WAYS)<line_t, L2_LINES> lines;
     EXP_MEM_TYPE_STRING(l2, hprots, L2_SETS, L2_WAYS)<hprot_t, L2_LINES> hprots;
     EXP_MEM_TYPE_STRING(l2, evict_ways, L2_SETS, L2_WAYS)<l2_way_t, L2_SETS> evict_ways;
@@ -150,7 +149,6 @@ public:
 
 	    // Clock binding for memories
 	    tags.clk(this->clk);
-	    states.clk(this->clk);
 	    hprots.clk(this->clk);
 	    lines.clk(this->clk);
 	    evict_ways.clk(this->clk);

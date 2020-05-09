@@ -27,7 +27,7 @@ void l2::ctrl()
             for (int j=0; j<L2_WAYS; j++) { // do not unroll
                 {
                     wait();
-                    states.port1[0][(i << L2_WAY_BITS) + j] = INVALID;
+                    states[(i << L2_WAY_BITS) + j] = INVALID;
                 }
             }
         }
@@ -503,7 +503,7 @@ void l2::ctrl()
                             wait();
                     }
 #endif
-		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = SHARED;
+		    states[(line_br.set << L2_WAY_BITS) + way_hit] = SHARED;
 
 		    break;
 		}
@@ -521,7 +521,7 @@ void l2::ctrl()
 			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // to requestor
 #endif
 
-		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
+		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
 		    break;
 		}
@@ -538,7 +538,7 @@ void l2::ctrl()
 #else
 			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
 #endif
-		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
+		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
 		    break;
 		}
@@ -561,7 +561,7 @@ void l2::ctrl()
  			send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]);
 #endif
 
- 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
+ 		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
  		    break;
  		}
@@ -574,7 +574,7 @@ void l2::ctrl()
  		    if (!ongoing_flush)
  			send_inval(fwd_in.addr);
 
- 		    states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
+ 		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
  		    break;
  		}
@@ -606,7 +606,7 @@ void l2::ctrl()
 
                 line_addr_t line_addr_tmp = (tag_buf[flush_way] << L2_SET_BITS) | (flush_set);
 
-                states.port1[0][(flush_set << L2_WAY_BITS) + flush_way] = INVALID;
+                states[(flush_set << L2_WAY_BITS) + flush_way] = INVALID;
 
                 unstable_state_t state_tmp;
                 coh_msg_t coh_msg_tmp;
@@ -824,7 +824,7 @@ void l2::ctrl()
 			break;
 
 			case EXCLUSIVE : // write hit
-			    states.port1[0][(addr_br.set << L2_WAY_BITS) + way_hit] = MODIFIED;
+			    states[(addr_br.set << L2_WAY_BITS) + way_hit] = MODIFIED;
 			case MODIFIED : // write hit
 			{
 			    HIT_WRITE_EM;
@@ -993,12 +993,10 @@ inline void l2::reset_io()
 
     /* Reset memories */
     tags.port1.reset();
-    states.port1.reset();
     hprots.port1.reset();
     lines.port1.reset();
 
     tags.port2.reset();
-    states.port2.reset();
     hprots.port2.reset();
     lines.port2.reset();
 
@@ -1008,41 +1006,34 @@ inline void l2::reset_io()
     CACHE_REPORT_VAR(0, "L2_WAYS", L2_WAYS);
 
     tags.port3.reset();
-    states.port3.reset();
     hprots.port3.reset();
     lines.port3.reset();
 
 #if (L2_WAYS >= 4)
 
     tags.port4.reset();
-    states.port4.reset();
     hprots.port4.reset();
     lines.port4.reset();
 
     tags.port5.reset();
-    states.port5.reset();
     hprots.port5.reset();
     lines.port5.reset();
 
 #if (L2_WAYS >= 8)
 
     tags.port6.reset();
-    states.port6.reset();
     hprots.port6.reset();
     lines.port6.reset();
 
     tags.port7.reset();
-    states.port7.reset();
     hprots.port7.reset();
     lines.port7.reset();
 
     tags.port8.reset();
-    states.port8.reset();
     hprots.port8.reset();
     lines.port8.reset();
 
     tags.port9.reset();
-    states.port9.reset();
     hprots.port9.reset();
     lines.port9.reset();
 
@@ -1368,7 +1359,7 @@ void l2::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, hprot_t
 
     lines.port1[0][base + way]  = line;
     hprots.port1[0][base + way] = hprot;
-    states.port1[0][base + way] = state;
+    states[base + way] = state;
     tags.port1[0][base + way]   = tag;
 
     // if necessary end the forward messages stall
@@ -1385,48 +1376,48 @@ inline void l2::read_set(l2_set_t set)
     sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
 
     tag_buf[0] = tags.port2[0][base + 0];
-    state_buf[0] = states.port2[0][base + 0];
+    state_buf[0] = states[base + 0];
     hprot_buf[0] = hprots.port2[0][base + 0];
     line_buf[0] = lines.port2[0][base + 0];
 
 #if (L2_WAYS >= 2)
 
     tag_buf[1] = tags.port3[0][base + 1];
-    state_buf[1] = states.port3[0][base + 1];
+    state_buf[1] = states[base + 1];
     hprot_buf[1] = hprots.port3[0][base + 1];
     line_buf[1] = lines.port3[0][base + 1];
 
 #if (L2_WAYS >= 4)
 
     tag_buf[2] = tags.port4[0][base + 2];
-    state_buf[2] = states.port4[0][base + 2];
+    state_buf[2] = states[base + 2];
     hprot_buf[2] = hprots.port4[0][base + 2];
     line_buf[2] = lines.port4[0][base + 2];
 
     tag_buf[3] = tags.port5[0][base + 3];
-    state_buf[3] = states.port5[0][base + 3];
+    state_buf[3] = states[base + 3];
     hprot_buf[3] = hprots.port5[0][base + 3];
     line_buf[3] = lines.port5[0][base + 3];
 
 #if (L2_WAYS >= 8)
 
     tag_buf[4] = tags.port6[0][base + 4];
-    state_buf[4] = states.port6[0][base + 4];
+    state_buf[4] = states[base + 4];
     hprot_buf[4] = hprots.port6[0][base + 4];
     line_buf[4] = lines.port6[0][base + 4];
 
     tag_buf[5] = tags.port7[0][base + 5];
-    state_buf[5] = states.port7[0][base + 5];
+    state_buf[5] = states[base + 5];
     hprot_buf[5] = hprots.port7[0][base + 5];
     line_buf[5] = lines.port7[0][base + 5];
 
     tag_buf[6] = tags.port8[0][base + 6];
-    state_buf[6] = states.port8[0][base + 6];
+    state_buf[6] = states[base + 6];
     hprot_buf[6] = hprots.port8[0][base + 6];
     line_buf[6] = lines.port8[0][base + 6];
 
     tag_buf[7] = tags.port9[0][base + 7];
-    state_buf[7] = states.port9[0][base + 7];
+    state_buf[7] = states[base + 7];
     hprot_buf[7] = hprots.port9[0][base + 7];
     line_buf[7] = lines.port9[0][base + 7];
 
