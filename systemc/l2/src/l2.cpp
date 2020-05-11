@@ -1117,6 +1117,12 @@ inline void l2::reset_io()
 		spdx_tu_pending_inv_valid[i] = false;
 	}
 
+	for (int i = 0; i < L2_LINES; i++)
+	{
+        HLS_UNROLL_LOOP(ON, "reset-states");
+        states[i] = INVALID;
+	}
+
 }
 
 
