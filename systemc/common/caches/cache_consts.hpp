@@ -211,6 +211,23 @@
 #define LLC_WB      11
 
 
+// DeNovo states
+#define DNV_I       0
+#define DNV_V       1
+#define DNV_R       2
+
+// DeNovo Transient state
+#define DNV_IV      1
+#define DNV_II      2
+
+// GPU states
+#define GPU_I       0
+#define GPU_V       1
+
+// DeNovo Transient state
+#define GPU_IV      1
+#define GPU_II      2
+
 /*
  * Protocol messages
  */
@@ -292,7 +309,7 @@ end original ESP messages
 #define RSP_RVK_O      4 // same as fwd_rvk_o
 #define RSP_V          5
 #define RSP_O          6 // same as fwd_req_o
-#define RSP_WT         7
+#define RSP_WT         7s
 #define RSP_WTdata     8
 
 

@@ -11,6 +11,7 @@ void l2::ctrl()
 {
 
     bool is_flush_all;
+	bool is_sync;
     {
         L2_RESET;
 
@@ -20,17 +21,6 @@ void l2::ctrl()
 
         // Reset all signals and channels
         reset_io();
-
-        // Reset state memory
-        wait();
-        for (int i=0; i<L2_SETS; i++) { // do not unroll
-            for (int j=0; j<L2_WAYS; j++) { // do not unroll
-                {
-                    wait();
-                    states[(i << L2_WAY_BITS) + j] = INVALID;
-                }
-            }
-        }
 
         wait();
     }
@@ -48,6 +38,7 @@ void l2::ctrl()
         bool do_fwd = false;
         bool do_ongoing_flush = false;
         bool do_cpu_req = false;
+		bool do_sync = false;
 
         l2_rsp_in_t rsp_in;
         l2_fwd_in_t fwd_in;
@@ -55,18 +46,17 @@ void l2::ctrl()
 
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
-            if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
+			if (l2_sync.nb_can_get()) {
+				l2_flush.nb_get(is_sync);
+				do_sync = true;
+            } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
                 ongoing_flush = true;
                 do_flush = true;
-            // } else if (spdx_tu_pending_inv_action_valid) {
-			// 	fwd_in = spdx_tu_pending_inv_action;
-			// 	spdx_tu_pending_inv_action_valid = false;
-			// 	do_fwd = true;
 			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if (((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) || spdx_tu_fake_putack_valid) {
+            } else if ((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
@@ -83,19 +73,20 @@ void l2::ctrl()
                         flush_way = 0;
                     }
                 } else {
-		    flush_set = 0;
+		    		flush_set = 0;
                     flush_way = 0;
                     ongoing_flush = false;
 
-		    flush_done.write(true);
-		    wait();
-		    flush_done.write(false);
+					flush_done.write(true);
+					wait();
+					flush_done.write(false);
                 }
             } else if ((l2_cpu_req.nb_can_get() || set_conflict) &&
                        !evict_stall && (reqs_cnt != 0 || ongoing_atomic)) { // assuming
                                                                             // HPROT
                                                                             // cacheable
-                if (!set_conflict) {
+                wait();
+				if (!set_conflict) {
                     get_cpu_req(cpu_req);
                 } else {
                     cpu_req = cpu_req_conflict;
@@ -105,9 +96,11 @@ void l2::ctrl()
             }
         }
 
+	if (do_sync) {
 
+		self_invalidate();
 
-	if (do_flush) {
+	} else if (do_flush) {
 
 
 	} else if (do_rsp) {
@@ -124,154 +117,23 @@ void l2::ctrl()
 
 	    switch (rsp_in.coh_msg) {
 
-	    case RSP_EDATA :
+	    case RSP_V :
 	    {
-		RSP_EDATA_ISD;
 
 		send_rd_rsp(rsp_in.line);
 
-		reqs[reqs_hit_i].state = INVALID;
+		reqs[reqs_hit_i].state = GPU_I;
 		reqs_cnt++;
 
 		put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, rsp_in.line,
-			 reqs[reqs_hit_i].hprot, EXCLUSIVE, reqs_hit_i);
+			 reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
 	    }
 	    break;
-
-	    case RSP_DATA :
-
-		switch (reqs[reqs_hit_i].state) {
-
-		case ISD :
-		{
-		    RSP_DATA_ISD;
-
-		    // read response
-		    send_rd_rsp(rsp_in.line);
-
-		    // resolve unstable state
-		    reqs[reqs_hit_i].state = INVALID;
-		    reqs_cnt++;
-
-			if (spdx_tu_pending_inv_valid[reqs_hit_i]) {
-
-				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-					rsp_in.line, reqs[reqs_hit_i].hprot, INVALID,
-					reqs_hit_i);
-			} else {
-
-				put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-					rsp_in.line, reqs[reqs_hit_i].hprot, SHARED,
-					reqs_hit_i);
-
-			}
-
-			spdx_tu_pending_inv_valid[reqs_hit_i] = false;
-
-		}
-
-		break;
-
-		case IMAD :
-		case SMAD :
-		{
-		    RSP_DATA_XMAD;
-
-		    // write word and resolve unstable state
-		    write_word(rsp_in.line, reqs[reqs_hit_i].word, reqs[reqs_hit_i].w_off,
-			       reqs[reqs_hit_i].b_off, reqs[reqs_hit_i].hsize);
-
-		    // update invack_cnt
-		    reqs[reqs_hit_i].invack_cnt += rsp_in.invack_cnt;
-
-		    if (reqs[reqs_hit_i].invack_cnt == MAX_N_L2) {
-
-			put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-				 rsp_in.line, reqs[reqs_hit_i].hprot, MODIFIED, reqs_hit_i);
-
-			// resolve unstable state
-			reqs[reqs_hit_i].state = INVALID;
-			reqs_cnt++;
-		    } else {
-			// update unstable state (+=2 is an optimization)
-			reqs[reqs_hit_i].state += 2;
-
-			reqs[reqs_hit_i].line = rsp_in.line;
-		    }
-		}
-
-		break;
-
-		case IMADW :
-		case SMADW :
-		{
-		    RSP_DATA_XMADW;
-
-		    // read response
-		    send_rd_rsp(rsp_in.line);
-
-		    reqs[reqs_hit_i].line = rsp_in.line;
-
-		    // update invack_cnt
-		    reqs[reqs_hit_i].invack_cnt += rsp_in.invack_cnt;
-
-		    if (reqs[reqs_hit_i].invack_cnt == MAX_N_L2) {
-			ongoing_atomic = true;
-			// update unstable state
-			reqs[reqs_hit_i].state = XMW;
-		    } else {
-			// update unstable state (+=2 is an optimization)
-			reqs[reqs_hit_i].state += 2;
-		    }
-		}
-
-		break;
-
-		default :
-		    RSP_DATA_DEFAULT;
-		}
-
-		break;
-
-	    case RSP_INVACK :
+		
+	    case RSP_NACK :
 	    {
-		RSP_INVACK_ALL;
 
-		reqs[reqs_hit_i].invack_cnt--;
-
-		if (reqs[reqs_hit_i].invack_cnt == MAX_N_L2) {
-
-		    switch (reqs[reqs_hit_i].state) {
-
-		    case IMA :
-		    case SMA :
-		    {
-			put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag,
-				 reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, MODIFIED, reqs_hit_i);
-
-			reqs[reqs_hit_i].state = INVALID;
-			reqs_cnt++;
-		    }
-		    break;
-
-		    case IMAW :
-		    case SMAW :
-		    {
-			ongoing_atomic = true;
-			reqs[reqs_hit_i].state = XMW;
-		    }
-		    break;
-
-		    case IMAD :
-		    case SMAD :
-		    case IMADW :
-		    case SMADW :
-			break;
-
-		    default :
-			RSP_INVACK_DEFAULT;
-		    }
-		}
+		// @TODO send retry
 	    }
 	    break;
 
@@ -282,363 +144,10 @@ void l2::ctrl()
 
 	} else if (do_fwd) {
 
-	    line_breakdown_t<l2_tag_t, l2_set_t> line_br;
-	    bool reqs_hit, tag_hit;
-	    sc_uint<REQS_BITS> reqs_hit_i;
-
-	    fwd_stall_ended = false;
-
-	    line_br.l2_line_breakdown(fwd_in.addr);
-
-	    l2_way_t way_hit;
-
-	    tag_lookup_fwd(line_br, tag_hit, way_hit);
-
-	    fwd_stall = reqs_peek_fwd(line_br, reqs_hit_i, reqs_hit, fwd_in.coh_msg);
-
-#if (USE_SPANDEX)
-		if (!(tag_hit || reqs_hit)) {
-			if (fwd_in.coh_msg == FWD_INV) send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-		} else
-#endif
-		
-		if (fwd_in.coh_msg == FWD_PUTACK) {
-
-		FWD_PUTACK_ALL;
-
-		if (evict_stall) {
-
-		    unstable_state_t state_tmp;
-		    mix_msg_t coh_msg_tmp;
-
-		    evict_stall = false;
-
-		    switch (reqs[reqs_hit_i].cpu_msg) {
-
-		    case READ :
-			state_tmp = ISD;
-			coh_msg_tmp = REQ_GETS;
-			break;
-
-		    case READ_ATOMIC :
-			state_tmp = IMADW;
-			coh_msg_tmp = REQ_GETM;
-			break;
-
-		    case WRITE :
-			state_tmp = IMAD;
-			coh_msg_tmp = REQ_GETM;
-			break;
-
-		    default :
-			PUTACK_DEFAULT;
-		    }
-
-		    l2_set_t set_tmp = reqs[reqs_hit_i].set;
-
-		    // TODO
-#if (L2_WAY_BITS == 1)
-		    evict_ways.port1[0][set_tmp] = (reqs[reqs_hit_i].way + 1) % 2;
-#else
-		    evict_ways.port1[0][set_tmp] = reqs[reqs_hit_i].way + 1;
-#endif
-		    reqs[reqs_hit_i].state = state_tmp;
-		    reqs[reqs_hit_i].tag = reqs[reqs_hit_i].tag_estall;
-
-		    line_addr_t line_addr_tmp = (reqs[reqs_hit_i].tag_estall << L2_SET_BITS) | (line_br.set);
-
-		    // send request to directory
-		    send_req_out(coh_msg_tmp, reqs[reqs_hit_i].hprot, line_addr_tmp, 0);
-
-		} else {
-
-		    reqs[reqs_hit_i].state = INVALID;
-		    reqs_cnt++;
-
-		}
-
-	    } else if (fwd_stall) {
-
-		FWD_STALL_BEGIN;
-
-		fwd_in_stalled = fwd_in;
-#if (USE_SPANDEX)
-		if (reqs[reqs_hit_i].state == ISD && fwd_in.coh_msg == FWD_INV) {
-			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
-			fwd_stall = false;
-			spdx_tu_pending_inv_valid[reqs_hit_i] = true;
-		}
-#endif
-
-	    } else if (reqs_hit) {
-
-#if (USE_SPANDEX)
-		if (fwd_in.coh_msg == FWD_INV) {
-			switch (reqs[reqs_hit_i].state) {
-				case SMAD:
-				case SMADW:
-				case SIA:
-				break;
-				// send incack as long as not above 3
-				default:
-					send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
-				break;
-			}
-		}
-#endif
-
-		switch (reqs[reqs_hit_i].state) {
-
-		case SMAD :
-		case SMADW :
-		{
-		    FWD_HIT_SMADX;
-
-		    if (fwd_in.coh_msg == FWD_INV) {
-				send_inval(fwd_in.addr);
-#if (USE_SPANDEX == 0)
-				send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-#else
-				send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // send incack to llc for spandex
-#endif
-
-			}
-		    reqs[reqs_hit_i].state -= 4; // TODO remove hardcoding, also in other places
-
-		    break;
-		}
-
-		case MIA :
-		{
-		    FWD_HIT_EMIA;
-
-		    if (fwd_in.coh_msg == FWD_GETS) {
-
-#if (USE_SPANDEX == 0)
-			for (int i = 0; i < 2; i++) {
-				// same rsp_s in spdx
-			    send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
-					 fwd_in.addr, reqs[reqs_hit_i].line);
-			    wait();
-			}
-#else
-                        {
-                                HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
-                                send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
-                                wait();
-                                send_rsp_out(RSP_S, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
-                                wait();
-                        }
-#endif
-
-			reqs[reqs_hit_i].state = SIA;
-
-		    } else {
-
- 			if (fwd_in.coh_msg == FWD_GETM) {
-#if (USE_SPANDEX == 0)
- 			    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
-#else
- 			    send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
-#endif
-			}
- 			else
-			 // non coherent dma
-#if (USE_SPANDEX == 0)
- 			    send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to LLC
-#else
- 			    send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
-#endif
-
-			reqs[reqs_hit_i].state = IIA;
-
-		    }
-
-		    break;
-		}
-
-		case SIA :
-		{
-		    FWD_HIT_SIA;
-
-		    if (fwd_in.coh_msg == FWD_INV) {
-
-#if (USE_SPANDEX == 0)
-			send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-#else
-			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-#endif
-
-			}
-		    reqs[reqs_hit_i].state = IIA;
-
-		    break;
-		}
-
-		default :
-		    FWD_HIT_DEFAULT;
-		}
-
-	    } else {
-
-		switch (fwd_in.coh_msg) {
-
-		case FWD_GETS :
-		{
-		    // FWD_NOHIT_GETS;
-
-#if (USE_SPANDEX == 0)
-		    for (int i = 0; i < 2; i++) {
-			// same rsp_s in spdx
-			send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
-				     fwd_in.addr, line_buf[way_hit]);
-			wait();
-		    }
-#else
-                    {
-                            HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
-                            send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]); // to llc
-                            wait();
-                            send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // same as rsp_s
-                            wait();
-                    }
-#endif
-		    states[(line_br.set << L2_WAY_BITS) + way_hit] = SHARED;
-
-		    break;
-		}
-
-		case FWD_GETM :
-		{
-		    FWD_NOHIT_GETM;
-
-		    if (!ongoing_flush)
-			send_inval(fwd_in.addr);
-
-#if (USE_SPANDEX == 0)
-		    send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
-#else
-			send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // to requestor
-#endif
-
-		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
-
-		    break;
-		}
-
-		case FWD_INV :
-		{
-		    FWD_NOHIT_INV;
-
-		    if (!ongoing_flush)
-			send_inval(fwd_in.addr);
-
-#if (USE_SPANDEX == 0)
-		    send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-#else
-			send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-#endif
-		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
-
-		    break;
-		}
-
- 		case FWD_GETM_LLC: // send rsp data to LLC (invack if exclusive)
- 		{
- 		    FWD_NOHIT_GETM_LLC;
-
- 		    if (!ongoing_flush)
- 			send_inval(fwd_in.addr);
-
-
-			// @TODO no worries for now
- 		    if (state_buf[way_hit] == EXCLUSIVE)
- 			send_rsp_out(RSP_INVACK, 0, 0, fwd_in.addr, 0);
- 		    else
-#if (USE_SPANDEX == 0)
- 			send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, line_buf[way_hit]);
-#else
- 			send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]);
-#endif
-
- 		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
-
- 		    break;
- 		}
-
-		// not happening after TU filter
- 		case FWD_INV_LLC : // same as FWD_INV but don't send invack
- 		{
- 		    FWD_NOHIT_INV_LLC;
-
- 		    if (!ongoing_flush)
- 			send_inval(fwd_in.addr);
-
- 		    states[(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
-
- 		    break;
- 		}
-
-		default :
-		    FWD_NOHIT_DEFAULT;
-		}
-	    }
+	// TODO probably not needed
 
 	} else if (do_ongoing_flush) {
-
-            sc_uint<REQS_BITS> reqs_hit_i;
-
-            read_set(flush_set);
-
-#ifdef L2_DEBUG
-            flush_way_dbg.write(flush_way);
-            flush_set_dbg.write(flush_set);
-#endif
-            if ((state_buf[flush_way] != INVALID) &&
-                (is_flush_all || hprot_buf[flush_way])) {
-
-                reqs_peek_flush(flush_set, reqs_hit_i);
-
-                addr_t addr_tmp = (tag_buf[flush_way] << L2_TAG_RANGE_LO) | (flush_set << SET_RANGE_LO);
-
-                addr_breakdown_t addr_br;
-                addr_br.breakdown(addr_tmp);
-
-                line_addr_t line_addr_tmp = (tag_buf[flush_way] << L2_SET_BITS) | (flush_set);
-
-                states[(flush_set << L2_WAY_BITS) + flush_way] = INVALID;
-
-                unstable_state_t state_tmp;
-                coh_msg_t coh_msg_tmp;
-
-                switch (state_buf[flush_way]) {
-
-                case SHARED :
-                    coh_msg_tmp = REQ_PUTS;
-                    state_tmp = SIA;
-                    break;
-
-                case EXCLUSIVE :
-                    coh_msg_tmp = REQ_PUTS;
-                    state_tmp = MIA;
-                    break;
-
-                case MODIFIED :
-                    coh_msg_tmp = REQ_PUTM;
-                    state_tmp = MIA;
-                    break;
-
-                default :
-                    EVICT_DEFAULT;
-                }
-
-                fill_reqs(0, addr_br, 0, flush_way, 0, state_tmp,
-                          0, 0, line_buf[flush_way], reqs_hit_i);
-
-                send_req_out(coh_msg_tmp, 0, line_addr_tmp,
-                             line_buf[flush_way]);
-            }
-            flush_way++;
+		self_invalidate();
 
 	} else if (do_cpu_req) { // assuming HPROT cacheable
 
@@ -653,79 +162,79 @@ void l2::ctrl()
 
 		// assuming there can only be 1 atomic operation in flight at a time
 
-		if (atomic_line_addr != addr_br.line_addr) {
+			if (atomic_line_addr != addr_br.line_addr) {
 
-		    ATOMIC_OVERRIDE;
+				ATOMIC_OVERRIDE;
 
-		    // atomic_conflict actually, but reuse variables
-		    set_conflict = true;
-		    cpu_req_conflict = cpu_req;
+				// atomic_conflict actually, but reuse variables
+				set_conflict = true;
+				cpu_req_conflict = cpu_req;
 
-		    reqs[reqs_atomic_i].state = INVALID;
-		    reqs_cnt++;
+				reqs[reqs_atomic_i].state = INVALID;
+				reqs_cnt++;
 
-		    wait();
+				wait();
 
-		    put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way,
-			     reqs[reqs_atomic_i].tag, reqs[reqs_atomic_i].line,
-			     reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
+				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way,
+					reqs[reqs_atomic_i].tag, reqs[reqs_atomic_i].line,
+					reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
 
-		    ongoing_atomic = false;
+				ongoing_atomic = false;
 
-		} else {
+			} else {
 
-		    ATOMIC_CONTINUE;
+				ATOMIC_CONTINUE;
 
-		    set_conflict = false;
+				set_conflict = false;
 
-		    switch (cpu_req.cpu_msg) {
+				switch (cpu_req.cpu_msg) {
 
-		    case READ :
+				case READ :
 
-			ATOMIC_CONTINUE_READ;
+				ATOMIC_CONTINUE_READ;
 
-			send_rd_rsp(reqs[reqs_atomic_i].line);
+				send_rd_rsp(reqs[reqs_atomic_i].line);
 
-			reqs[reqs_atomic_i].state = INVALID;
-			reqs_cnt++;
+				reqs[reqs_atomic_i].state = INVALID;
+				reqs_cnt++;
 
-			wait();
+				wait();
 
-			put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
-				 reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
+				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
+					reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
 
-			ongoing_atomic = false;
+				ongoing_atomic = false;
 
-			break;
+				break;
 
-		    case READ_ATOMIC :
+				case READ_ATOMIC :
 
-			send_rd_rsp(reqs[reqs_atomic_i].line);
+				send_rd_rsp(reqs[reqs_atomic_i].line);
 
-			break;
+				break;
 
-		    case WRITE :
-		    case WRITE_ATOMIC :
+				case WRITE :
+				case WRITE_ATOMIC :
 
-			ATOMIC_CONTINUE_WRITE;
+				ATOMIC_CONTINUE_WRITE;
 
-			write_word(reqs[reqs_atomic_i].line, cpu_req.word, addr_br.w_off,
-				   addr_br.b_off, cpu_req.hsize);
+				write_word(reqs[reqs_atomic_i].line, cpu_req.word, addr_br.w_off,
+					addr_br.b_off, cpu_req.hsize);
 
-			reqs[reqs_atomic_i].state = INVALID;
-			reqs_cnt++;
+				reqs[reqs_atomic_i].state = INVALID;
+				reqs_cnt++;
 
-			wait();
+				wait();
 
-			put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
-				 reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
+				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
+					reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
 
-			ongoing_atomic = false;
+				ongoing_atomic = false;
 
-		    break;
+				break;
 
-		    }
-		}
+				}
+			}
 
 	    } else if (set_conflict) {
 
@@ -735,200 +244,92 @@ void l2::ctrl()
 
 	    } else {
 
-		bool tag_hit;
-		l2_way_t way_hit;
-		bool empty_way_found;
-		l2_way_t empty_way;
+			bool tag_hit;
+			l2_way_t way_hit;
+			bool empty_way_found;
+			l2_way_t empty_way;
 
-		tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way);
+			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way);
 
-		if (cpu_req.cpu_msg == READ_ATOMIC) {
-		    reqs_atomic_i = reqs_hit_i;
-		    atomic_line_addr = addr_br.line_addr;
-		}
-
-
-#ifdef STATS_ENABLE
-		send_stats(tag_hit);
-#endif
-
-		if (tag_hit) {
-
-		    switch (cpu_req.cpu_msg) {
-
-		    case READ : // read hit
-		    {
-			HIT_READ;
-
-			// read response
-			send_rd_rsp(line_buf[way_hit]);
-		    }
-		    break;
-
-		    case READ_ATOMIC : // read atomic hit
-
-			switch (state_buf[way_hit]) {
-
-			case SHARED :
-			{
-			    HIT_READ_ATOMIC_S;
-
-			    // save request in intermediate state
-			    fill_reqs(cpu_req.cpu_msg, addr_br, 0, way_hit, cpu_req.hsize, SMADW,
-				      cpu_req.hprot, cpu_req.word, line_buf[way_hit], reqs_hit_i);
-
-			    // send request to directory
-			    send_req_out(REQ_GETM, cpu_req.hprot,
-					 addr_br.line_addr, 0);
-			}
-			break;
-
-			case EXCLUSIVE : // write hit
-			case MODIFIED : // write hit
-			{
-			    HIT_READ_ATOMIC_EM;
-
-			    ongoing_atomic = true;
-
-			    // save request in intermediate state
-			    fill_reqs(cpu_req.cpu_msg, addr_br, 0, way_hit, cpu_req.hsize, XMW,
-				      cpu_req.hprot, cpu_req.word, line_buf[way_hit], reqs_hit_i);
-
-                            // read response
-			    send_rd_rsp(line_buf[way_hit]);
-			}
-			break;
-
-			default:
-			    HIT_READ_ATOMIC_DEFAULT;
+			if (cpu_req.cpu_msg == READ_ATOMIC) {
+				reqs_atomic_i = reqs_hit_i;
+				atomic_line_addr = addr_br.line_addr;
 			}
 
-			break;
 
-		    case WRITE :
+			if (tag_hit) {
 
-			switch (state_buf[way_hit]) {
+				switch (cpu_req.cpu_msg) {
 
-			case SHARED :
-			{
-			    HIT_WRITE_S;
+				case READ : // read hit
+				HIT_READ;
 
-			    // save request in intermediate state
-			    fill_reqs(cpu_req.cpu_msg, addr_br, 0, way_hit, cpu_req.hsize, SMAD, cpu_req.hprot,
-				      cpu_req.word, line_buf[way_hit], reqs_hit_i);
+				// read response
+				send_rd_rsp(line_buf[way_hit]);
+				break;
 
-			    // send request to directory
-			    send_req_out(REQ_GETM, cpu_req.hprot,
-					 addr_br.line_addr, 0);
+				case READ_ATOMIC : // read atomic hit
+				// @TODO
+				break;
+
+				case WRITE :
+
+				write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
+				break;
+				
+				}
+
+			} else if (empty_way_found) {
+
+				unstable_state_t state_tmp;
+				coh_msg_t coh_msg_tmp;
+
+				switch (cpu_req.cpu_msg) {
+
+				case READ :
+				{
+				MISS_READ;
+				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, GPU_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], reqs_hit_i);
+
+				}
+				break;
+
+				case READ_ATOMIC :
+				{
+					// TODO
+				}
+				break;
+
+				case WRITE :
+				{
+				write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
+
+				}
+				break;
+
+				default:
+				MISS_DEFAULT;
+				}
+
+			} else {
+
+				evict_stall = true;
+				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
+				l2_tag_t tag_tmp = addr_br.tag;
+				addr_br.tag = tag_buf[evict_way];
+
+				unstable_state_t state_tmp;
+				coh_msg_t coh_msg_tmp;
+
+				state_buf[evict_way] = GPU_I;
+
+				send_inval(line_addr_evict);
+				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, GPU_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], reqs_hit_i);
 			}
-			break;
-
-			case EXCLUSIVE : // write hit
-			    states[(addr_br.set << L2_WAY_BITS) + way_hit] = MODIFIED;
-			case MODIFIED : // write hit
-			{
-			    HIT_WRITE_EM;
-
-			    // write word
-			    write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off,
-				       addr_br.b_off, cpu_req.hsize);
-			    lines.port1[0][(addr_br.set << L2_WAY_BITS) + way_hit] = line_buf[way_hit];
-			}
-			break;
-
-			default:
-			    HIT_WRITE_DEFAULT;
-			}
-			break;
-
-		    default:
-			HIT_DEFAULT;
-		    }
-
-		} else if (empty_way_found) {
-
-		    unstable_state_t state_tmp;
-		    coh_msg_t coh_msg_tmp;
-
-		    switch (cpu_req.cpu_msg) {
-
-		    case READ :
-		    {
-			MISS_READ;
-
-			state_tmp = ISD;
-			coh_msg_tmp = REQ_GETS;
-
-		    }
-		    break;
-
-		    case READ_ATOMIC :
-		    {
-			MISS_READ_ATOMIC;
-
-			state_tmp = IMADW;
-			coh_msg_tmp = REQ_GETM;
-
-		    }
-		    break;
-
-		    case WRITE :
-		    {
-			MISS_WRITE;
-
-			state_tmp = IMAD;
-			coh_msg_tmp = REQ_GETM;
-
-		    }
-		    break;
-
-		    default:
-			MISS_DEFAULT;
-		    }
-
-		    // save request in intermediate state
-		    fill_reqs(cpu_req.cpu_msg, addr_br, 0, empty_way, cpu_req.hsize,
-			      state_tmp, cpu_req.hprot, cpu_req.word, 0, reqs_hit_i);
-
-		    // send request to directory
-		    send_req_out(coh_msg_tmp, cpu_req.hprot, addr_br.line_addr, 0);
-
-		} else {
-
-		    evict_stall = true;
-		    line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
-		    l2_tag_t tag_tmp = addr_br.tag;
-		    addr_br.tag = tag_buf[evict_way];
-
-		    unstable_state_t state_tmp;
-		    coh_msg_t coh_msg_tmp;
-
-		    switch (state_buf[evict_way]) {
-
-		    case SHARED :
-			coh_msg_tmp = REQ_PUTS;
-			state_tmp = SIA;
-			break;
-
-		    case EXCLUSIVE :
-			coh_msg_tmp = REQ_PUTS;
-			state_tmp = MIA;
-			break;
-
-		    case MODIFIED :
-			coh_msg_tmp = REQ_PUTM;
-			state_tmp = MIA;
-			break;
-
-		    default :
-			EVICT_DEFAULT;
-		    }
-
-		    send_inval(line_addr_evict);
-		    send_req_out(coh_msg_tmp, 0, line_addr_evict, line_buf[evict_way]);
-		    fill_reqs(cpu_req.cpu_msg, addr_br, tag_tmp, evict_way, cpu_req.hsize, state_tmp,
-			      cpu_req.hprot, cpu_req.word, line_buf[evict_way], reqs_hit_i);
-		}
 	    }
 	}
 
@@ -1110,17 +511,11 @@ inline void l2::reset_io()
     ongoing_flush = false;
     flush_set = 0;
     flush_way = 0;
-	spdx_tu_fake_putack_valid = false;
-	for (int i = 0; i < N_REQS; i++)
-	{
-        HLS_UNROLL_LOOP(ON, "reset-buf");
-		spdx_tu_pending_inv_valid[i] = false;
-	}
 
 	for (int i = 0; i < L2_LINES; i++)
 	{
         HLS_UNROLL_LOOP(ON, "reset-states");
-        states[i] = INVALID;
+        states[i] = GPU_I;
 	}
 
 }
@@ -1140,47 +535,7 @@ void l2::get_fwd_in(l2_fwd_in_t &fwd_in)
     L2_GET_FWD_IN;
 
 
-#if (USE_SPANDEX == 1)
-// fake putack
-	if (spdx_tu_fake_putack_valid)
-	{
-		fwd_in = spdx_tu_fake_putack;
-		spdx_tu_fake_putack_valid = false;
-		return;
-	}
-
-#endif
-
     l2_fwd_in.nb_get(fwd_in);
-
-#if (USE_SPANDEX == 1)
-    // switch (fwd_in.coh_msg)
-    // {
-    //     case FWD_REQ_V:
-    //         // @TODO
-    //         break;
-    //     // case FWD_REQ_S:
-    //     //     fwd_in.coh_msg = FWD_GETS;
-    //     //     break;
-    //     // case FWD_REQ_O:
-    //     case FWD_REQ_Odata:
-    //         fwd_in.coh_msg = FWD_GETM;
-    //         break;
-    //     case FWD_RVK_O:
-    //         // same as inv for MESI
-    //     // case FWD_INV_SPDX:
-    //     //     fwd_in.coh_msg = FWD_INV;
-    //     //     break;
-    //     // case FWD_WB_ACK:
-    //     //     fwd_in.coh_msg = FWD_PUTACK;
-    //     //     break;
-    //     default:
-    //         break;
-
-    // }
-	orig_spdx_msg = fwd_in.coh_msg;
-	if (fwd_in.coh_msg == FWD_REQ_O) fwd_in.coh_msg = FWD_REQ_Odata;
-#endif
 }
 
 void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
@@ -1189,24 +544,6 @@ void l2::get_rsp_in(l2_rsp_in_t &rsp_in)
 
     l2_rsp_in.nb_get(rsp_in);
 
-#if (USE_SPANDEX == 1)
-    // switch (rsp_in.coh_msg)
-    // {
-    //     // case RSP_S:
-    //     //     rsp_in.coh_msg = RSP_DATA;
-    //     //     break;
-    //     case RSP_O:
-    //         rsp_in.coh_msg = RSP_DATA;
-    //         break;
-    //     case RSP_Odata:
-    //         rsp_in.coh_msg = RSP_DATA;
-    //         break;
-    //     defaut:
-    //         break;
-    // }
-	if (rsp_in.coh_msg == RSP_O || rsp_in.coh_msg == RSP_Odata) rsp_in.coh_msg = RSP_DATA;
-
-#endif
 }
 
 bool l2::get_flush()
@@ -1242,7 +579,7 @@ void l2::send_inval(line_addr_t addr_inval)
     l2_inval.put(addr_inval);
 }
 
-void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line)
+void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line, word_mask_t word_mask)
 {
     SEND_REQ_OUT;
 
@@ -1252,36 +589,7 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
     req_out.hprot = hprot;
     req_out.addr = line_addr;
     req_out.line = line;
-
-#if (USE_SPANDEX == 1)
-	req_out.word_mask = WORD_MASK_ALL; // 0b1111
-	if (req_out.coh_msg == REQ_PUTS)
-	{
-		spdx_tu_fake_putack.coh_msg = FWD_PUTACK;
-		spdx_tu_fake_putack.addr = line_addr;
-		spdx_tu_fake_putack.req_id = 0;
-		spdx_tu_fake_putack.word_mask = WORD_MASK_ALL;
-		spdx_tu_fake_putack_valid = 1;
-		return;
-	}
-    // switch (req_out.coh_msg)
-    // {
-    //     // case REQ_GETS:
-    //     //     req_out.coh_msg = REQ_S;
-    //     //     break;
-    //     // case REQ_GETM:
-    //     //     req_out.coh_msg = REQ_O;
-	// 	// 	break;
-    //     case REQ_PUTS:
-    //         // silent eviction
-    //         return;
-    //     // case REQ_PUTM:
-    //     //     req_out.coh_msg = REQ_WB;
-	// 	// 	break;
-    //     default:
-    //         break;
-    // }
-#endif
+	req_out.word_mask = word_mask;
 
     while (!l2_req_out.nb_can_put()) wait();
 
@@ -1290,35 +598,20 @@ void l2::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, l
 
 void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line)
 {
-    SEND_RSP_OUT;
+    // SEND_RSP_OUT;
 
-    l2_rsp_out_t rsp_out;
+    // l2_rsp_out_t rsp_out;
 
-    rsp_out.coh_msg = coh_msg;
-    rsp_out.req_id  = req_id;
-    rsp_out.to_req  = to_req;
-    rsp_out.addr    = line_addr;
-    rsp_out.line    = line;
-	rsp_out.word_mask = WORD_MASK_ALL;
+    // rsp_out.coh_msg = coh_msg;
+    // rsp_out.req_id  = req_id;
+    // rsp_out.to_req  = to_req;
+    // rsp_out.addr    = line_addr;
+    // rsp_out.line    = line;
+	// rsp_out.word_mask = WORD_MASK_ALL;
 
-// #if USE_SPANDEX == 1
-// 	switch (rsp_out.coh_msg)
-//     {
-//         case RSP_DATA:
-//             // @TODO check what type of request that has data?
-//             break;
-//         case RSP_INVACK:
-//             // @TODO inv_ack or rsp_rvko?
-//             rsp_out.coh_msg = RSP_INV_ACK_SPDX;
-//             break;
-//         default:
-//             break;
-//     }
-// #endif
+    // while (!l2_rsp_out.nb_can_put()) wait();
 
-    while (!l2_rsp_out.nb_can_put()) wait();
-
-    l2_rsp_out.nb_put(rsp_out);
+    // l2_rsp_out.nb_put(rsp_out);
 }
 
 #ifdef STATS_ENABLE
@@ -1614,3 +907,21 @@ bool l2::reqs_peek_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br,
 
     return fwd_stall_tmp;
 }
+
+
+void l2::self_invalidate()
+{
+	for (int i = 0; i < L2_LINES; i++)
+	{
+        HLS_UNROLL_LOOP(ON, "reset-states");
+        states[i] = GPU_I;
+	}
+
+	for (int i = 0; i < N_REQS; i++)
+	{
+        HLS_UNROLL_LOOP(ON, "reset-reqs");
+        if (reqs[i].state == GPU_IV) reqs[i].state = GPU_IV;
+	}
+
+}
+
