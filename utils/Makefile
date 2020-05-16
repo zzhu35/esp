@@ -529,13 +529,38 @@ RISCV_CFLAGS += -fno-builtin-printf
 RISCV_CFLAGS += -nostdlib
 RISCV_CFLAGS += -nostartfiles -lm -lgcc
 
-systest.exe: systest.c uart.o
+RISCV_CPP_CFLAGS  = -I$(RISCV_TESTS)/env
+RISCV_CPP_CFLAGS += -I$(RISCV_TESTS)/benchmarks/common
+RISCV_CPP_CFLAGS += -I$(BOOTROM_PATH)
+RISCV_CPP_CFLAGS += -mcmodel=medany
+RISCV_CPP_CFLAGS += -static
+RISCV_CPP_CFLAGS += -std=c++11
+RISCV_CPP_CFLAGS += -O2
+RISCV_CPP_CFLAGS += -ffast-math
+RISCV_CPP_CFLAGS += -fno-common
+RISCV_CPP_CFLAGS += -fno-builtin-printf
+RISCV_CPP_CFLAGS += -nostdlib
+RISCV_CPP_CFLAGS += -nostartfiles -lm -lgcc
+
+syscalls.o:
 	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
 	$(RISCV_TESTS)/benchmarks/common/syscalls.c \
-	$(RISCV_TESTS)/benchmarks/common/crt.S  \
+	-I$(DESIGN_PATH) -c -o $@
+
+crt.o:
+	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
+	$(RISCV_TESTS)/benchmarks/common/crt.S \
+	-I$(DESIGN_PATH) -c -o $@
+
+systest.o: systest.c
+	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
+	-I$(DESIGN_PATH) -c -o $@ $<
+
+systest.exe: systest.o syscalls.o crt.o uart.o
+	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
+	syscalls.o crt.o uart.o systest.o \
 	-T $(RISCV_TESTS)/benchmarks/common/test.ld -o $@ \
-	-I$(DESIGN_PATH) \
-	uart.o $<
+	-I$(DESIGN_PATH)
 
 systest.bin: $(TEST_PROGRAM)
 	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O binary $< $@
