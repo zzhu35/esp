@@ -438,7 +438,14 @@ else ifeq ("$(CPU_ARCH)", "ariane")
 RISCV_TESTS = $(SOFT)/riscv-tests
 RISCV_PK = $(SOFT)/riscv-pk
 
-soft: prom.srec ram.srec prom.bin systest.bin
+soft: soft-clean prom.srec ram.srec prom.bin systest.bin
+soft-cpp: soft-clean prom.srec ram.srec-cpp prom.bin systest-cpp.bin
+	@mv systest-cpp.bin systest.bin
+	@mv systest.exe-cpp systest.exe
+	@mv ram.srec-cpp ram.srec
+
+disas:
+	riscv64-unknown-elf-objdump -D -S systest.exe > systest.lst
 
 soft-clean:
 	$(QUIET_CLEAN)$(RM) 	\
@@ -446,6 +453,7 @@ soft-clean:
 		ram.srec	\
 		prom.exe	\
 		systest.exe	\
+		*.o \
 		prom.bin	\
 		ariane.dtb	\
 		startup.o	\
@@ -529,6 +537,39 @@ RISCV_CFLAGS += -fno-builtin-printf
 RISCV_CFLAGS += -nostdlib
 RISCV_CFLAGS += -nostartfiles -lm -lgcc
 
+RISCV_CPP_CFLAGS  = -I$(RISCV_TESTS)/env
+RISCV_CPP_CFLAGS += -I$(RISCV_TESTS)/benchmarks/common
+RISCV_CPP_CFLAGS += -I$(BOOTROM_PATH)
+RISCV_CPP_CFLAGS += -mcmodel=medany
+RISCV_CPP_CFLAGS += -static
+RISCV_CPP_CFLAGS += -std=c++11
+RISCV_CPP_CFLAGS += -O2
+RISCV_CPP_CFLAGS += -ffast-math
+RISCV_CPP_CFLAGS += -fno-common
+RISCV_CPP_CFLAGS += -fno-builtin-printf
+RISCV_CPP_CFLAGS += -nostdlib
+RISCV_CPP_CFLAGS += -nostartfiles -lm -lgcc
+
+syscalls.o:
+	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
+	$(RISCV_TESTS)/benchmarks/common/syscalls.c \
+	-I$(DESIGN_PATH) -c -o $@
+
+crt.o:
+	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
+	$(RISCV_TESTS)/benchmarks/common/crt.S \
+	-I$(DESIGN_PATH) -c -o $@
+
+systest-cpp.o: systest.cpp
+	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
+	-I$(DESIGN_PATH) -c -o $@ $<
+
+systest.exe-cpp: systest-cpp.o syscalls.o crt.o uart.o
+	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
+	syscalls.o crt.o uart.o systest-cpp.o \
+	-T $(RISCV_TESTS)/benchmarks/common/test.ld -o $@ \
+	-I$(DESIGN_PATH)
+
 systest.exe: systest.c uart.o
 	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
 	$(RISCV_TESTS)/benchmarks/common/syscalls.c \
@@ -540,9 +581,14 @@ systest.exe: systest.c uart.o
 systest.bin: $(TEST_PROGRAM)
 	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O binary $< $@
 
+systest-cpp.bin: $(TEST_PROGRAM)-cpp
+	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O binary $< $@
+
 ram.srec: $(TEST_PROGRAM)
 	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O srec --gap-fill 0 $< $@
 
+ram.srec-cpp: $(TEST_PROGRAM)-cpp
+	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O srec --gap-fill 0 $< $@
 
 
 .PHONY: ahbrom-clean ahbrom-distclean
@@ -1032,13 +1078,32 @@ xmsim-compile: sldgen check_all_srcs soft xcelium/xmready xcelium/xmsim.in
 	$(XMUPDATE) $(SIMTOP); \
 	cd ../;
 
+xmsim-compile-cpp: sldgen check_all_srcs soft-cpp xcelium/xmready xcelium/xmsim.in
+	$(QUIET_MAKE) \
+	cd xcelium; \
+	echo $(SPACES)"$(XMUPDATE) $(SIMOPT)"; \
+	$(XMUPDATE) $(SIMTOP); \
+	cd ../;
+
 xmsim: xmsim-compile
 	@cd xcelium; \
 	echo $(SPACES)"xmsim $(XMSIMOPT)"; \
 	xmsim $(XMSIMOPT); \
 	cd ../
 
+xmsim-cpp: xmsim-compile-cpp
+	@cd xcelium; \
+	echo $(SPACES)"xmsim $(XMSIMOPT)"; \
+	xmsim $(XMSIMOPT); \
+	cd ../
+
 xmsim-gui: xmsim-compile
+	@cd xcelium; \
+	echo $(SPACES)"xmsim -gui $(XMSIMOPT)"; \
+	xmsim -gui $(XMSIMOPT); \
+	cd ../
+
+xmsim-gui-cpp: xmsim-compile-cpp
 	@cd xcelium; \
 	echo $(SPACES)"xmsim -gui $(XMSIMOPT)"; \
 	xmsim -gui $(XMSIMOPT); \
@@ -1626,6 +1691,12 @@ endif
 
 
 fpga-run: esplink soft
+	@./esplink --reset
+	@./esplink --brom -i prom.bin
+	@./esplink --dram -i systest.bin
+	@./esplink --reset
+
+fpga-run-cpp: esplink soft-cpp
 	@./esplink --reset
 	@./esplink --brom -i prom.bin
 	@./esplink --dram -i systest.bin
