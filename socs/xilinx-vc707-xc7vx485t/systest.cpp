@@ -1,36 +1,43 @@
 #include <atomic>
 using namespace std;
 
-extern "C"{
+extern "C"
+{
 #include "uart.h"
-void myprintf(const char* str){
+void cprintf(const char* str)
+{
     print_uart(str);
 }
+void cprintint(uint32_t i)
+{
+	print_uart_int(i);
+}
+}
+
+void fence()
+{
+	__asm__ volatile ("fence" : : : "memory");
+
 }
 
 int main(int argc, char **argv)
 {
-    myprintf("Hello from CPP!\n");
-	int i, tmp, tmp2;
+	char str[50];
+	int tmp, tmp2;
+    cprintf("Hello from CPP!\n");
 	volatile int* c = (volatile int*)&tmp;
 	volatile int* d = (volatile int*)&tmp2;
 
-	*c = 0;
-	for (i = 0; i < 10; i++)
+	atomic<int> atom(0);
+
+	while(true)
 	{
-		*c = *c + 1;
-		__asm__ volatile ("fence" : : : "memory");
-		// asm volatile (
-		// " amoswap.w.aq t0, t0, (%1);"
-		// : "=&r"(d)
-		// : "0" (d)
-		// : "memory"
-		// );
+		atom.fetch_add(1);
+    	cprintf("step\n");
+		tmp = atom.load();
+		cprintint(tmp); cprintf("\n");
+
 	}
-	if (*c == 10)
-		myprintf("C == 10.\n");
-	else
-		myprintf("C is wrong.\n");
-	
+
 	return 0;
 }

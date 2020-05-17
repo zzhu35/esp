@@ -553,21 +553,21 @@ RISCV_CPP_CFLAGS += -nostartfiles -lm -lgcc
 syscalls.o:
 	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
 	$(RISCV_TESTS)/benchmarks/common/syscalls.c \
-	-I$(DESIGN_PATH) -c -o $@
+	-I$(DESIGN_PATH) -c -g -o $@
 
 crt.o:
 	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
 	$(RISCV_TESTS)/benchmarks/common/crt.S \
-	-I$(DESIGN_PATH) -c -o $@
+	-I$(DESIGN_PATH) -c -g -o $@
 
 systest-cpp.o: systest.cpp
 	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
-	-I$(DESIGN_PATH) -c -o $@ $<
+	-I$(DESIGN_PATH) -c -g -o $@ $<
 
 systest.exe-cpp: systest-cpp.o syscalls.o crt.o uart.o
 	$(QUIET_CC) riscv64-unknown-elf-g++ $(RISCV_CPP_CFLAGS) \
 	syscalls.o crt.o uart.o systest-cpp.o \
-	-T $(RISCV_TESTS)/benchmarks/common/test.ld -o $@ \
+	-T $(RISCV_TESTS)/benchmarks/common/test.ld -g -o $@ \
 	-I$(DESIGN_PATH)
 
 systest.exe: systest.c uart.o
