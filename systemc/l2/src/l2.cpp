@@ -117,28 +117,43 @@ void l2::ctrl()
 
 	    switch (rsp_in.coh_msg) {
 
+        case RSP_WTdata:
 	    case RSP_V :
 	    {
 
-		send_rd_rsp(rsp_in.line);
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                HLS_UNROLL_LOOP(ON, "rsp_v");
+                if (rsp_in.word_mask & 1 << i) {
+                    // found a valid bit in response word mask
+                    reqs[reqs_hit_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                    reqs[reqs_hit_i].word_mask |= 1 << i;
+                }
+            }
 
-		reqs[reqs_hit_i].state = GPU_I;
-		reqs_cnt++;
-
-		put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, rsp_in.line,
-			 reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+            // all words valid now
+            if (reqs[reqs_hit_i].word_mask == WORD_MASK_ALL){
+                
+                HLS_DEFINE_PROTOCOL("gpu-resp");
+                send_rd_rsp(rsp_in.line);
+                reqs[reqs_hit_i].state = GPU_I;
+                reqs_cnt++;
+                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+            }
 	    }
 	    break;
 		
 	    case RSP_NACK :
 	    {
-
-		// @TODO send retry
+            reqs[reqs_hit_i].retry++;
+            {
+                HLS_DEFINE_PROTOCOL("send retry");
+				send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY) ? REQ_V : REQ_WTdata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+            }
 	    }
 	    break;
 
 	    default:
-		RSP_DEFAULT;
+		    RSP_DEFAULT;
 
 	    }
 
@@ -158,86 +173,8 @@ void l2::ctrl()
 
 	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
 
-	    if (ongoing_atomic) {
-
-		// assuming there can only be 1 atomic operation in flight at a time
-
-			if (atomic_line_addr != addr_br.line_addr) {
-
-				ATOMIC_OVERRIDE;
-
-				// atomic_conflict actually, but reuse variables
-				set_conflict = true;
-				cpu_req_conflict = cpu_req;
-
-				reqs[reqs_atomic_i].state = INVALID;
-				reqs_cnt++;
-
-				wait();
-
-				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way,
-					reqs[reqs_atomic_i].tag, reqs[reqs_atomic_i].line,
-					reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
-
-				ongoing_atomic = false;
-
-			} else {
-
-				ATOMIC_CONTINUE;
-
-				set_conflict = false;
-
-				switch (cpu_req.cpu_msg) {
-
-				case READ :
-
-				ATOMIC_CONTINUE_READ;
-
-				send_rd_rsp(reqs[reqs_atomic_i].line);
-
-				reqs[reqs_atomic_i].state = INVALID;
-				reqs_cnt++;
-
-				wait();
-
-				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
-					reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
-
-				ongoing_atomic = false;
-
-				break;
-
-				case READ_ATOMIC :
-
-				send_rd_rsp(reqs[reqs_atomic_i].line);
-
-				break;
-
-				case WRITE :
-				case WRITE_ATOMIC :
-
-				ATOMIC_CONTINUE_WRITE;
-
-				write_word(reqs[reqs_atomic_i].line, cpu_req.word, addr_br.w_off,
-					addr_br.b_off, cpu_req.hsize);
-
-				reqs[reqs_atomic_i].state = INVALID;
-				reqs_cnt++;
-
-				wait();
-
-				put_reqs(reqs[reqs_atomic_i].set, reqs[reqs_atomic_i].way, reqs[reqs_atomic_i].tag,
-					reqs[reqs_atomic_i].line, reqs[reqs_atomic_i].hprot, MODIFIED, reqs_atomic_i);
-
-				ongoing_atomic = false;
-
-				break;
-
-				}
-			}
-
-	    } else if (set_conflict) {
-
+        if (set_conflict) {
+            // @TODO probably not needed, but leave it here for now
 		SET_CONFLICT;
 
 		cpu_req_conflict = cpu_req;
@@ -251,78 +188,35 @@ void l2::ctrl()
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way);
 
-			if (cpu_req.cpu_msg == READ_ATOMIC) {
-				reqs_atomic_i = reqs_hit_i;
-				atomic_line_addr = addr_br.line_addr;
-			}
+            if (cpu_req.amo) {
+                // @TODO implement AMO
+            }
 
+            else if (cpu_req.cpu_msg == WRITE)
+            {
+                HLS_DEFINE_PROTOCOL("send wt");
+                // @TODO implement write buffer
 
-			if (tag_hit) {
-
-				switch (cpu_req.cpu_msg) {
-
-				case READ : // read hit
-				HIT_READ;
-
-				// read response
-				send_rd_rsp(line_buf[way_hit]);
-				break;
-
-				case READ_ATOMIC : // read atomic hit
-				// @TODO
-				break;
-
-				case WRITE :
-
-				write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+                // only update word if tag hit, otherwise just send request, no write allocate
+				if (tag_hit) write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
 				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
-				break;
+            }
+            // else if read
+
+			else if (tag_hit) {
 				
-				}
+                send_rd_rsp(line_buf[way_hit]);
 
-			} else if (empty_way_found) {
+			}
+            else if (empty_way_found) {
 
-				unstable_state_t state_tmp;
-				coh_msg_t coh_msg_tmp;
-
-				switch (cpu_req.cpu_msg) {
-
-				case READ :
-				{
-				MISS_READ;
 				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
 				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, GPU_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], reqs_hit_i);
 
-				}
-				break;
-
-				case READ_ATOMIC :
-				{
-					// TODO
-				}
-				break;
-
-				case WRITE :
-				{
-				write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
-				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
-
-				}
-				break;
-
-				default:
-				MISS_DEFAULT;
-				}
-
 			} else {
 
-				evict_stall = true;
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
-				l2_tag_t tag_tmp = addr_br.tag;
 				addr_br.tag = tag_buf[evict_way];
-
-				unstable_state_t state_tmp;
-				coh_msg_t coh_msg_tmp;
 
 				state_buf[evict_way] = GPU_I;
 
@@ -645,6 +539,8 @@ void l2::fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t tag_est
     reqs[reqs_i].invack_cnt  = MAX_N_L2;
     reqs[reqs_i].word	     = word;
     reqs[reqs_i].line	     = line;
+    reqs[reqs_i].word_mask   = 0;
+    reqs[reqs_i].retry       = 0;
 
     reqs_cnt--;
 }
@@ -738,11 +634,6 @@ void l2::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &way_hit, 
 
     for (int i = L2_WAYS-1; i >=0; --i) {
 	TAG_LOOKUP_LOOP;
-
-	// HLS_BREAK_ARRAY_DEPENDENCY(tags); // TODO are these needed?
-	// HLS_BREAK_ARRAY_DEPENDENCY(states);
-	// HLS_BREAK_ARRAY_DEPENDENCY(hprots);
-	// HLS_BREAK_ARRAY_DEPENDENCY(lines);
 
 	// tag_buf[i]   = tags[base + i];
 	// state_buf[i] = states[base + i];
@@ -920,8 +811,10 @@ void l2::self_invalidate()
 	for (int i = 0; i < N_REQS; i++)
 	{
         HLS_UNROLL_LOOP(ON, "reset-reqs");
-        if (reqs[i].state == GPU_IV) reqs[i].state = GPU_IV;
+        if (reqs[i].state == GPU_IV) reqs[i].state = GPU_II;
 	}
+
+    // @TODO flush write buffer
 
 }
 

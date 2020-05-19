@@ -228,6 +228,9 @@
 #define GPU_IV      1
 #define GPU_II      2
 
+#define MAX_RETRY 4
+#define MAX_RETRY_BITS ilog2(MAX_RETRY)
+
 /*
  * Protocol messages
  */
@@ -279,6 +282,8 @@ original ESP messages
 end original ESP messages
 *****************/
 
+#define ARIANE_AMO_BITS 6        //@TODO fix me and define AMOs, probably done already in ESP Ariane SMP release
+
 
 // requests (L2/TU to L3)
 #define REQ_S          0 // same as gets
@@ -309,7 +314,7 @@ end original ESP messages
 #define RSP_RVK_O      4 // same as fwd_rvk_o
 #define RSP_V          5
 #define RSP_O          6 // same as fwd_req_o
-#define RSP_WT         7s
+#define RSP_WT         7
 #define RSP_WTdata     8
 
 

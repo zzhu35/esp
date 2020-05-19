@@ -32,9 +32,19 @@ int main(int argc, char **argv)
 
 	while(true)
 	{
-		atom.fetch_add(1);
-    	cprintf("step\n");
-		tmp = atom.load();
+		// memory_order_relaxed
+    	// memory_order_consume
+    	// memory_order_acquire
+    	// memory_order_release
+    	// memory_order_acq_rel
+    	// memory_order_seq_cst
+
+		// tmp = atom.fetch_add(0, std::memory_order_seq_cst); // atomic read
+		atom.store(1, std::memory_order_seq_cst); // atomic write
+		// atom.store(1, std::memory_order_seq_cst);
+		// tmp = atom.load(std::memory_order_seq_cst);
+
+
 		cprintint(tmp); cprintf("\n");
 
 	}
