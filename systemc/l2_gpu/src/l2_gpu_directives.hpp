@@ -1,12 +1,12 @@
 // Copyright (c) 2011-2019 Columbia University, System Level Design Group
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef __L2_DIRECTIVES_HPP__
-#define __L2_DIRECTIVES_HPP__
+#ifndef __L2_GPU_DIRECTIVES_HPP__
+#define __L2_GPU_DIRECTIVES_HPP__
 
-#define L2_FLATTEN_REGS				\
-    HLS_FLATTEN_ARRAY(spdx_tu_pending_inv_valid);			\
+#define L2_GPU_FLATTEN_REGS				\
     HLS_FLATTEN_ARRAY(reqs);			\
+    HLS_FLATTEN_ARRAY(states);			\
     HLS_FLATTEN_ARRAY(tag_buf);			\
     HLS_FLATTEN_ARRAY(state_buf);		\
     HLS_FLATTEN_ARRAY(hprot_buf);		\
@@ -15,7 +15,7 @@
 
 /* Reset */
 
-#define L2_RESET				\
+#define L2_GPU_RESET				\
     HLS_DEFINE_PROTOCOL("l2-reset")
 
 /* Debug */

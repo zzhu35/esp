@@ -1,19 +1,18 @@
 // Copyright (c) 2011-2019 Columbia University, System Level Design Group
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef __L2_HPP__
-#define __L2_HPP__
+#ifndef __L2_GPU_HPP__
+#define __L2_GPU_HPP__
 
 #include "cache_utils.hpp"
-#include "l2_directives.hpp"
+#include "l2_gpu_directives.hpp"
 
-#include EXP_MEM_INCLUDE_STRING(l2, tags, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2, states, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2, lines, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2, hprots, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2, evict_ways, L2_SETS, L2_WAYS)
+#include EXP_MEM_INCLUDE_STRING(l2_gpu, tags, L2_SETS, L2_WAYS)
+#include EXP_MEM_INCLUDE_STRING(l2_gpu, lines, L2_SETS, L2_WAYS)
+#include EXP_MEM_INCLUDE_STRING(l2_gpu, hprots, L2_SETS, L2_WAYS)
+#include EXP_MEM_INCLUDE_STRING(l2_gpu, evict_ways, L2_SETS, L2_WAYS)
 
-class l2 : public sc_module
+class l2_gpu : public sc_module
 {
 
 public:
@@ -68,7 +67,8 @@ public:
     nb_get_initiator<l2_cpu_req_t>	l2_cpu_req;
     nb_get_initiator<l2_fwd_in_t>	l2_fwd_in;
     nb_get_initiator<l2_rsp_in_t>	l2_rsp_in;
-    nb_get_initiator<bool>		l2_flush;
+    nb_get_initiator<bool>		    l2_flush;
+    nb_get_initiator<bool>		    l2_sync;
 
     // Output ports
     put_initiator<l2_rd_rsp_t>	l2_rd_rsp;
@@ -81,14 +81,18 @@ public:
 #endif
 
     // Local memory
-    EXP_MEM_TYPE_STRING(l2, tags, L2_SETS, L2_WAYS)<l2_tag_t, L2_LINES> tags;
-    EXP_MEM_TYPE_STRING(l2, states, L2_SETS, L2_WAYS)<state_t, L2_LINES> states;
-    EXP_MEM_TYPE_STRING(l2, lines, L2_SETS, L2_WAYS)<line_t, L2_LINES> lines;
-    EXP_MEM_TYPE_STRING(l2, hprots, L2_SETS, L2_WAYS)<hprot_t, L2_LINES> hprots;
-    EXP_MEM_TYPE_STRING(l2, evict_ways, L2_SETS, L2_WAYS)<l2_way_t, L2_SETS> evict_ways;
+    EXP_MEM_TYPE_STRING(l2_gpu, tags, L2_SETS, L2_WAYS)<l2_tag_t, L2_LINES> tags;
+    state_t states[L2_LINES]; // fast flush
+    EXP_MEM_TYPE_STRING(l2_gpu, lines, L2_SETS, L2_WAYS)<line_t, L2_LINES> lines;
+    EXP_MEM_TYPE_STRING(l2_gpu, hprots, L2_SETS, L2_WAYS)<hprot_t, L2_LINES> hprots;
+    EXP_MEM_TYPE_STRING(l2_gpu, evict_ways, L2_SETS, L2_WAYS)<l2_way_t, L2_SETS> evict_ways;
 
     // Local registers
     reqs_buf_t	 reqs[N_REQS];
+
+    //@TODO add retry buffer
+    //@TODO add GPU write buffer
+
 
     l2_tag_t	 tag_buf[L2_WAYS];
     state_t	 state_buf[L2_WAYS];
@@ -96,15 +100,9 @@ public:
     line_t	 line_buf[L2_WAYS];
     l2_way_t	 evict_way;
 
-#if (USE_SPANDEX == 1)
-    coh_msg_t orig_spdx_msg;
-    l2_fwd_in_t spdx_tu_fake_putack;
-    bool spdx_tu_fake_putack_valid;
-    bool spdx_tu_pending_inv_valid[N_REQS];
-#endif
 
     // Constructor
-    SC_CTOR(l2)
+    SC_CTOR(l2_gpu)
 	: clk("clk")
 	, rst("rst")
 #ifdef L2_DEBUG
@@ -116,6 +114,7 @@ public:
 	, l2_fwd_in("l2_fwd_in")
 	, l2_rsp_in("l2_rsp_in")
 	, l2_flush("l2_flush")
+	, l2_sync("l2_sync")
 	, l2_rd_rsp("l2_rd_rsp")
 	, l2_inval("l2_inval")
 	, l2_req_out("l2_req_out")
@@ -134,6 +133,7 @@ public:
 	    l2_fwd_in.clk_rst (clk, rst);
 	    l2_rsp_in.clk_rst (clk, rst);
 	    l2_flush.clk_rst (clk, rst);
+	    l2_sync.clk_rst (clk, rst);
 	    l2_rd_rsp.clk_rst(clk, rst);
 	    l2_inval.clk_rst(clk, rst);
 	    l2_req_out.clk_rst(clk, rst);
@@ -143,14 +143,13 @@ public:
 #endif
 
 	    // Flatten arrays
-	    L2_FLATTEN_REGS;
+	    L2_GPU_FLATTEN_REGS;
 
 	    // Preserve signals
 	    PRESERVE_SIGNALS;
 
 	    // Clock binding for memories
 	    tags.clk(this->clk);
-	    states.clk(this->clk);
 	    hprots.clk(this->clk);
 	    lines.clk(this->clk);
 	    evict_ways.clk(this->clk);
@@ -170,10 +169,9 @@ public:
 
     /* Functions to send output messages */
     void send_rd_rsp(line_t lines);
-    void send_inval(line_addr_t addr_inval);
-    void send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t lines);
+    void send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t lines, word_mask_t word_mask);
     void send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line);
-
+    void send_inval(line_addr_t addr_inval);
     /* Functions to move around buffered lines */
     void fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t tag_estall, l2_way_t way_hit, 
 		   hsize_t hsize, unstable_state_t state, hprot_t hprot, word_t word, line_t line,
@@ -190,8 +188,9 @@ public:
 		     sc_uint<REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
     void reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
-    bool reqs_peek_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uint<REQS_BITS> &reqs_i,
-		       bool &reqs_hit, mix_msg_t coh_msg);
+    bool reqs_peek_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uint<REQS_BITS> &reqs_i, bool &reqs_hit, mix_msg_t coh_msg);
+
+    void self_invalidate();
 #ifdef STATS_ENABLE
     void send_stats(bool stats);
 #endif
@@ -224,4 +223,4 @@ private:
 };
 
 
-#endif /* __L2_HPP__ */
+#endif /* __L2_GPU_HPP__ */
