@@ -29,6 +29,7 @@ package allcaches is
   constant OFFSET_BITS    : integer := WORD_OFFSET_BITS + BYTE_OFFSET_BITS;
   constant LINE_ADDR_BITS : integer := ADDR_BITS - OFFSET_BITS;
   constant WORDS_PER_LINE : integer := 2**WORD_OFFSET_BITS;
+  constant AMO_BITS       : integer := 6;
   constant BYTES_PER_WORD : integer := 2**BYTE_OFFSET_BITS;
   constant BYTES_PER_LINE : integer := WORDS_PER_LINE * BYTES_PER_WORD;
   constant BITS_PER_WORD  : integer := (BYTES_PER_WORD * 8);

@@ -106,6 +106,7 @@ package cachepackage is
   subtype word_t is std_logic_vector(BITS_PER_WORD - 1 downto 0);
   subtype line_t is std_logic_vector(BITS_PER_LINE - 1 downto 0);
   subtype word_mask_t is std_logic_vector(WORDS_PER_LINE - 1 downto 0);
+  subtype amo_t is std_logic_vector(AMO_BITS - 1 downto 0);
   subtype coh_msg_t is std_logic_vector(COH_MSG_TYPE_WIDTH - 1 downto 0);
   subtype mix_msg_t is std_logic_vector(MIX_MSG_TYPE_WIDTH - 1 downto 0);
   -- subtype l2_set_t is std_logic_vector(SET_BITS - 1 downto 0);

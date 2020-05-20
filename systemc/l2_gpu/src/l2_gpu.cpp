@@ -198,7 +198,12 @@ void l2_gpu::ctrl()
                 // @TODO implement write buffer
 
                 // only update word if tag hit, otherwise just send request, no write allocate
-				if (tag_hit) write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+				if (tag_hit) 
+                {
+                    write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+                    sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
+                    lines.port1[0][base + way]  = line_buf[way_hit];
+                }
 				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
             }
             // else if read

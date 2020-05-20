@@ -303,7 +303,7 @@ end original ESP messages
 #define FWD_INV_SPDX   2 // same as fwd_inv
 #define FWD_WB_ACK     3 // same as fwd_putack
 #define FWD_RVK_O      4 // same as getm_llc
-#define FWD_REQ_V      5
+#define FWD_REQ_V      7 // non existent in ESP
 #define FWD_REQ_O      6
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
