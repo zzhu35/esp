@@ -117,7 +117,28 @@ void l2_gpu::ctrl()
 
 	    switch (rsp_in.coh_msg) {
 
+            // respond AMO one word
         case RSP_WTdata:
+        {
+            line_t line = 0;
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                HLS_UNROLL_LOOP(ON, "rsp_v");
+                if (rsp_in.word_mask & 1 << i) {
+                    // found a valid bit in response word mask
+                    line.range(BITS_PER_WORD, 0) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                    break;
+                }
+            }
+
+            {                
+                HLS_DEFINE_PROTOCOL("gpu-resp");
+                send_rd_rsp(line);
+                reqs[reqs_hit_i].state = GPU_I;
+                reqs_cnt++;
+                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_I, reqs_hit_i);
+            }
+        }
+        break;
 	    case RSP_V :
 	    {
 
@@ -172,6 +193,7 @@ void l2_gpu::ctrl()
 	    addr_br.breakdown(cpu_req.addr);
 
 	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
+        sc_uint<L2_SET_BITS+L2_WAY_BITS> base = addr_br.set << L2_WAY_BITS;
 
         if (set_conflict) {
             // @TODO probably not needed, but leave it here for now
@@ -188,8 +210,49 @@ void l2_gpu::ctrl()
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way);
 
+
             if (cpu_req.amo) {
-                // @TODO implement AMO
+                coh_msg_t msg;
+                switch (cpu_req.amo)
+                {
+                    case AMO_SWAP :
+                        msg = REQ_AMO_SWAP;
+                        break;
+                    case AMO_ADD :
+                        msg = REQ_AMO_ADD;
+                        break;
+                    case AMO_AND :
+                        msg = REQ_AMO_AND;
+                        break;
+                    case AMO_OR :
+                        msg = REQ_AMO_OR;
+                        break;
+                    case AMO_XOR :
+                        msg = REQ_AMO_XOR;
+                        break;
+                    case AMO_MAX :
+                        msg = REQ_AMO_MAX;
+                        break;
+                    case AMO_MAXU :
+                        msg = REQ_AMO_MAXU;
+                        break;
+                    case AMO_MIN :
+                        msg = REQ_AMO_MIN;
+                        break;
+                    case AMO_MINU :
+                        msg = REQ_AMO_MINU;
+                        break;
+
+                    default:
+                        break;
+                }
+                // if we already have this line, evict it
+                if (tag_hit) states[base + way_hit] = GPU_I;
+                fill_reqs(0, addr_br, 0, 0, 0, GPU_AMO, cpu_req.hprot, 0, 0, reqs_hit_i);
+                line_t line;
+                line.range(BITS_PER_WORD, 0) = cpu_req.word;
+				send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
+
             }
 
             else if (cpu_req.cpu_msg == WRITE)
@@ -201,8 +264,7 @@ void l2_gpu::ctrl()
 				if (tag_hit) 
                 {
                     write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
-                    sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
-                    lines.port1[0][base + way]  = line_buf[way_hit];
+                    lines.port1[0][base + way_hit]  = line_buf[way_hit];
                 }
 				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
             }

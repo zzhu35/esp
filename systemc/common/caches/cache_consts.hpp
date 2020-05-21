@@ -227,6 +227,7 @@
 // DeNovo Transient state
 #define GPU_IV      1
 #define GPU_II      2
+#define GPU_AMO     3
 
 #define MAX_RETRY 4
 #define MAX_RETRY_BITS ilog2(MAX_RETRY)
@@ -282,7 +283,7 @@ original ESP messages
 end original ESP messages
 *****************/
 
-#define ARIANE_AMO_BITS 6        //@TODO fix me and define AMOs, probably done already in ESP Ariane SMP release
+#define ARIANE_AMO_BITS 6
 
 
 // requests (L2/TU to L3)
@@ -290,10 +291,18 @@ end original ESP messages
 #define REQ_Odata      1 // same as getm
 #define REQ_WT         2
 #define REQ_WB         3 // same as putm
-#define REQ_WTdata     4
-#define REQ_O          5
-#define REQ_V          6
-
+#define REQ_O          4
+#define REQ_V          5
+#define REQ_WTdata     6
+#define REQ_AMO_SWAP    REQ_WTdata
+#define REQ_AMO_ADD     7 // ADD
+#define REQ_AMO_AND     8 // CLR
+#define REQ_AMO_OR      9 // SET
+#define REQ_AMO_XOR     10 // EOR
+#define REQ_AMO_MAX     11 // SMAX
+#define REQ_AMO_MAXU    12 // UMAX
+#define REQ_AMO_MIN     13 // SMIN
+#define REQ_AMO_MINU    14 // UMIN
 /* DMA currently not used by Spandex */
 
 
@@ -317,6 +326,17 @@ end original ESP messages
 #define RSP_WT         7
 #define RSP_WTdata     8
 
+
+// AMOS
+#define AMO_SWAP    24      // 0b110000 // SWAP
+#define AMO_ADD     32      // 0b100000 // ADD
+#define AMO_AND     33      // 0b100001 // CLR
+#define AMO_OR      35      // 0b100011 // SET
+#define AMO_XOR     34      // 0b100010 // EOR
+#define AMO_MAX     36      // 0b100100 // SMAX
+#define AMO_MAXU    38      // 0b100110 // UMAX
+#define AMO_MIN     37      // 0b100101 // SMIN
+#define AMO_MINU    39      // 0b100111 // UMIN
 
 // DMA burst not currently supported in Spandex
 

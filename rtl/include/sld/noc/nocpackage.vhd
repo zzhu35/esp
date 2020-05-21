@@ -64,28 +64,37 @@ package nocpackage is
   -- -- Message type encoding
   -- -- Cachable data plane 1 -> request messages
   constant REQ_S          : noc_msg_type := "00000";  -- Writer-invalidated Read
-  constant REQ_O          : noc_msg_type := "00001";  -- Ownership Write (overwrites all requested data)
+  constant REQ_Odata      : noc_msg_type := "00001";  -- Ownership Write (overwrites all requested data)
   constant REQ_WT         : noc_msg_type := "00010";  -- Write-through Write (overwrites all requested data)
   constant REQ_WB         : noc_msg_type := "00011";  -- Write-back owned data
-  constant REQ_WTdata     : noc_msg_type := "00100";  -- Write-through Write (returns the value before update)
-  constant REQ_Odata      : noc_msg_type := "00101";  -- Ownership Write (returns the value before update)
-  constant REQ_V          : noc_msg_type := "00110";  -- Self-invalidated Read
+  constant REQ_O          : noc_msg_type := "00100";  -- Ownership Write (returns the value before update)
+  constant REQ_V          : noc_msg_type := "00101";  -- Self-invalidated Read
+  constant REQ_WTdata     : noc_msg_type := "00110";  -- Write-through Write (returns the value before update)
+  constant REQ_AMO_SWAP   : noc_msg_type := "00110";
+  constant REQ_AMO_ADD    : noc_msg_type := "00111";
+  constant REQ_AMO_AND    : noc_msg_type := "01000";
+  constant REQ_AMO_OR     : noc_msg_type := "01001";
+  constant REQ_AMO_XOR    : noc_msg_type := "01010";
+  constant REQ_AMO_MAX    : noc_msg_type := "01011";
+  constant REQ_AMO_MAXU   : noc_msg_type := "01100";
+  constant REQ_AMO_MIN    : noc_msg_type := "01101";
+  constant REQ_AMO_MINU   : noc_msg_type := "01110";
   -- Cachable data plane 2 -> forwarded messages
   constant FWD_REQ_S      : noc_msg_type := "00000";
-  constant FWD_REQ_O      : noc_msg_type := "00001";
+  constant FWD_REQ_Odata  : noc_msg_type := "00001";
   constant FWD_INV_SPDX   : noc_msg_type := "00010";
   constant FWD_WB_ACK     : noc_msg_type := "00011";
   constant FWD_RVK_O      : noc_msg_type := "00100";
   constant FWD_REQ_V      : noc_msg_type := "00101";
-  constant FWD_REQ_Odata  : noc_msg_type := "00110";
+  constant FWD_REQ_O      : noc_msg_type := "00110";
   -- Cachable data plane 3 -> response messages
   constant RSP_S              : noc_msg_type := "00000";
-  constant RSP_O              : noc_msg_type := "00001";
+  constant RSP_Odata          : noc_msg_type := "00001";
   constant RSP_INV_ACK_SPDX   : noc_msg_type := "00010";
   constant RSP_NACK           : noc_msg_type := "00011";
   constant RSP_RVK_O          : noc_msg_type := "00100";
   constant RSP_V              : noc_msg_type := "00101";
-  constant RSP_Odata          : noc_msg_type := "00110";
+  constant RSP_O              : noc_msg_type := "00110";
   constant RSP_WT             : noc_msg_type := "00111";
   constant RSP_WTdata         : noc_msg_type := "01000";
 
