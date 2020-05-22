@@ -856,6 +856,7 @@ public:
     word_t		word;
     line_t		line;
 	word_mask_t word_mask;
+	bool is_amo;
 
     llc_reqs_buf_t() :
 	msg(0),
@@ -870,7 +871,8 @@ public:
 	invack_cnt(0),
     	word(0),
     	line(0),
-		word_mask(0)
+		word_mask(0),
+		is_amo(0)
     {}
 
     inline llc_reqs_buf_t& operator = (const llc_reqs_buf_t& x) {

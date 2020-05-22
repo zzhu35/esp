@@ -3,6 +3,82 @@
 
 #include "llc.hpp"
 
+inline bool llc::is_amo(coh_msg_t coh_msg)
+{
+        bool ret = false;
+        switch (coh_msg)
+        {
+                case REQ_AMO_SWAP:
+                case REQ_AMO_ADD:
+                case REQ_AMO_AND:
+                case REQ_AMO_OR:
+                case REQ_AMO_XOR:
+                case REQ_AMO_MAX:
+                case REQ_AMO_MAXU:
+                case REQ_AMO_MIN:
+                case REQ_AMO_MINU:
+                        ret = true;
+                        break;
+                default:
+                break;
+        }
+        return ret;
+
+}
+
+// line gets stored, data gets sent back
+inline void llc::calc_amo(line_t& line, line_t& data, coh_msg_t req, word_mask_t word_mask)
+{
+        // word_mask must contain only one bit set
+        int i;
+        for (i = 0; i < WORDS_PER_LINE; i++)
+        {
+                HLS_UNROLL_LOOP("amo");
+                if (word_mask & (1 << i)) break;
+        }
+        wait();
+        int old = line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
+        int dataw = data.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
+
+        // @TODO MAX MIN might not work, depending on if to_int() sign_extends
+
+        data = line; // send old data back
+        switch (req)
+        {
+                case REQ_AMO_SWAP:
+                        old = dataw;
+                        break;
+                case REQ_AMO_ADD:
+                        old += dataw;
+                        break;
+                case REQ_AMO_AND:
+                        old &= dataw;
+                        break;
+                case REQ_AMO_OR:
+                        old |= dataw;
+                        break;
+                case REQ_AMO_XOR:
+                        old ^= dataw;
+                        break;
+                case REQ_AMO_MAX:
+                        old = (old > dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MAXU:
+                        old = ((unsigned)old > (unsigned)dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MIN:
+                        old = (old < dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MINU:
+                        old = ((unsigned)old < (unsigned)dataw) ? old : dataw;
+                        break;
+                default:
+                break;
+        }
+        line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD) = old; // store calculated new word in the line
+
+}       
+
 
 inline void llc::reset_io()
 {
@@ -616,6 +692,7 @@ void llc::fill_reqs(mix_msg_t msg, cache_id_t req_id, addr_breakdown_llc_t addr_
     reqs[reqs_i].line	     = line;
     reqs[reqs_i].word_mask   = word_mask;
     reqs[reqs_i].req_id      = req_id;
+    reqs[reqs_i].is_amo      = false;
     reqs_cnt--;
 }
 
@@ -862,12 +939,16 @@ void llc::ctrl()
                                                 {
                                                         if (reqs[reqs_hit_i].msg == REQ_WT) {
                                                                 HLS_DEFINE_PROTOCOL("send-rsp-813");
-                                                                send_rsp_out(RSP_WT, rsp_in.addr, 0, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
+                                                                send_rsp_out(RSP_O, rsp_in.addr, 0, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
                                                         }
-                                                        else {
+                                                        else if (reqs[reqs_hit_i].is_amo) {
                                                                 HLS_DEFINE_PROTOCOL("send-rsp-817");
+                                                                calc_amo(lines_buf[reqs[reqs_hit_i].way], reqs[reqs_hit_i].line, req_in.coh_msg, req_in.word_mask);
                                                                 send_rsp_out(RSP_WTdata, rsp_in.addr, reqs[reqs_hit_i].line, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
+                                                        } else {
+                                                                // nothing
                                                         }
+                                                        lines_buf[reqs[reqs_hit_i].way] = reqs[reqs_hit_i].line;
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_V;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
@@ -932,7 +1013,24 @@ void llc::ctrl()
                                         break;
                                         case LLC_OV:
                                         {
-                                                // @TODO
+                                                if (owners_buf[reqs[reqs_hit_i].way] & reqs[reqs_hit_i].word_mask == 0)
+                                                {
+                                                        if (reqs[reqs_hit_i].msg == REQ_WT) {
+                                                                HLS_DEFINE_PROTOCOL("send-rsp-813");
+                                                                send_rsp_out(RSP_O, rsp_in.addr, 0, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
+                                                        }
+                                                        else if (reqs[reqs_hit_i].is_amo) {
+                                                                HLS_DEFINE_PROTOCOL("send-rsp-817");
+                                                                calc_amo(lines_buf[reqs[reqs_hit_i].way], reqs[reqs_hit_i].line, req_in.coh_msg, req_in.word_mask);
+                                                                send_rsp_out(RSP_WTdata, rsp_in.addr, reqs[reqs_hit_i].line, reqs[reqs_hit_i].req_id, reqs[reqs_hit_i].req_id, 0, 0, reqs[reqs_hit_i].word_mask);
+                                                        } else {
+                                                                // nothing
+                                                        }
+                                                        lines_buf[reqs[reqs_hit_i].way] = reqs[reqs_hit_i].line;
+                                                        states_buf[reqs[reqs_hit_i].way] = LLC_V;
+                                                        reqs[reqs_hit_i].state = LLC_I;
+                                                        reqs_cnt++;
+                                                }
                                         }
                                         break;
                                         case LLC_OWB:
@@ -1070,6 +1168,53 @@ void llc::ctrl()
             if (evict_stall)
             {
                     llc_req_stall = req_in;
+            } else if (is_amo(req_in.coh_msg)) {
+               // if in owned state
+               dirty_bits_buf[way] = 1;
+               switch (states_buf[way])
+               {
+                       case LLC_I:
+                        {
+                                // if in invalid, read out data and perform amo
+                                HLS_DEFINE_PROTOCOL("send_mem_req-948");
+                                send_mem_req(READ, req_in.addr, req_in.hprot, 0);
+                                get_mem_rsp(lines_buf[way]);
+                                calc_amo(lines_buf[way], req_in.line, req_in.coh_msg, req_in.word_mask);
+                                send_rsp_out(RSP_WTdata, req_in.addr, req_in.line, req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask); // send old data out
+                                hprots_buf[way]     = req_in.hprot;
+                                tags_buf[way]       = line_br.tag;
+                                dirty_bits_buf[way] = 0;
+                                states_buf[way]     = LLC_V;
+                        }
+                       break;
+                       case LLC_V:
+                        {
+                                // if amo is on not owned word, we are lucky
+                                if (owners_buf[way] & req_in.word_mask == 0)
+                                {
+                                        calc_amo(lines_buf[way], req_in.line, req_in.coh_msg, req_in.word_mask);
+                                        send_rsp_out(RSP_WTdata, req_in.addr, req_in.line, req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask); // send old data out
+                                } else {
+                                        // send rvko
+                                        // @TODO this might need thinking
+                                        send_fwd_with_owner_mask(FWD_RVK_O, req_in.addr, req_in.req_id, req_in.word_mask, 0);
+                                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i); // save this request in reqs buffer
+                                        reqs[reqs_empty_i].is_amo = true;
+                                }
+                        }
+                       break;
+                       case LLC_S:
+                        {
+                            int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
+                            fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, req_in.line, req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                            reqs[reqs_empty_i].invack_cnt = cnt;
+                            reqs[reqs_empty_i].is_amo = true;
+                        }
+                       break;
+
+                       default:
+                       break;
+               }
             } else {
 
             switch (req_in.coh_msg) {
@@ -1313,7 +1458,7 @@ void llc::ctrl()
                                 states_buf[way] = LLC_V;
                                 {
                                         HLS_DEFINE_PROTOCOL("send_rsp_1157");
-                                        send_rsp_out(RSP_WT, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
 
                                 }
                         }
@@ -1323,30 +1468,42 @@ void llc::ctrl()
                                 word_owner_mask = owners_buf[way] & req_in.word_mask;
                                 if (word_owner_mask) {
                                         send_fwd_with_owner_mask(FWD_REQ_O, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
-                                }
-                                // write new data
-                                for (int i = 0; i < WORDS_PER_LINE; i++) {
-                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
-                                        if (req_in.word_mask & (1 << i)) {
-                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                                
+                                        // write new data
+                                        for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                                HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                                if (req_in.word_mask & (1 << i)) {
+                                                        reqs[reqs_empty_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                }
                                         }
-                                }
-                                dirty_bits_buf[way] = 1;
-                                states_buf[way] = LLC_V;
-                                {
-                                        HLS_DEFINE_PROTOCOL("send_rsp_1180");
-                                        send_rsp_out(RSP_WT, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                } else {
+                                        for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                                HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                                if (req_in.word_mask & (1 << i)) {
+                                                        lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                }
+                                        }
+                                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
 
                                 }
+                                dirty_bits_buf[way] = 1;
                         }
                         break;
                 case LLC_S :
                         {
                             // REQWT_S;
                             // invalidate
+                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                        if (req_in.word_mask & (1 << i)) {
+                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                        }
+                                }
                             int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
                             fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
                             reqs[reqs_empty_i].invack_cnt = cnt;
+                            dirty_bits_buf[way] = 1;
                         }
                         break;
 
@@ -1464,74 +1621,74 @@ void llc::ctrl()
                     }
                 break;
 
-            case REQ_WTdata :
+        //     case REQ_WTdata :
 
-                // LLC_REQWT;
+        //         // LLC_REQWT;
 
-                switch (states_buf[way]) {
+        //         switch (states_buf[way]) {
 
-                case LLC_I :
-                    {
-                            {
-                                    HLS_DEFINE_PROTOCOL("send_mem_1302");
-                                    send_mem_req(READ, req_in.addr, req_in.hprot, 0);
-                                    get_mem_rsp(lines_buf[way]);
-                            }
+        //         case LLC_I :
+        //             {
+        //                     {
+        //                             HLS_DEFINE_PROTOCOL("send_mem_1302");
+        //                             send_mem_req(READ, req_in.addr, req_in.hprot, 0);
+        //                             get_mem_rsp(lines_buf[way]);
+        //                     }
 
-                            // write new data
-                            for (int i = 0; i < WORDS_PER_LINE; i++) {
-                                    HLS_UNROLL_LOOP(ON, "set-ownermask");
-                                    if (req_in.word_mask & (1 << i)) {
-                                            lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
-                                    }
-                            }
-                            hprots_buf[way]     = req_in.hprot;
-                            tags_buf[way]       = line_br.tag;
-                            dirty_bits_buf[way] = 1;
-                            states_buf[way] = LLC_V;
-                            {
-                                    HLS_DEFINE_PROTOCOL("send_rsp_1302");
-                                    send_rsp_out(RSP_WTdata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+        //                     // write new data
+        //                     for (int i = 0; i < WORDS_PER_LINE; i++) {
+        //                             HLS_UNROLL_LOOP(ON, "set-ownermask");
+        //                             if (req_in.word_mask & (1 << i)) {
+        //                                     lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+        //                             }
+        //                     }
+        //                     hprots_buf[way]     = req_in.hprot;
+        //                     tags_buf[way]       = line_br.tag;
+        //                     dirty_bits_buf[way] = 1;
+        //                     states_buf[way] = LLC_V;
+        //                     {
+        //                             HLS_DEFINE_PROTOCOL("send_rsp_1302");
+        //                             send_rsp_out(RSP_WTdata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
 
-                            }
-                    }
-                    break;
-                case LLC_V :
-                    {
-                            word_owner_mask = owners_buf[way] & req_in.word_mask;
-                            if (word_owner_mask) {
-                                    send_fwd_with_owner_mask(FWD_REQ_O, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
-                            }
-                            // write new data
-                            for (int i = 0; i < WORDS_PER_LINE; i++) {
-                                    HLS_UNROLL_LOOP(ON, "set-ownermask");
-                                    if (req_in.word_mask & (1 << i)) {
-                                            lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
-                                    }
-                            }
-                            dirty_bits_buf[way] = 1;
-                            states_buf[way] = LLC_V;
-                            {
-                                    HLS_DEFINE_PROTOCOL("send_rsp_1330");
-                                    send_rsp_out(RSP_WTdata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                            }
-                    }
-                    break;
-                case LLC_S :
-                    {
-                        // REQWT_S;
-                        // invalidate
-                        int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
-                        fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
-                        reqs[reqs_empty_i].invack_cnt = cnt;
-                    }
-                    break;
+        //                     }
+        //             }
+        //             break;
+        //         case LLC_V :
+        //             {
+        //                     word_owner_mask = owners_buf[way] & req_in.word_mask;
+        //                     if (word_owner_mask) {
+        //                             send_fwd_with_owner_mask(FWD_REQ_O, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
+        //                     }
+        //                     // write new data
+        //                     for (int i = 0; i < WORDS_PER_LINE; i++) {
+        //                             HLS_UNROLL_LOOP(ON, "set-ownermask");
+        //                             if (req_in.word_mask & (1 << i)) {
+        //                                     lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+        //                             }
+        //                     }
+        //                     dirty_bits_buf[way] = 1;
+        //                     states_buf[way] = LLC_V;
+        //                     {
+        //                             HLS_DEFINE_PROTOCOL("send_rsp_1330");
+        //                             send_rsp_out(RSP_WTdata, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+        //                     }
+        //             }
+        //             break;
+        //         case LLC_S :
+        //             {
+        //                 // REQWT_S;
+        //                 // invalidate
+        //                 int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
+        //                 fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+        //                 reqs[reqs_empty_i].invack_cnt = cnt;
+        //             }
+        //             break;
 
-                default :
-                    GENERIC_ASSERT;
-                }
+        //         default :
+        //             GENERIC_ASSERT;
+        //         }
 
-                break;
+        //         break;
 
             case REQ_WB :
                 word_owner_mask = owners_buf[way] & req_in.word_mask;

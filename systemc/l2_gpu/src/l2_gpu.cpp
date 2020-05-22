@@ -250,7 +250,7 @@ void l2_gpu::ctrl()
                 if (tag_hit) states[base + way_hit] = GPU_I;
                 fill_reqs(0, addr_br, 0, 0, 0, GPU_AMO, cpu_req.hprot, 0, 0, reqs_hit_i);
                 line_t line;
-                line.range(BITS_PER_WORD, 0) = cpu_req.word;
+                line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = cpu_req.word;
 				send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
 
             }
@@ -267,6 +267,8 @@ void l2_gpu::ctrl()
                     lines.port1[0][base + way_hit]  = line_buf[way_hit];
                 }
 				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
+
+                // @TODO wait for RSPO?
             }
             // else if read
 

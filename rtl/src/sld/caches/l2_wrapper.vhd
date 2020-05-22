@@ -1154,6 +1154,7 @@ begin  -- architecture rtl of l2_wrapper
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -1203,20 +1204,24 @@ begin  -- architecture rtl of l2_wrapper
 
           coherence_req_wrreq <= '1';
 
-          if '0' & reg.coh_msg = REQ_WB then
+          mix_msg := '0' & reg.coh_msg;
+
+          case mix_msg is
+
+            when REQ_WB | REQ_WTdata =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_data;
             reg.word_cnt          := 0;
 
-          else
+            when others =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_header;
 
-          end if;
+          end case;
         end if;
 
       -- SEND DATA
