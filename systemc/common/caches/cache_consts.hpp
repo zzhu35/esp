@@ -219,6 +219,7 @@
 // DeNovo Transient state
 #define DNV_IV      1
 #define DNV_II      2
+#define DNV_AMO     3
 
 // GPU states
 #define GPU_I       0
