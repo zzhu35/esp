@@ -4,6 +4,7 @@ using namespace std;
 extern "C"
 {
 #include "uart.h"
+#include "riscv_test.h"
 void cprintf(const char* str)
 {
     print_uart(str);
@@ -46,6 +47,8 @@ int main(int argc, char **argv)
 
 
 		cprintint(tmp); cprintf("\n");
+
+		riscv_sp_test();
 
 	}
 

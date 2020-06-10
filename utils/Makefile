@@ -547,6 +547,7 @@ RISCV_CPP_CFLAGS += -O2
 RISCV_CPP_CFLAGS += -ffast-math
 RISCV_CPP_CFLAGS += -fno-common
 RISCV_CPP_CFLAGS += -fno-builtin-printf
+RISCV_CPP_CFLAGS += -fpermissive
 RISCV_CPP_CFLAGS += -nostdlib
 RISCV_CPP_CFLAGS += -nostartfiles -lm -lgcc
 
