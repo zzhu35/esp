@@ -41,11 +41,12 @@ entity llc_wrapper is
     local_y       : local_yx;
     local_x       : local_yx;
     cacheline     : integer;
+    little_end    : integer range 0 to 1 := 0;
     l2_cache_en   : integer                      := 0;
     cache_tile_id : cache_attribute_array;
     dma_tile_id   : dma_attribute_array;
-    tile_cache_id : tile_attribute_array;
-    tile_dma_id   : tile_attribute_array;
+    tile_cache_id : attribute_vector(0 to CFG_TILES_NUM - 1);
+    tile_dma_id   : attribute_vector(0 to CFG_TILES_NUM - 1);
     dma_y         : yx_vec(0 to 2**NLLC_MAX_LOG2 - 1);
     dma_x         : yx_vec(0 to 2**NLLC_MAX_LOG2 - 1);
     cache_y       : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
@@ -89,6 +90,22 @@ entity llc_wrapper is
 end llc_wrapper;
 
 architecture rtl of llc_wrapper is
+
+  -- Helpers
+  function fix_endian (
+    le : std_logic_vector(ARCH_BITS - 1 downto 0))
+    return std_logic_vector is
+    variable be : std_logic_vector(ARCH_BITS - 1 downto 0);
+  begin
+    if little_end = 0 then
+      be := le;
+    else
+      for i in 0 to (ARCH_BITS / 8) - 1 loop
+        be(8 * (i + 1) - 1 downto 8 * i) := le(ARCH_BITS - 8 * i - 1 downto ARCH_BITS - 8 * (i + 1));
+      end loop;  -- i
+    end if;
+    return be;
+  end fix_endian;
 
   -- Interface with LLC cache
 
@@ -481,7 +498,7 @@ architecture rtl of llc_wrapper is
   attribute mark_debug of llc_rsp_in_valid        : signal is "true";
   attribute mark_debug of llc_rsp_in_data_coh_msg : signal is "true";
   attribute mark_debug of llc_rsp_in_data_addr    : signal is "true";
-  -- attribute mark_debug of llc_rsp_in_data_line   : signal is "true";
+  attribute mark_debug of llc_rsp_in_data_line   : signal is "true";
   attribute mark_debug of llc_rsp_in_data_req_id  : signal is "true";
 
   attribute mark_debug of llc_rsp_out_ready            : signal is "true";
@@ -513,7 +530,7 @@ architecture rtl of llc_wrapper is
 
   attribute mark_debug of llc_mem_rsp_ready : signal is "true";
   attribute mark_debug of llc_mem_rsp_valid : signal is "true";
-  -- attribute mark_debug of llc_mem_rsp_data_line : signal is "true";
+  attribute mark_debug of llc_mem_rsp_data_line : signal is "true";
 
   attribute mark_debug of llc_mem_req_ready       : signal is "true";
   attribute mark_debug of llc_mem_req_valid       : signal is "true";
@@ -650,7 +667,14 @@ begin  -- architecture rtl
 -- Static outputs: AHB master, NoC
 -------------------------------------------------------------------------------
 
-  ahbmo.hsize   <= HSIZE_WORD;
+  ariane_cache_word_gen: if GLOB_CPU_ARCH = ariane generate
+    ahbmo.hsize <= HSIZE_DWORD;
+  end generate ariane_cache_word_gen;
+
+  leon3_cache_word_gen: if GLOB_CPU_ARCH = leon3 generate
+    ahbmo.hsize <= HSIZE_WORD;
+  end generate leon3_cache_word_gen;
+
   ahbmo.hlock   <= '0';
   ahbmo.hirq    <= (others => '0');
   ahbmo.hconfig <= hconfig;
@@ -776,11 +800,11 @@ begin  -- architecture rtl
         elsif reg.word_cnt = WORDS_PER_LINE then
 
           if ahbmi.hready = '1' then
-            reg.line(WORDS_PER_LINE*BITS_PER_WORD-1 downto (WORDS_PER_LINE-1)*BITS_PER_WORD) := ahbmi.hrdata;
+            reg.line(WORDS_PER_LINE*BITS_PER_WORD-1 downto (WORDS_PER_LINE-1)*BITS_PER_WORD) := fix_endian(ahbmi.hrdata);
 
             llc_mem_rsp_valid <= '1';
             if llc_mem_rsp_ready = '1' then
-              llc_mem_rsp_data_line <= ahbmi.hrdata & reg.line((WORDS_PER_LINE-1)*BITS_PER_WORD-1 downto 0);
+              llc_mem_rsp_data_line <= fix_endian(ahbmi.hrdata) & reg.line((WORDS_PER_LINE-1)*BITS_PER_WORD-1 downto 0);
               reg.state             := idle;
             else
               reg.state := send_mem_rsp;
@@ -799,7 +823,7 @@ begin  -- architecture rtl
           ahbmo.haddr                           <= reg.haddr;
           ahbmo.hprot(HPROT_WIDTH - 1 downto 0) <= reg.hprot;
           if ahbmi.hready = '1' then
-            reg.line(reg.word_cnt*BITS_PER_WORD-1 downto (reg.word_cnt-1)*BITS_PER_WORD) := ahbmi.hrdata;
+            reg.line(reg.word_cnt*BITS_PER_WORD-1 downto (reg.word_cnt-1)*BITS_PER_WORD) := fix_endian(ahbmi.hrdata);
             reg.word_cnt                                                                 := reg.word_cnt + 1;
             reg.haddr                                                                    := reg.haddr  + GLOB_ADDR_INCR;
           end if;
@@ -834,7 +858,7 @@ begin  -- architecture rtl
 
         elsif reg.word_cnt = WORDS_PER_LINE then
 
-          ahbmo.hwdata <= reg.line(WORDS_PER_LINE*BITS_PER_WORD-1 downto (WORDS_PER_LINE-1)*BITS_PER_WORD);
+          ahbmo.hwdata <= fix_endian(reg.line(WORDS_PER_LINE*BITS_PER_WORD-1 downto (WORDS_PER_LINE-1)*BITS_PER_WORD));
           if ahbmi.hready = '1' then
             reg.state := idle;
           end if;

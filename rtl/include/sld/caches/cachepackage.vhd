@@ -32,6 +32,8 @@ package cachepackage is
   constant AS_AHBS_STRSP_HREADY  : integer := 10;
   constant AS_AHBS_INV_FIFO      : integer := 11;
   constant AS_AHBS_NON_CACHEABLE : integer := 12;
+
+  constant AS_INV_STATE          : integer := 13;
   -- constant AS_AHBM_ : integer := 0;
 
   -- constant AS_REQ_ : integer := 0;
@@ -143,7 +145,7 @@ package cachepackage is
   function read_word (line : line_t; w_off : integer)
     return word_t;
 
-  function make_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+  function make_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
                         mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;
@@ -173,7 +175,7 @@ package cachepackage is
       mem_hindex  : integer := 4;
       mem_hconfig : ahb_config_type;
       mem_num     : integer := 1;
-      mem_info    : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+      mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
       cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_id      : integer := 0;
@@ -187,6 +189,8 @@ package cachepackage is
       ahbso : out ahb_slv_out_type;
       ahbmi : in  ahb_mst_in_type;
       ahbmo : out ahb_mst_out_type;
+      mosi  : in  axi_mosi_type;
+      somi  : out axi_somi_type;
       apbi  : in  apb_slv_in_type;
       apbo  : out apb_slv_out_type;
       flush : in  std_ulogic;           -- flush request from CPU
@@ -221,7 +225,7 @@ package cachepackage is
       local_y     : local_yx;
       local_x     : local_yx;
       mem_num     : integer := 1;
-      mem_info    : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+      mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
       cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_tile_id : cache_attribute_array);
@@ -288,11 +292,12 @@ package cachepackage is
       local_y     : local_yx;
       local_x     : local_yx;
       cacheline   : integer;
+      little_end  : integer range 0 to 1 := 0;
       l2_cache_en : integer                      := 0;
       cache_tile_id : cache_attribute_array;
       dma_tile_id   : dma_attribute_array;
-      tile_cache_id : tile_attribute_array;
-      tile_dma_id   : tile_attribute_array;
+      tile_cache_id : attribute_vector(0 to CFG_TILES_NUM - 1);
+      tile_dma_id   : attribute_vector(0 to CFG_TILES_NUM - 1);
       dma_y         : yx_vec(0 to 2**NLLC_MAX_LOG2 - 1);
       dma_x         : yx_vec(0 to 2**NLLC_MAX_LOG2 - 1);
       cache_y       : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
@@ -385,7 +390,7 @@ package body cachepackage is
 
   end function read_word;
   
-  function make_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+  function make_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
                         mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;

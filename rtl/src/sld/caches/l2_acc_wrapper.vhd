@@ -36,7 +36,7 @@ entity l2_acc_wrapper is
     local_y     : local_yx;
     local_x     : local_yx;
     mem_num     : integer := 1;
-    mem_info    : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+    mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_tile_id : cache_attribute_array);
@@ -88,8 +88,6 @@ end l2_acc_wrapper;
 architecture rtl of l2_acc_wrapper is
 
   -- Interface with L2 cache
-
-  -- TODO: Replace AHB with DMA handling
 
   -- AHB to cache
   signal cpu_req_ready          : std_ulogic;
@@ -152,9 +150,10 @@ architecture rtl of l2_acc_wrapper is
   -------------------------------------------------------------------------------
   -- Flush FSM signals
   -------------------------------------------------------------------------------
-  type flush_fsm is (idle, issue);
+  type flush_fsm is (idle, hold, issue);
   signal flush_state      : flush_fsm := idle;
   signal flush_state_next : flush_fsm := idle;
+  signal flush_hold : std_ulogic;
 
   -------------------------------------------------------------------------------
   -- FSM: Requests/Responses from/to accelerator (handled one at a time)
@@ -292,7 +291,7 @@ architecture rtl of l2_acc_wrapper is
   -- Others
   -------------------------------------------------------------------------------
 
-  signal empty_offset : std_logic_vector(OFFSET_BITS - 1 downto 0) := (others => '0');
+  constant empty_offset : std_logic_vector(OFFSET_BITS - 1 downto 0) := (others => '0');
 
   -------------------------------------------------------------------------------
   -- Debug
@@ -313,67 +312,67 @@ architecture rtl of l2_acc_wrapper is
 
   attribute mark_debug : string;
 
-  attribute mark_debug of req_acc_reg_state   : signal is "true";
-  attribute mark_debug of req_reg_state    : signal is "true";
-  attribute mark_debug of rsp_out_reg_state    : signal is "true";
-  attribute mark_debug of rsp_in_reg_state : signal is "true";
+  -- attribute mark_debug of req_acc_reg_state   : signal is "true";
+  -- attribute mark_debug of req_reg_state    : signal is "true";
+  -- attribute mark_debug of rsp_out_reg_state    : signal is "true";
+  -- attribute mark_debug of rsp_in_reg_state : signal is "true";
 
-  attribute mark_debug of flush_state : signal is "true";
+  -- attribute mark_debug of flush_state : signal is "true";
 
-  -- attribute mark_debug of req_asserts    : signal is "true";
-  -- attribute mark_debug of rsp_out_asserts    : signal is "true";
-  -- attribute mark_debug of rsp_in_asserts : signal is "true";
+  -- -- attribute mark_debug of req_asserts    : signal is "true";
+  -- -- attribute mark_debug of rsp_out_asserts    : signal is "true";
+  -- -- attribute mark_debug of rsp_in_asserts : signal is "true";
 
-  -- AHB to cache
-  attribute mark_debug of cpu_req_ready          : signal is "true";
-  attribute mark_debug of cpu_req_valid          : signal is "true";
-  attribute mark_debug of cpu_req_data_cpu_msg   : signal is "true";
-  attribute mark_debug of cpu_req_data_hsize     : signal is "true";
-  attribute mark_debug of cpu_req_data_hprot     : signal is "true";
-  attribute mark_debug of cpu_req_data_addr      : signal is "true";
-  attribute mark_debug of cpu_req_data_word      : signal is "true";
-  attribute mark_debug of flush_ready            : signal is "true";
-  attribute mark_debug of flush_valid            : signal is "true";
-  attribute mark_debug of flush_data             : signal is "true";
-  -- cache to AHB
-  attribute mark_debug of rd_rsp_ready           : signal is "true";
-  attribute mark_debug of rd_rsp_valid           : signal is "true";
-  -- attribute mark_debug of rd_rsp_data_line       : signal is "true";
-  -- cache to NoC
-  attribute mark_debug of req_out_ready          : signal is "true";
-  attribute mark_debug of req_out_valid          : signal is "true";
-  attribute mark_debug of req_out_data_coh_msg   : signal is "true";
-  attribute mark_debug of req_out_data_hprot     : signal is "true";
-  attribute mark_debug of req_out_data_addr      : signal is "true";
-  -- attribute mark_debug of req_out_data_line      : signal is "true";
-  attribute mark_debug of rsp_out_ready          : signal is "true";
-  attribute mark_debug of rsp_out_valid          : signal is "true";
-  attribute mark_debug of rsp_out_data_coh_msg   : signal is "true";
-  attribute mark_debug of rsp_out_data_req_id    : signal is "true";
-  attribute mark_debug of rsp_out_data_to_req    : signal is "true";
-  attribute mark_debug of rsp_out_data_addr      : signal is "true";
-  -- attribute mark_debug of rsp_out_data_line      : signal is "true";
-  -- NoC to cache
-  attribute mark_debug of fwd_in_ready           : signal is "true";
-  attribute mark_debug of fwd_in_valid           : signal is "true";
-  attribute mark_debug of fwd_in_data_coh_msg    : signal is "true";
-  attribute mark_debug of fwd_in_data_addr       : signal is "true";
-  attribute mark_debug of fwd_in_data_req_id     : signal is "true";
-  attribute mark_debug of rsp_in_valid           : signal is "true";
-  attribute mark_debug of rsp_in_ready           : signal is "true";
-  attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
-  attribute mark_debug of rsp_in_data_addr       : signal is "true";
-  -- attribute mark_debug of rsp_in_data_line       : signal is "true";
-  attribute mark_debug of rsp_in_data_invack_cnt : signal is "true";
-  -- debug
-  --attribute mark_debug of asserts                : signal is "true";
-  --attribute mark_debug of bookmark               : signal is "true";
-  -- attribute mark_debug of custom_dbg             : signal is "true";
-  attribute mark_debug of flush_done             : signal is "true";
-  -- statistics
-  attribute mark_debug of stats_ready            : signal is "true";
-  attribute mark_debug of stats_valid            : signal is "true";
-  attribute mark_debug of stats_data             : signal is "true";
+  -- -- AHB to cache
+  -- attribute mark_debug of cpu_req_ready          : signal is "true";
+  -- attribute mark_debug of cpu_req_valid          : signal is "true";
+  -- attribute mark_debug of cpu_req_data_cpu_msg   : signal is "true";
+  -- attribute mark_debug of cpu_req_data_hsize     : signal is "true";
+  -- attribute mark_debug of cpu_req_data_hprot     : signal is "true";
+  -- attribute mark_debug of cpu_req_data_addr      : signal is "true";
+  -- attribute mark_debug of cpu_req_data_word      : signal is "true";
+  -- attribute mark_debug of flush_ready            : signal is "true";
+  -- attribute mark_debug of flush_valid            : signal is "true";
+  -- attribute mark_debug of flush_data             : signal is "true";
+  -- -- cache to AHB
+  -- attribute mark_debug of rd_rsp_ready           : signal is "true";
+  -- attribute mark_debug of rd_rsp_valid           : signal is "true";
+  -- -- attribute mark_debug of rd_rsp_data_line       : signal is "true";
+  -- -- cache to NoC
+  -- attribute mark_debug of req_out_ready          : signal is "true";
+  -- attribute mark_debug of req_out_valid          : signal is "true";
+  -- attribute mark_debug of req_out_data_coh_msg   : signal is "true";
+  -- attribute mark_debug of req_out_data_hprot     : signal is "true";
+  -- attribute mark_debug of req_out_data_addr      : signal is "true";
+  -- -- attribute mark_debug of req_out_data_line      : signal is "true";
+  -- attribute mark_debug of rsp_out_ready          : signal is "true";
+  -- attribute mark_debug of rsp_out_valid          : signal is "true";
+  -- attribute mark_debug of rsp_out_data_coh_msg   : signal is "true";
+  -- attribute mark_debug of rsp_out_data_req_id    : signal is "true";
+  -- attribute mark_debug of rsp_out_data_to_req    : signal is "true";
+  -- attribute mark_debug of rsp_out_data_addr      : signal is "true";
+  -- -- attribute mark_debug of rsp_out_data_line      : signal is "true";
+  -- -- NoC to cache
+  -- attribute mark_debug of fwd_in_ready           : signal is "true";
+  -- attribute mark_debug of fwd_in_valid           : signal is "true";
+  -- attribute mark_debug of fwd_in_data_coh_msg    : signal is "true";
+  -- attribute mark_debug of fwd_in_data_addr       : signal is "true";
+  -- attribute mark_debug of fwd_in_data_req_id     : signal is "true";
+  -- attribute mark_debug of rsp_in_valid           : signal is "true";
+  -- attribute mark_debug of rsp_in_ready           : signal is "true";
+  -- attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
+  -- attribute mark_debug of rsp_in_data_addr       : signal is "true";
+  -- -- attribute mark_debug of rsp_in_data_line       : signal is "true";
+  -- attribute mark_debug of rsp_in_data_invack_cnt : signal is "true";
+  -- -- debug
+  -- --attribute mark_debug of asserts                : signal is "true";
+  -- --attribute mark_debug of bookmark               : signal is "true";
+  -- -- attribute mark_debug of custom_dbg             : signal is "true";
+  -- attribute mark_debug of flush_done             : signal is "true";
+  -- -- statistics
+  -- attribute mark_debug of stats_ready            : signal is "true";
+  -- attribute mark_debug of stats_valid            : signal is "true";
+  -- attribute mark_debug of stats_data             : signal is "true";
 
 begin  -- architecture rtl of l2_acc_wrapper
 
@@ -458,7 +457,12 @@ begin  -- architecture rtl of l2_acc_wrapper
 
   flush_data           <= '0';
   inval_ready          <= '1'; -- inval not used by accelerators
-  cpu_req_data_hsize   <= "010";
+  hsize32_gen: if ARCH_BITS = 32 generate
+    cpu_req_data_hsize   <= "010";
+  end generate hsize32_gen;
+  hsize64_gen: if ARCH_BITS = 64 generate
+    cpu_req_data_hsize   <= "011";
+  end generate hsize64_gen;
   cpu_req_data_hprot   <= "01";
 
   stats_ready    <= '1';
@@ -497,7 +501,9 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
 -- FSM: L2 flush management
 -------------------------------------------------------------------------------
-  fsm_flush : process (flush_state, flush, flush_ready)
+  flush_hold <= dma_read or dma_write or (not cpu_req_ready);
+
+  fsm_flush : process (flush_state, flush, flush_ready, flush_hold)
 
   begin
 
@@ -506,27 +512,42 @@ begin  -- architecture rtl of l2_acc_wrapper
       -- IDLE
       when idle =>
 
+        flush_valid <= '0';
+
         if flush = '1' then
 
-          flush_valid <= '1';
-
-          if flush_ready = '0' then
+          if flush_hold = '0' then
 
             flush_state_next <= issue;
 
           else
 
-            flush_state_next <= idle;
+            flush_state_next <= hold;
 
           end if;
 
         else
 
-          flush_valid <= '0';
-
           flush_state_next <= idle;
 
         end if;
+
+
+      -- HOLD
+      when hold =>
+
+        flush_valid <= '0';
+
+        if flush_hold = '0' then
+
+          flush_state_next <= issue;
+
+        else
+
+          flush_state_next <= hold;
+
+        end if;
+
 
       -- ISSUE
       when issue =>
