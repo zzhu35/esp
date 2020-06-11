@@ -43,9 +43,9 @@ foreach sets [list 32] {
 
     foreach ways [list 4] {
 
-	foreach wbits [list 2] {
+	foreach wbits [list 1] {
 
-	    foreach bbits [list 2] {
+	    foreach bbits [list 3] {
 
 		foreach abits [list 32] {
 

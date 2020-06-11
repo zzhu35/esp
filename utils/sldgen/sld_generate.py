@@ -115,8 +115,8 @@ class Component():
 #
 bits_per_line = 128
 phys_addr_bits = 32
-word_offset_bits = 2
-byte_offset_bits = 2
+word_offset_bits = 1
+byte_offset_bits = 3
 offset_bits = 4
 words_per_line = 2**word_offset_bits
 
@@ -603,7 +603,7 @@ def write_cache_interface(f, cac, is_llc):
     f.write("      l2_cpu_req_data_hprot     : in  std_logic_vector(1 downto 0);\n")
     f.write("      l2_cpu_req_data_addr      : in  std_logic_vector(" + str(phys_addr_bits - 1) + " downto 0);\n")
     f.write("      l2_cpu_req_data_word      : in  std_logic_vector(" + str(dma_width - 1) + " downto 0);\n")
-    # f.write("      l2_cpu_req_data_amo       : in  std_logic_vector(5 downto 0);\n")
+    f.write("      l2_cpu_req_data_amo       : in  std_logic_vector(5 downto 0);\n")
     f.write("      l2_fwd_in_valid           : in  std_ulogic;\n")
     f.write("      l2_fwd_in_data_coh_msg    : in  std_logic_vector(4 downto 0);\n")
     f.write("      l2_fwd_in_data_addr       : in  std_logic_vector(" + str(phys_addr_bits - offset_bits - 1) + " downto 0);\n")
@@ -735,7 +735,7 @@ def write_cache_port_map(f, cac, is_llc):
     f.write("      l2_cpu_req_data_hprot     => l2_cpu_req_data_hprot,\n")
     f.write("      l2_cpu_req_data_addr      => l2_cpu_req_data_addr,\n")
     f.write("      l2_cpu_req_data_word      => l2_cpu_req_data_word,\n")
-    # f.write("      l2_cpu_req_data_amo       => l2_cpu_req_data_amo,\n")
+    f.write("      l2_cpu_req_data_amo       => l2_cpu_req_data_amo,\n")
     f.write("      l2_fwd_in_valid           => l2_fwd_in_valid,\n")
     f.write("      l2_fwd_in_data_coh_msg    => l2_fwd_in_data_coh_msg,\n")
     f.write("      l2_fwd_in_data_addr       => l2_fwd_in_data_addr,\n")
