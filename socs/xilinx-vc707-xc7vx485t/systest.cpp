@@ -31,26 +31,24 @@ int main(int argc, char **argv)
 
 	atomic<int> atom(0);
 
-	while(true)
-	{
-		// memory_order_relaxed
-    	// memory_order_consume
-    	// memory_order_acquire
-    	// memory_order_release
-    	// memory_order_acq_rel
-    	// memory_order_seq_cst
+	// memory_order_relaxed
+	// memory_order_consume
+	// memory_order_acquire
+	// memory_order_release
+	// memory_order_acq_rel
+	// memory_order_seq_cst
 
-		// tmp = atom.fetch_add(0, std::memory_order_seq_cst); // atomic read
-		atom.store(1, std::memory_order_seq_cst); // atomic write
-		// atom.store(1, std::memory_order_seq_cst);
-		// tmp = atom.load(std::memory_order_seq_cst);
+	// tmp = atom.fetch_add(0, std::memory_order_seq_cst); // atomic read
+	atom.store(1, std::memory_order_seq_cst); // atomic write
+    cprintf("You should see a single cycle spike in sync_l2\n");
+
+	// atom.store(1, std::memory_order_seq_cst);
+	// tmp = atom.load(std::memory_order_seq_cst);
 
 
-		cprintint(tmp); cprintf("\n");
+	// cprintint(tmp); cprintf("\n");
 
-		riscv_sp_test();
-
-	}
+	// riscv_sp_test();
 
 	return 0;
 }
