@@ -611,79 +611,131 @@ module ariane_wrap
    // ---------------
    // Memory
    // ---------------
-   AXI_BUS
-     #(
-       .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
-       .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
-       .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
-       .AXI_USER_WIDTH ( AXI_USER_WIDTH   )
-       ) dram();
+  //  AXI_BUS
+  //    #(
+  //      .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
+  //      .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
+  //      .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
+  //      .AXI_USER_WIDTH ( AXI_USER_WIDTH   )
+  //      ) dram();
 
-   axi_riscv_atomics_wrap
-     #(
-       .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
-       .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
-       .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
-       .AXI_USER_WIDTH ( AXI_USER_WIDTH   ),
-       .AXI_MAX_WRITE_TXNS ( 1  ),
-       .RISCV_WORD_WIDTH   ( 64 )
-       ) i_axi_riscv_atomics
-       (
-	.clk_i  ( clk          ),
-	.rst_ni ( rstn         ),
-	.slv    ( master[DRAM] ),
-	.mst    ( dram         )
-	);
+  //  axi_riscv_atomics_wrap
+  //    #(
+  //      .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
+  //      .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
+  //      .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
+  //      .AXI_USER_WIDTH ( AXI_USER_WIDTH   ),
+  //      .AXI_MAX_WRITE_TXNS ( 1  ),
+  //      .RISCV_WORD_WIDTH   ( 64 )
+  //      ) i_axi_riscv_atomics
+  //      (
+	// .clk_i  ( clk          ),
+	// .rst_ni ( rstn         ),
+	// .slv    ( master[DRAM] ),
+	// .mst    ( dram         )
+	// );
 
-   //    AW
-   assign dram_aw_id = dram.aw_id;
-   assign dram_aw_addr = dram.aw_addr;
-   assign dram_aw_len = dram.aw_len;
-   assign dram_aw_size = dram.aw_size;
-   assign dram_aw_burst = dram.aw_burst;
-   assign dram_aw_lock = dram.aw_lock;
-   assign dram_aw_cache = dram.aw_cache;
-   assign dram_aw_prot = dram.aw_prot;
-   assign dram_aw_qos = dram.aw_qos;
-   assign dram_aw_atop = dram.aw_atop;
-   assign dram_aw_region = dram.aw_region;
-   assign dram_aw_user = dram.aw_user;
-   assign dram_aw_valid = dram.aw_valid;
-   assign dram.aw_ready = dram_aw_ready;
-   //    W
-   assign dram_w_data = dram.w_data;
-   assign dram_w_strb = dram.w_strb;
-   assign dram_w_last = dram.w_last;
-   assign dram_w_user = dram.w_user;
-   assign dram_w_valid = dram.w_valid;
-   assign dram.w_ready = dram_w_ready;
-   //    B
-   assign dram.b_id = dram_b_id;
-   assign dram.b_resp = dram_b_resp;
-   assign dram.b_user = dram_b_user;
-   assign dram.b_valid = dram_b_valid;
-   assign dram_b_ready = dram.b_ready;
-   //    AR
-   assign dram_ar_id = dram.ar_id;
-   assign dram_ar_addr = dram.ar_addr;
-   assign dram_ar_len = dram.ar_len;
-   assign dram_ar_size = dram.ar_size;
-   assign dram_ar_burst = dram.ar_burst;
-   assign dram_ar_lock = dram.ar_lock;
-   assign dram_ar_cache = dram.ar_cache;
-   assign dram_ar_prot = dram.ar_prot;
-   assign dram_ar_qos = dram.ar_qos;
-   assign dram_ar_region = dram.ar_region;
-   assign dram_ar_user = dram.ar_user;
-   assign dram_ar_valid = dram.ar_valid;
-   assign dram.ar_ready = dram_ar_ready;
-   //    R
-   assign dram.r_id = dram_r_id;
-   assign dram.r_data = dram_r_data;
-   assign dram.r_resp = dram_r_resp;
-   assign dram.r_last = dram_r_last;
-   assign dram.r_user = dram_r_user;
-   assign dram.r_valid = dram_r_valid;
-   assign dram_r_ready = dram.r_ready;
+  //  //    AW
+  //  assign dram_aw_id = dram.aw_id;
+  //  assign dram_aw_addr = dram.aw_addr;
+  //  assign dram_aw_len = dram.aw_len;
+  //  assign dram_aw_size = dram.aw_size;
+  //  assign dram_aw_burst = dram.aw_burst;
+  //  assign dram_aw_lock = dram.aw_lock;
+  //  assign dram_aw_cache = dram.aw_cache;
+  //  assign dram_aw_prot = dram.aw_prot;
+  //  assign dram_aw_qos = dram.aw_qos;
+  //  assign dram_aw_atop = dram.aw_atop;
+  //  assign dram_aw_region = dram.aw_region;
+  //  assign dram_aw_user = dram.aw_user;
+  //  assign dram_aw_valid = dram.aw_valid;
+  //  assign dram.aw_ready = dram_aw_ready;
+  //  //    W
+  //  assign dram_w_data = dram.w_data;
+  //  assign dram_w_strb = dram.w_strb;
+  //  assign dram_w_last = dram.w_last;
+  //  assign dram_w_user = dram.w_user;
+  //  assign dram_w_valid = dram.w_valid;
+  //  assign dram.w_ready = dram_w_ready;
+  //  //    B
+  //  assign dram.b_id = dram_b_id;
+  //  assign dram.b_resp = dram_b_resp;
+  //  assign dram.b_user = dram_b_user;
+  //  assign dram.b_valid = dram_b_valid;
+  //  assign dram_b_ready = dram.b_ready;
+  //  //    AR
+  //  assign dram_ar_id = dram.ar_id;
+  //  assign dram_ar_addr = dram.ar_addr;
+  //  assign dram_ar_len = dram.ar_len;
+  //  assign dram_ar_size = dram.ar_size;
+  //  assign dram_ar_burst = dram.ar_burst;
+  //  assign dram_ar_lock = dram.ar_lock;
+  //  assign dram_ar_cache = dram.ar_cache;
+  //  assign dram_ar_prot = dram.ar_prot;
+  //  assign dram_ar_qos = dram.ar_qos;
+  //  assign dram_ar_region = dram.ar_region;
+  //  assign dram_ar_user = dram.ar_user;
+  //  assign dram_ar_valid = dram.ar_valid;
+  //  assign dram.ar_ready = dram_ar_ready;
+  //  //    R
+  //  assign dram.r_id = dram_r_id;
+  //  assign dram.r_data = dram_r_data;
+  //  assign dram.r_resp = dram_r_resp;
+  //  assign dram.r_last = dram_r_last;
+  //  assign dram.r_user = dram_r_user;
+  //  assign dram.r_valid = dram_r_valid;
+  //  assign dram_r_ready = dram.r_ready;
+
+  // AW
+  assign dram_aw_id = master[DRAM].aw_id;
+  assign dram_aw_addr = master[DRAM].aw_addr;
+  assign dram_aw_len = master[DRAM].aw_len;
+  assign dram_aw_size = master[DRAM].aw_size;
+  assign dram_aw_burst = master[DRAM].aw_burst;
+  assign dram_aw_lock = master[DRAM].aw_lock;
+  assign dram_aw_cache = master[DRAM].aw_cache;
+  assign dram_aw_prot = master[DRAM].aw_prot;
+  assign dram_aw_qos = master[DRAM].aw_qos;
+  assign dram_aw_atop = master[DRAM].aw_atop;
+  assign dram_aw_region = master[DRAM].aw_region;
+  assign dram_aw_user = master[DRAM].aw_user;
+  assign dram_aw_valid = master[DRAM].aw_valid;
+  assign master[DRAM].aw_ready = dram_aw_ready;
+  //    W
+  assign dram_w_data = master[DRAM].w_data;
+  assign dram_w_strb = master[DRAM].w_strb;
+  assign dram_w_last = master[DRAM].w_last;
+  assign dram_w_user = master[DRAM].w_user;
+  assign dram_w_valid = master[DRAM].w_valid;
+  assign master[DRAM].w_ready = dram_w_ready;
+  //    B
+  assign master[DRAM].b_id = dram_b_id;
+  assign master[DRAM].b_resp = dram_b_resp;
+  assign master[DRAM].b_user = dram_b_user;
+  assign master[DRAM].b_valid = dram_b_valid;
+  assign dram_b_ready = master[DRAM].b_ready;
+  //    AR
+  assign dram_ar_id = master[DRAM].ar_id;
+  assign dram_ar_addr = master[DRAM].ar_addr;
+  assign dram_ar_len = master[DRAM].ar_len;
+  assign dram_ar_size = master[DRAM].ar_size;
+  assign dram_ar_burst = master[DRAM].ar_burst;
+  assign dram_ar_lock = master[DRAM].ar_lock;
+  assign dram_ar_cache = master[DRAM].ar_cache;
+  assign dram_ar_prot = master[DRAM].ar_prot;
+  assign dram_ar_qos = master[DRAM].ar_qos;
+  assign dram_ar_region = master[DRAM].ar_region;
+  assign dram_ar_user = master[DRAM].ar_user;
+  assign dram_ar_valid = master[DRAM].ar_valid;
+  assign master[DRAM].ar_ready = dram_ar_ready;
+  //    R
+  assign master[DRAM].r_id = dram_r_id;
+  assign master[DRAM].r_data = dram_r_data;
+  assign master[DRAM].r_resp = dram_r_resp;
+  assign master[DRAM].r_last = dram_r_last;
+  assign master[DRAM].r_user = dram_r_user;
+  assign master[DRAM].r_valid = dram_r_valid;
+  assign dram_r_ready = master[DRAM].r_ready;
+
 
 endmodule
