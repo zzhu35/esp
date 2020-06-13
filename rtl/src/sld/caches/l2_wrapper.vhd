@@ -563,10 +563,10 @@ begin  -- architecture rtl of l2_wrapper
       flush_done                => flush_done,
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
-      l2_stats_data             => stats_data
-      -- l2_sync_ready             => open,
-      -- l2_sync_valid             => sync_l2,
-      -- l2_sync_data              => sync_l2
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
       );
 
   Invalidate_fifo : fifo_custom

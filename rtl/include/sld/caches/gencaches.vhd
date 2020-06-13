@@ -68,10 +68,10 @@ package gencaches is
       l2_rsp_out_data_line : out line_t;
       l2_rsp_out_data_word_mask : out word_mask_t;
       l2_stats_valid : out std_ulogic;
-      l2_stats_data : out std_ulogic
-      -- l2_sync_ready : out std_ulogic;
-      -- l2_sync_valid : in std_ulogic;
-      -- l2_sync_data : in std_ulogic
+      l2_stats_data : out std_ulogic;
+      l2_sync_ready : out std_ulogic;
+      l2_sync_valid : in std_ulogic;
+      l2_sync_data : in std_ulogic
       );
   end component;
 
