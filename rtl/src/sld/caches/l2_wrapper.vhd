@@ -60,6 +60,7 @@ entity l2_wrapper is
     apbi  : in  apb_slv_in_type;
     apbo  : out apb_slv_out_type;
     flush : in  std_ulogic;             -- flush request from CPU
+    sync_l2 : in std_logic;
 
     -- backend (cache - NoC)
     -- tile->NoC1
@@ -563,6 +564,9 @@ begin  -- architecture rtl of l2_wrapper
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
       l2_stats_data             => stats_data
+      -- l2_sync_ready             => open,
+      -- l2_sync_valid             => sync_l2,
+      -- l2_sync_data              => sync_l2
       );
 
   Invalidate_fifo : fifo_custom

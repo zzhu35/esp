@@ -449,6 +449,9 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
       l2_stats_data             => stats_data
+      -- l2_sync_ready             => open,
+      -- l2_sync_valid             => '0',
+      -- l2_sync_data              => '0'
       );
 
 -------------------------------------------------------------------------------

@@ -117,6 +117,9 @@ architecture rtl of tile_cpu is
   -- L2 wrapper and cache debug reset
   signal l2_rstn : std_ulogic;
 
+  -- Sync L2
+  signal sync_l2 : std_logic;
+
   -- Interrupt controller
   signal irqi : l3_irq_in_type;
   signal irqo : l3_irq_out_type;
@@ -453,6 +456,7 @@ begin
         irq         => irq,
         timer_irq   => timer_irq,
         ipi         => ipi,
+        sync_l2     => sync_l2,
         romi        => mosi(0),
         romo        => somi(0),
         drami       => ariane_drami,
@@ -515,6 +519,7 @@ begin
         apbi                       => noc_apbi,
         apbo                       => noc_apbo(this_l2_pindex),
         flush                      => dflush,
+        sync_l2                    => sync_l2,
         coherence_req_wrreq        => coherence_req_wrreq,
         coherence_req_data_in      => coherence_req_data_in,
         coherence_req_full         => coherence_req_full,
