@@ -194,6 +194,7 @@ package cachepackage is
       apbi  : in  apb_slv_in_type;
       apbo  : out apb_slv_out_type;
       flush : in  std_ulogic;           -- flush request from CPU
+      sync_l2 : in std_logic;
 
       -- backend (cache - NoC)
       -- tile->NoC1

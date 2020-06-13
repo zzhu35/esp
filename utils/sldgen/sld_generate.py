@@ -645,7 +645,10 @@ def write_cache_interface(f, cac, is_llc):
     f.write("      l2_rsp_out_data_line      : out std_logic_vector(" + str(bits_per_line - 1) + " downto 0);\n")
     f.write("      l2_rsp_out_data_word_mask : out std_logic_vector(" + str(words_per_line - 1) + "  downto 0);\n")
     f.write("      l2_stats_valid            : out std_ulogic;\n")
-    f.write("      l2_stats_data             : out std_ulogic\n")
+    f.write("      l2_stats_data             : out std_ulogic;\n")
+    f.write("      l2_sync_ready             : out std_ulogic;\n")
+    f.write("      l2_sync_valid             : in  std_ulogic;\n")
+    f.write("      l2_sync_data              : in  std_ulogic\n")
 
 
 def write_cache_port_map(f, cac, is_llc):
@@ -777,7 +780,10 @@ def write_cache_port_map(f, cac, is_llc):
     f.write("      l2_rsp_out_data_line      => l2_rsp_out_data_line,\n")
     f.write("      l2_rsp_out_data_word_mask => l2_rsp_out_data_word_mask,\n")
     f.write("      l2_stats_valid            => l2_stats_valid,\n")
-    f.write("      l2_stats_data             => l2_stats_data\n")
+    f.write("      l2_stats_data             => l2_stats_data,\n")
+    f.write("      l2_sync_ready             => l2_sync_ready,\n")
+    f.write("      l2_sync_valid             => l2_sync_valid,\n")
+    f.write("      l2_sync_data              => l2_sync_data\n")
   f.write("    );\n")
 
 

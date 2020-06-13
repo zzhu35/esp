@@ -69,6 +69,7 @@ public:
     nb_get_initiator<l2_fwd_in_t>	l2_fwd_in;
     nb_get_initiator<l2_rsp_in_t>	l2_rsp_in;
     nb_get_initiator<bool>		l2_flush;
+    nb_get_initiator<bool>		    l2_sync;
 
     // Output ports
     put_initiator<l2_rd_rsp_t>	l2_rd_rsp;
@@ -116,6 +117,7 @@ public:
 	, l2_fwd_in("l2_fwd_in")
 	, l2_rsp_in("l2_rsp_in")
 	, l2_flush("l2_flush")
+    , l2_sync("l2_sync")
 	, l2_rd_rsp("l2_rd_rsp")
 	, l2_inval("l2_inval")
 	, l2_req_out("l2_req_out")
@@ -134,6 +136,7 @@ public:
 	    l2_fwd_in.clk_rst (clk, rst);
 	    l2_rsp_in.clk_rst (clk, rst);
 	    l2_flush.clk_rst (clk, rst);
+        l2_sync.clk_rst (clk, rst);
 	    l2_rd_rsp.clk_rst(clk, rst);
 	    l2_inval.clk_rst(clk, rst);
 	    l2_req_out.clk_rst(clk, rst);

@@ -35,6 +35,7 @@ module ariane_wrap
     input logic [1:0] 			irq,
     input logic 			timer_irq,
     input logic 			ipi,
+    output logic      sync_l2,
     // -- ROM
     //    AW
     output logic [AXI_ID_WIDTH_SLV-1:0] rom_aw_id,
@@ -364,6 +365,7 @@ module ariane_wrap
 	.ipi_i        ( ipi	            ),
 	.time_irq_i   ( timer_irq           ),
 	.debug_req_i  ( 1'b0                ),
+  .sync_l2      ( sync_l2             ),
 	.axi_req_o    ( axi_ariane_req      ),
 	.axi_resp_i   ( axi_ariane_resp     )
 	);

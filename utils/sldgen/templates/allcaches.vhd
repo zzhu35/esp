@@ -115,7 +115,10 @@ package allcaches is
       l2_rsp_out_data_addr      : out std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
       l2_rsp_out_data_line      : out std_logic_vector(BITS_PER_LINE - 1 downto 0);
       l2_stats_valid            : out std_ulogic;
-      l2_stats_data             : out std_ulogic
+      l2_stats_data             : out std_ulogic;
+      l2_sync_ready             : out std_ulogic;
+      l2_sync_valid             : in  std_ulogic;
+      l2_sync_data              : in  std_ulogic
       );
   end component;
 
