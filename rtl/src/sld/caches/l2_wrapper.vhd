@@ -97,6 +97,7 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
+  signal cpu_req_data_amo       : amo_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -450,6 +451,7 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of cpu_req_data_hprot     : signal is "true";
   attribute mark_debug of cpu_req_data_addr      : signal is "true";
   attribute mark_debug of cpu_req_data_word      : signal is "true";
+  attribute mark_debug of cpu_req_data_amo       : signal is "true";
   attribute mark_debug of flush_ready            : signal is "true";
   attribute mark_debug of flush_valid            : signal is "true";
   attribute mark_debug of flush_data             : signal is "true";
@@ -519,7 +521,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
-      l2_cpu_req_data_amo       => (others => '0'), -- @TODO fix me 
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -793,6 +795,7 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
     cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
 
     flush_valid <= '0';
 
@@ -1710,6 +1713,7 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
     cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
 
     flush_valid <= '0';
 
@@ -2037,6 +2041,7 @@ begin  -- architecture rtl of l2_wrapper
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
           cpu_req_data_word    <= mosi.w.data;
+          cpu_req_data_amo     <= xreg.atop;
           cpu_req_valid <= '1';
 
           if cpu_req_ready = '1' then

@@ -821,7 +821,11 @@ def gen_tech_dep(accelerator_list, cache_list, dma_width, template_dir, out_dir)
         is_llc = cac.name == "llc"
         for impl in cac.hlscfg:
           f.write("\n")
-          f.write("  component " + cac.name + "_" + impl + "\n")
+          if cac.name in spandex_config:
+            rtl_name = spandex_config[cac.name]
+          else:
+            rtl_name = cac.name
+          f.write("  component " + rtl_name + "_" + impl + "\n")
           f.write("    port (\n")
           write_cache_interface(f, cac, is_llc)
           f.write("    );\n")
@@ -959,7 +963,7 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
         f.write("    " + cac.name + "_rtl_top_i: " + cac.name + "_rtl_top\n")
         write_cache_port_map(f, cac, is_llc)
         f.write("  end generate rtl_gen;\n\n")
-        f.write("\n");
+        f.write("\n")
         f.write("  hls_gen: if use_rtl = 0 generate\n")
         for impl in cac.hlscfg:
           info = re.split('_|x', impl)
@@ -987,7 +991,11 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
             continue
           f.write("\n")
           f.write("  " + impl + "_gen: if sets = " + str(sets) + " and ways = " + str(ways) + " generate\n")
-          f.write("    " + cac.name + "_" + impl + "_i: " + cac.name + "_" + impl + "\n")
+          if cac.name in spandex_config:
+            rtl_name = spandex_config[cac.name]
+          else:
+            rtl_name = cac.name
+          f.write("    " + rtl_name + "_" + impl + "_i: " + rtl_name + "_" + impl + "\n")
           write_cache_port_map(f, cac, is_llc)
           f.write("  end generate " +  impl + "_gen;\n\n")
         f.write("  end generate hls_gen;\n\n")
@@ -1253,7 +1261,20 @@ accelerators = next(os.walk(acc_rtl_dir))[1]
 axi_accelerators = next(os.walk(axi_acc_dir))[1]
 
 caches = [ ]
-tmp_l2_dir = caches_rtl_dir + '/l2'
+l2_type = 'l2'
+import json
+spandex_config_file = '{}/spandex/spandex-config.json'.format(sys.argv[3])
+spandex_config = {}
+try:
+  f = open(spandex_config_file)
+  spandex_config = json.load(f)
+  l2_type = spandex_config['l2']
+  f.close()
+except:
+  print('Spandex Warning: Failed to read Spandex configuration. Using standard MESI cache with Translation Unit.')
+
+
+tmp_l2_dir = caches_rtl_dir + '/{}'.format(l2_type)
 tmp_llc_dir = caches_rtl_dir + '/llc'
 caches.append('l2')
 caches.append('llc')
