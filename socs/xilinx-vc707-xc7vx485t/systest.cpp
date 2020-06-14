@@ -39,6 +39,7 @@ int main(int argc, char **argv)
 	// memory_order_seq_cst
 
 	// tmp = atom.fetch_add(0, std::memory_order_seq_cst); // atomic read
+	cprintint(atom.load(std::memory_order_relaxed)); cprintf("\n");
 	atom.store(1, std::memory_order_seq_cst); // atomic write
     cprintf("You should see a single cycle spike in sync_l2\n");
 

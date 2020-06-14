@@ -2131,7 +2131,10 @@ begin  -- architecture rtl of l2_wrapper
 
         if mosi.b.ready = '1' then
 
-          if valid_axi_req = '1' then
+          if unsigned(xreg.atop) > 0 then
+            reg.state := load_rsp;
+
+          elsif valid_axi_req = '1' then
             if mosi.aw.valid = '0' then
               reg.cpu_msg := '0' & mosi.ar.lock;
               reg.hsize   := mosi.ar.size;
