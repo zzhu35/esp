@@ -33,6 +33,9 @@ public:
     sc_signal< l2_cpu_req_t > cpu_req_conflict_dbg;
     sc_signal< bool > evict_stall_dbg;
     sc_signal< bool > fwd_stall_dbg;
+    sc_signal< bool > sync_dbg;
+    sc_signal< amo_t > amo_dbg;
+
     sc_signal< bool > fwd_stall_ended_dbg;
     sc_signal< l2_fwd_in_t > fwd_in_stalled_dbg;
     sc_signal< sc_uint<REQS_BITS> > reqs_fwd_stall_i_dbg;

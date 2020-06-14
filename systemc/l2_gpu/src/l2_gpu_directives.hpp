@@ -364,7 +364,10 @@
     HLS_PRESERVE_SIGNAL(reqs_dbg, true);		\
     HLS_PRESERVE_SIGNAL(tag_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(state_buf_dbg, true);		\
-    HLS_PRESERVE_SIGNAL(evict_way_dbg, true)
+    HLS_PRESERVE_SIGNAL(evict_way_dbg, true);  \
+    HLS_PRESERVE_SIGNAL(sync_dbg, true);  \
+    HLS_PRESERVE_SIGNAL(amo_dbg, true);
+
 
 #else
 

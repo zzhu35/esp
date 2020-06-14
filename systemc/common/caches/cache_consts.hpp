@@ -330,7 +330,7 @@ end original ESP messages
 
 
 // AMOS
-#define AMO_SWAP    24      // 0b110000 // SWAP
+#define AMO_SWAP    48      // 0b110000 // SWAP
 #define AMO_ADD     32      // 0b100000 // ADD
 #define AMO_AND     33      // 0b100001 // CLR
 #define AMO_OR      35      // 0b100011 // SET

@@ -940,12 +940,13 @@ begin  -- architecture rtl
 
           reg.origin_x                                              := get_origin_x(NOC_FLIT_SIZE, coherence_req_data_out);
           reg.origin_y                                              := get_origin_y(NOC_FLIT_SIZE, coherence_req_data_out);
-          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) <= noc_xlen and
-             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) <= noc_xlen
+          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) < noc_xlen and
+             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) < noc_xlen
           then
 
             reg.tile_id := to_integer(unsigned(reg.origin_x)) +
                            to_integer(unsigned(reg.origin_y)) * noc_xlen;
+            -- report "tile_id: " & integer'image(reg.tile_id);
 
             if tile_cache_id(reg.tile_id) >= 0 then
               reg.req_id := std_logic_vector(to_unsigned(tile_cache_id(reg.tile_id), NL2_MAX_LOG2));
@@ -962,7 +963,9 @@ begin  -- architecture rtl
 
         if coherence_req_empty = '0' then
 
-          if reg.coh_msg = REQ_WB then
+          case reg.coh_msg is
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
+         
 
             coherence_req_rdreq <= '1';
 
@@ -970,7 +973,8 @@ begin  -- architecture rtl
             reg.word_cnt := 0;
             reg.state    := rcv_data;
 
-          elsif llc_req_in_ready = '1' then
+            when others =>
+            if llc_req_in_ready = '1' then
 
             coherence_req_rdreq <= '1';
 
@@ -983,8 +987,8 @@ begin  -- architecture rtl
 
             reg.state := rcv_header;
 
-          end if;
-
+            end if;
+          end case;
         end if;
 
       -- RECEIVE DATA

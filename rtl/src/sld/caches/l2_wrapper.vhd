@@ -1300,7 +1300,7 @@ begin  -- architecture rtl of l2_wrapper
 
           case mix_msg is
 
-            when REQ_WB | REQ_WTdata =>
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;

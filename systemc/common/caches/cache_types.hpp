@@ -86,6 +86,7 @@ public:
 	hprot   = x.hprot;
 	addr    = x.addr;
 	word    = x.word;
+	amo     = x.amo;
 	return *this;
     }
     inline bool operator  == (const l2_cpu_req_t& x) const {
@@ -93,7 +94,8 @@ public:
 		x.hsize   == hsize	&&
 		x.hprot   == hprot	&&
 		x.addr    == addr	&&
-		x.word    == word);
+		x.word    == word   &&
+		x.amo     == amo);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_cpu_req_t& x, const std::string & name) {
 	sc_trace(tf, x.cpu_msg , name + ".cpu_msg ");

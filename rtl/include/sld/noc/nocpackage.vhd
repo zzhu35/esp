@@ -85,7 +85,7 @@ package nocpackage is
   constant FWD_INV_SPDX   : noc_msg_type := "00010";
   constant FWD_WB_ACK     : noc_msg_type := "00011";
   constant FWD_RVK_O      : noc_msg_type := "00100";
-  constant FWD_REQ_V      : noc_msg_type := "00101";
+  constant FWD_REQ_V      : noc_msg_type := "00111";
   constant FWD_REQ_O      : noc_msg_type := "00110";
   -- Cachable data plane 3 -> response messages
   constant RSP_S              : noc_msg_type := "00000";

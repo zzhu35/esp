@@ -47,7 +47,7 @@ void l2_gpu::ctrl()
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
 			if (l2_sync.nb_can_get()) {
-				l2_flush.nb_get(is_sync);
+				l2_sync.nb_get(is_sync);
 				do_sync = true;
             } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
@@ -95,6 +95,9 @@ void l2_gpu::ctrl()
                 do_cpu_req = true;
             }
         }
+
+                sync_dbg.write(do_sync);
+
 
 	if (do_sync) {
 
@@ -210,6 +213,7 @@ void l2_gpu::ctrl()
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way);
 
+            amo_dbg.write(cpu_req.amo);
 
             if (cpu_req.amo) {
                 coh_msg_t msg;
@@ -259,11 +263,10 @@ void l2_gpu::ctrl()
             {
                 HLS_DEFINE_PROTOCOL("send wt");
                 // @TODO implement write buffer
-
+                write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
                 // only update word if tag hit, otherwise just send request, no write allocate
 				if (tag_hit) 
                 {
-                    write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
                     lines.port1[0][base + way_hit]  = line_buf[way_hit];
                 }
 				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);

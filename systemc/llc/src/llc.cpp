@@ -1190,7 +1190,7 @@ void llc::ctrl()
                        case LLC_V:
                         {
                                 // if amo is on not owned word, we are lucky
-                                if (owners_buf[way] & req_in.word_mask == 0)
+                                if ((owners_buf[way] & req_in.word_mask) == 0)
                                 {
                                         calc_amo(lines_buf[way], req_in.line, req_in.coh_msg, req_in.word_mask);
                                         send_rsp_out(RSP_WTdata, req_in.addr, req_in.line, req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask); // send old data out
