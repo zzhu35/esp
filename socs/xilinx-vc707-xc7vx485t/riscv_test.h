@@ -38,24 +38,20 @@
 #define SPW_TIME_TEST  4
 
 /* Cache parameters */
-#define SETS 512
-#define L2_WAYS 4
+#define SETS 32
+#define L2_WAYS 2
 // #define N_CPU 4
 #define MAX_N_CPU 4
 //#define LLC_WAYS CPUS*L2_WAYS
 // #define LLC_WAYS (MAX_N_CPU * L2_WAYS)
 #define LINE_SIZE 16
-#define BYTES_PER_WORD 4
-#define WORDS_PER_LINE 4
+#define BYTES_PER_WORD 8
+#define WORDS_PER_LINE 2
 #define ASI_LEON_DFLUSH 0x11
-#define WORD_SIZE 32 /* Assuming words of 32 bits */
+#define WORD_SIZE 64 /* Assuming words of 32 bits */
 #define L2_CACHE_BYTES (SETS * L2_WAYS * LINE_SIZE)
 #define L2_CACHE_WORDS (L2_CACHE_BYTES / BYTES_PER_WORD)
 
-#define TAG_OFFSET 13
-#define SET_OFFSET 4
-#define WORD_OFFSET 2
-#define BYTE_OFFSET 0
 
 /* Test features */
 #define SPINLOCK 0
