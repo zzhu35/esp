@@ -57,6 +57,7 @@ public:
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
     sc_signal<l2_tag_t> tag_buf_dbg[L2_WAYS];
     sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
+    sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
 #endif
 
@@ -90,6 +91,7 @@ public:
 
     // Local registers
     reqs_buf_t	 reqs[N_REQS];
+    word_mask_t reqs_word_mask_in[N_REQS];
 
 
     l2_tag_t	 tag_buf[L2_WAYS];
@@ -185,7 +187,7 @@ public:
 		     sc_uint<REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
     void reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
-    bool reqs_peek_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uint<REQS_BITS> &reqs_i, bool &reqs_hit, mix_msg_t coh_msg);
+    bool reqs_peek_fwd(addr_breakdown_t addr_br);
 
     void self_invalidate();
 #ifdef STATS_ENABLE

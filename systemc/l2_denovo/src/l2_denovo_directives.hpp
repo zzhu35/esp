@@ -12,7 +12,8 @@
     HLS_FLATTEN_ARRAY(state_buf);		\
     HLS_FLATTEN_ARRAY(hprot_buf);		\
     HLS_FLATTEN_ARRAY(line_buf);                \
-    HLS_FLATTEN_ARRAY(is_to_req)
+    HLS_FLATTEN_ARRAY(is_to_req); \
+    HLS_FLATTEN_ARRAY(reqs_word_mask_in)
 
 /* Reset */
 
@@ -365,7 +366,9 @@
     HLS_PRESERVE_SIGNAL(reqs_dbg, true);		\
     HLS_PRESERVE_SIGNAL(tag_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(state_buf_dbg, true);		\
-    HLS_PRESERVE_SIGNAL(evict_way_dbg, true)
+    HLS_PRESERVE_SIGNAL(evict_way_dbg, true); \
+    HLS_PRESERVE_SIGNAL(states_dbg, true)
+
 
 #else
 

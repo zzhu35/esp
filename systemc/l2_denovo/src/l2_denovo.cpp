@@ -40,6 +40,8 @@ void l2_denovo::ctrl()
         bool do_cpu_req = false;
 		bool do_sync = false;
 
+        sc_uint<L2_SET_BITS+L2_WAY_BITS>  base = 0;
+
         l2_rsp_in_t rsp_in;
         l2_fwd_in_t fwd_in;
         l2_cpu_req_t cpu_req;
@@ -47,7 +49,7 @@ void l2_denovo::ctrl()
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
 			if (l2_sync.nb_can_get()) {
-				l2_flush.nb_get(is_sync);
+				l2_sync.nb_get(is_sync);
 				do_sync = true;
             } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
@@ -113,6 +115,7 @@ void l2_denovo::ctrl()
 
 	    line_br.l2_line_breakdown(rsp_in.addr);
 
+        base = line_br.set << L2_WAY_BITS;
 	    reqs_lookup(line_br, reqs_hit_i);
 
 	    switch (rsp_in.coh_msg) {
@@ -144,7 +147,7 @@ void l2_denovo::ctrl()
 
             for (int i = 0; i < WORDS_PER_LINE; i++) {
                 HLS_UNROLL_LOOP(ON, "rsp_v");
-                if (rsp_in.word_mask & 1 << i) {
+                if (rsp_in.word_mask & (1 << i)) {
                     // found a valid bit in response word mask
                     reqs[reqs_hit_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
                     reqs[reqs_hit_i].word_mask |= 1 << i;
@@ -156,9 +159,9 @@ void l2_denovo::ctrl()
                 
                 HLS_DEFINE_PROTOCOL("denovo-resp");
                 send_rd_rsp(rsp_in.line);
-                reqs[reqs_hit_i].state = GPU_I;
+                reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
-                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_V, reqs_hit_i);
             }
 	    }
 	    break;
@@ -180,43 +183,73 @@ void l2_denovo::ctrl()
 
 	} else if (do_fwd) {
 	    addr_breakdown_t addr_br;
-	    sc_uint<REQS_BITS> reqs_hit_i;
 	    addr_br.breakdown(fwd_in.addr << OFFSET_BITS);
-	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
-        sc_uint<L2_SET_BITS+L2_WAY_BITS> base = addr_br.set << L2_WAY_BITS;
-        bool tag_hit, word_hit;
-        l2_way_t way_hit;
-        bool empty_way_found;
-        l2_way_t empty_way;
-        tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
+	    fwd_stall = reqs_peek_fwd(addr_br);
+        if (fwd_stall) {
+		    SET_CONFLICT;
+            // @TODO optimization
+            // fwd_stall will block everything
+            fwd_in_stalled = fwd_in;
 
-        // only handle fwd_req_o
-        if (fwd_in.coh_msg == FWD_REQ_O) {
-            word_mask_t nack_mask = 0;
-            word_mask_t ack_mask = 0;
-            // line exists
-            if (tag_hit) {
-                for (int i = 0; i < WORDS_PER_LINE; i++)
+	    } else {
+            base = addr_br.set << L2_WAY_BITS;
+            bool tag_hit, word_hit;
+            l2_way_t way_hit;
+            bool empty_way_found;
+            l2_way_t empty_way;
+            tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
+
+            switch (fwd_in.coh_msg) {
+                case FWD_REQ_O:
                 {
-                    HLS_UNROLL_LOOP(ON, "1");
-                    if (fwd_in.word_mask & 1 << i && state_buf[base + way_hit][i] == DNV_R) { // if reqo and we have this word in registered
-                        ack_mask |= 1 << i;
-                    }
-                    if (fwd_in.word_mask & 1 << i && state_buf[base + way_hit][i] != DNV_R) { // if reqo and we do not have this word in registered
-                        nack_mask |= 1 << i;
-                    }
-                }
+                    word_mask_t nack_mask = 0;
+                    word_mask_t ack_mask = 0;
+                    // line exists
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
+                                ack_mask |= 1 << i;
+                            }
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_R) { // if reqo and we do not have this word in registered
+                                nack_mask |= 1 << i;
+                            }
+                        }
 
-                if (nack_mask) {
-                    send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
-                }
+                        if (nack_mask) {
+                            send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
+                        }
 
-                if (ack_mask) {
-                    send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                        if (ack_mask) {
+                            send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                        }
+                    }
                 }
+                break;
+                case FWD_RVK_O:
+                {
+                    word_mask_t rsp_mask = 0;
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
+                                rsp_mask |= 1 << i;
+                                state_buf[way_hit][i] = DNV_V;
+                            }
+                        }
+                        if (rsp_mask) {
+                            send_rsp_out(RSP_RVK_O, fwd_in.req_id, false, fwd_in.addr, line_buf[way_hit], rsp_mask);
+                        }
+
+                    }
+                }
+                break;
+                default:
+                break;
             }
         }
-
 	} else if (do_ongoing_flush) {
 		self_invalidate();
 
@@ -228,11 +261,9 @@ void l2_denovo::ctrl()
 	    addr_br.breakdown(cpu_req.addr);
 
 	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
-        sc_uint<L2_SET_BITS+L2_WAY_BITS> base = addr_br.set << L2_WAY_BITS;
+        base = addr_br.set << L2_WAY_BITS;
 
         if (set_conflict) {
-            // @TODO probably not needed, but leave it here for now
-            // @TODO DeNovo conflict on word granularity?
 		SET_CONFLICT;
 
 		cpu_req_conflict = cpu_req;
@@ -283,7 +314,8 @@ void l2_denovo::ctrl()
                         break;
                 }
                 // if we already have this word, evict it
-                if (word_hit) states[base + way_hit][addr_br.w_off] = DNV_I;
+                // @TODO
+                if (word_hit) state_buf[way_hit][addr_br.w_off] = DNV_I;
                 fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_hit_i);
                 line_t line;
                 line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = cpu_req.word;
@@ -294,11 +326,45 @@ void l2_denovo::ctrl()
             else if (cpu_req.cpu_msg == WRITE)
             {
                 HLS_DEFINE_PROTOCOL("send wt");
-                write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
-                lines.port1[0][base + way_hit] = line_buf[way_hit];
-                if (!word_hit || (word_hit && state_buf[way_hit][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
-				    send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off); // send registration
-                    state_buf[way_hit][addr_br.w_off] = DNV_R; // directly go to registered
+                l2_way_t way_write;
+                if (tag_hit || empty_way_found) way_write = (tag_hit) ? way_hit : empty_way;
+                else {
+                    // eviction
+                    line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
+
+                    word_mask_t word_mask = 0;
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "3");
+                        if (state_buf[evict_way][i] == DNV_R)
+                        {
+                            word_mask |= 1 << i;
+                        }
+                    }
+
+                    {
+                        HLS_DEFINE_PROTOCOL("spandex_dual_req");
+                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                        wait();
+                    }
+
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "4");
+                        state_buf[evict_way][i] = DNV_I;
+                    }
+                    send_inval(line_addr_evict);
+                    way_write = evict_way;
+                }
+                write_word(line_buf[way_write], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+                lines.port1[0][base + way_write] = line_buf[way_write];
+                hprots.port1[0][base + way_write] = cpu_req.hprot;
+                tags.port1[0][base + way_write] = addr_br.tag;
+                if ((!word_hit) || (word_hit && (state_buf[way_write][addr_br.w_off] != DNV_R))) { // if no hit or not in registered
+                    HLS_DEFINE_PROTOCOL("spandex_dual_req");
+				    send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
+                    wait();
+                    state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
                 }
 
             }
@@ -319,7 +385,7 @@ void l2_denovo::ctrl()
                 if (word_mask) // some words are present but not whole line. send reqv
                 {
                     send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
-				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], ~word_mask, reqs_hit_i);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], ~word_mask, reqs_hit_i);
                 }
                 else send_rd_rsp(line_buf[way_hit]);
                 
@@ -328,39 +394,47 @@ void l2_denovo::ctrl()
             else if (empty_way_found) {
 
 				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_hit_i);
+				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_hit_i);
 
 			} else {
 
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
-				addr_br.tag = tag_buf[evict_way];
 
                 word_mask_t word_mask = 0;
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
                     HLS_UNROLL_LOOP(ON, "3");
-                    if (state_buf[way_hit][i] == DNV_R)
+                    if (state_buf[evict_way][i] == DNV_R)
                     {
                         word_mask |= 1 << i;
                     }
                 }
 
-				if (word_mask) { // send wb, not need to wait for response
-                    send_req_out(REQ_WB, cpu_req.hprot, addr_br.line_addr, line_buf[evict_way], word_mask);
-                }
+                {
+                    HLS_DEFINE_PROTOCOL("spandex_dual_req");
+                    send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                    wait();
+                    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                    wait();
+                }   
 
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
                     HLS_UNROLL_LOOP(ON, "4");
-                    state_buf[way_hit][i] = DNV_I;
+                    state_buf[evict_way][i] = DNV_I;
                 }
 
                 send_inval(line_addr_evict);
-                send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-                fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_hit_i);
+                fill_reqs(cpu_req.cpu_msg, addr_br, tag_buf[evict_way], evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_hit_i);
                 
 			}
 	    }
+	}
+
+    for (int i = 0; i < L2_WAYS; i++) {
+        for (int j = 0; j < WORDS_PER_LINE; j++) {
+            states[base + i][j] = state_buf[i][j];
+        }
 	}
 
 #ifdef L2_DEBUG
@@ -395,8 +469,17 @@ void l2_denovo::ctrl()
         }
 	}
 
+    for (int i = 0; i < L2_LINES; i++) {
+        for (int j = 0; j < WORDS_PER_LINE; j++) {
+            states_dbg[i][j] = states[i][j];
+
+        }
+
+    }
+
 	evict_way_dbg.write(evict_way);
 #endif
+
 
         wait();
     }
@@ -687,6 +770,7 @@ void l2_denovo::fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t 
     reqs[reqs_i].line	     = line;
     reqs[reqs_i].word_mask   = word_mask;
     reqs[reqs_i].retry       = 0;
+    reqs_word_mask_in[reqs_i] = word_mask;
 
     reqs_cnt--;
 }
@@ -702,8 +786,8 @@ void l2_denovo::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, 
     hprots.port1[0][base + way] = hprot;
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "put reqs");
-        if (reqs[reqs_i].word_mask & 1 << i) // @TODO be careful some reqs buffer might not have word_mask set
-            states[base + way][i] = state;
+        if (reqs_word_mask_in[reqs_i] & 1 << i) // @TODO be careful some reqs buffer might not have word_mask set
+            state_buf[way][i] = state;
     }
     tags.port1[0][base + way]   = tag;
 
@@ -808,6 +892,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
     TAG_LOOKUP;
 
     tag_hit = false;
+    word_hit = false;
     empty_way_found = false;
 
     read_set(addr_br.set);
@@ -822,7 +907,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
 	// line_buf[i] = lines[base + i];
 
     bool line_present = false;
-    for (int j = 0; i < WORDS_PER_LINE; j++)
+    for (int j = 0; j < WORDS_PER_LINE; j++)
     {
         HLS_UNROLL_LOOP(ON, "16");
         if (state_buf[i][j] != DNV_I) {
@@ -835,7 +920,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
 	    way_hit = i;
 	}
 
-	if (tag_buf[i] == addr_br.tag && state_buf[i][addr_br.w_off] != DNV_I) {
+	if (tag_buf[i] == addr_br.tag && line_present && state_buf[i][addr_br.w_off] != DNV_I) {
 	    word_hit = true;
 	}
 
@@ -863,7 +948,7 @@ void l2_denovo::reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uin
     for (unsigned int i = 0; i < N_REQS; ++i) {
 	REQS_LOOKUP_LOOP;
 
-	if (reqs[i].tag == line_br.tag && reqs[i].set == line_br.set && reqs[i].state != INVALID) {
+	if (reqs[i].tag == line_br.tag && reqs[i].set == line_br.set && reqs[i].state != DNV_I) {
 	    reqs_hit = true;
 	    reqs_hit_i = i;
 	}
@@ -885,10 +970,10 @@ bool l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
     for (unsigned int i = 0; i < N_REQS; ++i) {
 	REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state == INVALID)
+	if (reqs[i].state == DNV_I)
 	    reqs_i = i;
 
-	if (reqs[i].set == set && reqs[i].state != INVALID)
+	if (reqs[i].set == set && reqs[i].state != DNV_I)
 	    set_conflict = true;
     }
 
@@ -906,7 +991,7 @@ void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
     for (unsigned int i = 0; i < N_REQS; ++i) {
 	REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state == INVALID)
+	if (reqs[i].state == DNV_I)
 	    reqs_i = i;
     }
 
@@ -916,51 +1001,20 @@ void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 }
 
 
-bool l2_denovo::reqs_peek_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br,
-		       sc_uint<REQS_BITS> &reqs_i, bool &reqs_hit, mix_msg_t coh_msg)
+bool l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
 {
-    REQS_PEEK_FWD;
+    REQS_PEEK_REQ;
 
-    bool fwd_stall_tmp = false;
-
-    reqs_hit = false;
-    reqs_i = 0;
+    set_conflict = false;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_FWD_LOOP;
+	REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state != INVALID &&
-	    reqs[i].tag == line_br.tag &&
-	    reqs[i].set == line_br.set) {
-
-	    reqs_hit = true;
-	    reqs_i = i;
-
-	    fwd_stall_tmp = true;
-
-	    if (coh_msg == FWD_PUTACK) {
-
-		fwd_stall_tmp = false;
-
-	    } else if (coh_msg == FWD_INV || coh_msg == FWD_INV_LLC) {
-
-		if (reqs[i].state != ISD)
-		    fwd_stall_tmp = false;
-	    } else {
-
-		if (reqs[i].state == MIA)
-		    fwd_stall_tmp = false;
-	    }
-	}
+	if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I)
+	    set_conflict = true;
     }
 
-    reqs_fwd_stall_i = reqs_i;
-
-#ifdef L2_DEBUG
-    peek_reqs_hit_fwd_dbg.write(reqs_hit);
-#endif
-
-    return fwd_stall_tmp;
+    return set_conflict;
 }
 
 
@@ -972,9 +1026,9 @@ void l2_denovo::self_invalidate()
         for (int j = 0; j < WORDS_PER_LINE; j++)
         {
             HLS_UNROLL_LOOP(ON, "reset-states");
-            if (states[i][j] != DNV_R && touched[i][j] != true)
+            if (state_buf[i][j] != DNV_R && touched[i][j] != true)
             {
-                states[i][j] = DNV_I;
+                state_buf[i][j] = DNV_I;
             }
             touched[i][j] = false;
         }
