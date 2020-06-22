@@ -57,6 +57,7 @@ public:
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
     sc_signal<l2_tag_t> tag_buf_dbg[L2_WAYS];
     sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
+    sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
 #endif
 

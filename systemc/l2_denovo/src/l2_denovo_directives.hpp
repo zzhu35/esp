@@ -367,7 +367,7 @@
     HLS_PRESERVE_SIGNAL(tag_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(state_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(evict_way_dbg, true); \
-    HLS_PRESERVE_SIGNAL(states, true)
+    HLS_PRESERVE_SIGNAL(states_dbg, true)
 
 
 #else
