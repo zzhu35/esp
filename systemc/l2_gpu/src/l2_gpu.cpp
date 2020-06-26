@@ -156,12 +156,21 @@ void l2_gpu::ctrl()
 
             // all words valid now
             if (reqs[reqs_hit_i].word_mask == WORD_MASK_ALL){
-                
-                HLS_DEFINE_PROTOCOL("gpu-resp");
-                send_rd_rsp(rsp_in.line);
-                reqs[reqs_hit_i].state = GPU_I;
-                reqs_cnt++;
-                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+                // write allocate
+                if(reqs[reqs_hit_i].cpu_msg == WRITE){
+                    HLS_DEFINE_PROTOCOL("gpu-wt-allocate");
+                    write_word(reqs[reqs_hit_i].line, reqs[reqs_hit_i].word, reqs[reqs_hit_i].w_off, reqs[reqs_hit_i].b_off, reqs[reqs_hit_i].hsize);
+                    send_req_out(REQ_WT, reqs[reqs_hit_i].hprot, ((reqs[reqs_hit_i].tag << L2_SET_BITS) | reqs[reqs_hit_i].set), reqs[reqs_hit_i].line, 1 << reqs[reqs_hit_i].w_off);
+                    reqs[reqs_hit_i].state = GPU_I;
+                    reqs_cnt++;
+                    put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+                }else{
+                    HLS_DEFINE_PROTOCOL("gpu-resp");
+                    send_rd_rsp(rsp_in.line);
+                    reqs[reqs_hit_i].state = GPU_I;
+                    reqs_cnt++;
+                    put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, GPU_V, reqs_hit_i);
+                }
             }
 	    }
 	    break;
@@ -263,15 +272,29 @@ void l2_gpu::ctrl()
             {
                 HLS_DEFINE_PROTOCOL("send wt");
                 // @TODO implement write buffer
-                write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
-                // only update word if tag hit, otherwise just send request, no write allocate
-				if (tag_hit) 
-                {
-                    lines.port1[0][base + way_hit]  = line_buf[way_hit];
-                }
-				send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
+                // Writing large size that does not require write allocate OR tag hit
+                if (cpu_req.hsize >= WORD_64 || tag_hit){
+                    write_word(line_buf[way_hit], cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
+                    // only update word if tag hit, otherwise just send request, no write allocate
+                    if (tag_hit) 
+                    {
+                        lines.port1[0][base + way_hit]  = line_buf[way_hit];
+                    }
+                    send_req_out(REQ_WT, cpu_req.hprot, addr_br.line_addr, line_buf[way_hit], 1 << addr_br.w_off);
 
-                // @TODO wait for RSPO?
+                    // @TODO wait for RSPO?
+                }else{
+                    // need to write allocate
+                    if(!empty_way_found){
+                        line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
+                        addr_br.tag = tag_buf[evict_way];
+                        state_buf[evict_way] = GPU_I;
+                        send_inval(line_addr_evict);
+                    }
+                    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, GPU_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], reqs_hit_i);
+                }
+                
             }
             // else if read
 
