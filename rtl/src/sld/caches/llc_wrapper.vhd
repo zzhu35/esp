@@ -1077,8 +1077,8 @@ begin  -- architecture rtl
           reg.origin_x := get_origin_x(NOC_FLIT_SIZE, dma_rcv_data_out);
           reg.origin_y := get_origin_y(NOC_FLIT_SIZE, dma_rcv_data_out);
 
-          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) <= noc_xlen and
-             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) <= noc_xlen
+          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) < noc_xlen and
+             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) < noc_xlen
           then
             reg.tile_id := to_integer(unsigned(reg.origin_x)) +
                            to_integer(unsigned(reg.origin_y)) * noc_xlen;
@@ -1241,8 +1241,8 @@ begin  -- architecture rtl
           reserved    := get_reserved_field(NOC_FLIT_SIZE, coherence_rsp_rcv_data_out);
           reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
-          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) <= noc_xlen and
-             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) <= noc_xlen
+          if unsigned(reg.origin_x) >= 0 and unsigned(reg.origin_x) < noc_xlen and
+             unsigned(reg.origin_y) >= 0 and unsigned(reg.origin_y) < noc_xlen
           then
             reg.tile_id := to_integer(unsigned(reg.origin_x)) + to_integer(unsigned(reg.origin_y)) * noc_xlen;
             if tile_cache_id(reg.tile_id) >= 0 then
