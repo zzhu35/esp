@@ -2,5 +2,6 @@
     "l2_types": ["denovo", "gpu"],
     "l2":
         {
+            "2" : "gpu"
         }
 }
