@@ -248,6 +248,7 @@ architecture rtl of l2_acc_wrapper is
     state   : fwd_in_fsm;
     coh_msg : mix_msg_t;
     req_id  : cache_id_t;
+    word_mask : word_mask_t;
     asserts : asserts_fwd_t;
   end record fwd_in_reg_type;
 
@@ -255,6 +256,7 @@ architecture rtl of l2_acc_wrapper is
     state   => rcv_header,
     coh_msg => (others => '0'),
     req_id  => (others => '0'),
+    word_mask => (others => '0'),
     asserts => (others => '0'));
 
   signal fwd_in_reg      : fwd_in_reg_type := FWD_IN_REG_DEFAULT;
@@ -273,6 +275,7 @@ architecture rtl of l2_acc_wrapper is
     addr       : line_addr_t;
     line       : line_t;
     word_cnt   : natural range 0 to 3;
+    word_mask  : word_mask_t;
     asserts    : asserts_rsp_in_t;
   end record rsp_in_reg_type;
 
@@ -282,6 +285,7 @@ architecture rtl of l2_acc_wrapper is
     invack_cnt => (others => '0'),
     addr       => (others => '0'),
     line       => (others => '0'),
+    word_mask  => (others => '0'),
     word_cnt   => 0,
     asserts    => (others => '0'));
 
@@ -890,10 +894,11 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_req : process (req_reg, coherence_req_full,
                      req_out_valid, req_out_data_coh_msg, req_out_data_hprot,
-                     req_out_data_addr, req_out_data_line) is
+                     req_out_data_addr, req_out_data_line, req_out_data_word_mask) is
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -942,21 +947,24 @@ begin  -- architecture rtl of l2_acc_wrapper
         if coherence_req_full = '0' then
 
           coherence_req_wrreq <= '1';
+          mix_msg := '0' & reg.coh_msg;
 
-          if '0' & reg.coh_msg = REQ_WB then
+          case mix_msg is
+
+            when REQ_WB | REQ_WTdata | REQ_WT =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_data;
             reg.word_cnt          := 0;
 
-          else
+            when others =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_header;
 
-          end if;
+          end case;
         end if;
 
       -- SEND DATA
@@ -997,7 +1005,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          rsp_out_valid, rsp_out_data_coh_msg, rsp_out_data_req_id,
-                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line) is
+                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask) is
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');
@@ -1057,12 +1065,21 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata =>
+            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
+
+              coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-              reg.word_cnt := 0;
+              reg.state                 := send_data;
+              reg.word_cnt              := 0;
+
             when others =>
+
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+              coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state                 := send_header;
+
           end case;
+
         end if;
 
       -- SEND DATA
@@ -1107,6 +1124,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     variable reg          : fwd_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
 
   begin  -- process fsm_fwd_in
@@ -1120,6 +1138,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     fwd_in_data_coh_msg <= (others => '0');
     fwd_in_data_addr    <= (others => '0');
     fwd_in_data_req_id  <= (others => '0');
+    fwd_in_data_word_mask    <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_fwd_rdreq <= '0';
@@ -1141,6 +1160,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           reg.coh_msg := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved    := get_reserved_field(NOC_FLIT_SIZE, coherence_fwd_data_out);
           reg.req_id  := reserved(reg.req_id'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -1156,6 +1176,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           fwd_in_data_coh_msg <= reg.coh_msg;
           fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
           fwd_in_data_req_id  <= reg.req_id;
+          fwd_in_data_word_mask    <= reg.word_mask;
 
           reg.state := rcv_header;
 
@@ -1176,6 +1197,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     variable reg          : rsp_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
 
   begin  -- process fsm_rsp_in
@@ -1190,6 +1212,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     rsp_in_data_addr       <= (others => '0');
     rsp_in_data_line       <= (others => '0');
     rsp_in_data_invack_cnt <= (others => '0');
+    rsp_in_data_word_mask       <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_rsp_rcv_rdreq <= '0';
@@ -1211,6 +1234,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           reg.coh_msg    := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved       := get_reserved_field(NOC_FLIT_SIZE, coherence_rsp_rcv_data_out);
           reg.invack_cnt := reserved(reg.invack_cnt'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -1265,6 +1289,7 @@ begin  -- architecture rtl of l2_acc_wrapper
               rsp_in_data_invack_cnt <= reg.invack_cnt;
               rsp_in_data_addr       <= reg.addr;
               rsp_in_data_line       <= reg.line;
+              rsp_in_data_word_mask  <= reg.word_mask;
             end if;
 
           else
