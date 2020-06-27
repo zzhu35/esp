@@ -143,7 +143,7 @@ architecture rtl of acc_dma2noc is
     0 => ahb_device_reg (VENDOR_SLD, devid, 0, revision, pirq),
     1 => apb_iobar(paddr, pmask),
     2 => (others => '0'));
-  constant hprot : std_logic_vector(3 downto 0) := "0011";
+  constant hprot : std_logic_vector(7 downto 0) := "00000011";
 
   constant len_pad : std_logic_vector(GLOB_BYTE_OFFSET_BITS - 1 downto 0) := (others => '0');
 
@@ -230,7 +230,7 @@ architecture rtl of acc_dma2noc is
   signal sample_rd_size, sample_wr_size      : std_ulogic;
   signal size_r                              : std_logic_vector(2 downto 0);
   signal irq_header_i, irq_header            : misc_noc_flit_type;
-  constant irq_info                          : std_logic_vector(3 downto 0) := conv_std_logic_vector(pirq, 4);
+  constant irq_info                          : std_logic_vector(7 downto 0) := "0000" & conv_std_logic_vector(pirq, 4);
 
   -- DMA
   type dma_fsm is (idle, request_header, request_address, request_length,
