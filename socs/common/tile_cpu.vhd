@@ -506,7 +506,8 @@ begin
         cache_y       => cache_y,
         cache_x       => cache_x,
         cache_id      => this_cache_id,
-        cache_tile_id => cache_tile_id)
+        cache_tile_id => cache_tile_id,
+        tile_id       => tile_id)
       port map (
         rst                        => l2_rstn,
         clk                        => clk_feedthru,

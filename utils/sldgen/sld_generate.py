@@ -821,10 +821,7 @@ def gen_tech_dep(accelerator_list, cache_list, dma_width, template_dir, out_dir)
         is_llc = cac.name == "llc"
         for impl in cac.hlscfg:
           f.write("\n")
-          if cac.name in spandex_config:
-            rtl_name = spandex_config[cac.name]
-          else:
-            rtl_name = cac.name
+          rtl_name = cac.name
           f.write("  component " + rtl_name + "_" + impl + "\n")
           f.write("    port (\n")
           write_cache_interface(f, cac, is_llc)
@@ -959,10 +956,15 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
         f.write("\n")
         f.write("architecture mapping of " + cac.name + " is\n\n")
         f.write("begin  -- mapping\n\n")
-        f.write("  rtl_gen: if use_rtl /= 0 generate\n")
-        f.write("    " + cac.name + "_rtl_top_i: " + cac.name + "_rtl_top\n")
-        write_cache_port_map(f, cac, is_llc)
-        f.write("  end generate rtl_gen;\n\n")
+        if 'gpu' in cac.name:
+          pass
+        elif 'denovo' in cac.name:
+          pass
+        else:
+          f.write("  rtl_gen: if use_rtl /= 0 generate\n")
+          f.write("    " + cac.name + "_rtl_top_i: " + cac.name + "_rtl_top\n")
+          write_cache_port_map(f, cac, is_llc)
+          f.write("  end generate rtl_gen;\n\n")
         f.write("\n")
         f.write("  hls_gen: if use_rtl = 0 generate\n")
         for impl in cac.hlscfg:
@@ -991,10 +993,7 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
             continue
           f.write("\n")
           f.write("  " + impl + "_gen: if sets = " + str(sets) + " and ways = " + str(ways) + " generate\n")
-          if cac.name in spandex_config:
-            rtl_name = spandex_config[cac.name]
-          else:
-            rtl_name = cac.name
+          rtl_name = cac.name
           f.write("    " + rtl_name + "_" + impl + "_i: " + rtl_name + "_" + impl + "\n")
           write_cache_port_map(f, cac, is_llc)
           f.write("  end generate " +  impl + "_gen;\n\n")
@@ -1042,7 +1041,8 @@ def gen_interfaces(accelerator_list, axi_accelerator_list, dma_width, template_d
         f.write("      has_dvfs       : integer := 1;\n")
         f.write("      has_pll        : integer;\n")
         f.write("      extra_clk_buf  : integer;\n")
-        f.write("      local_apb_en   : std_logic_vector(0 to NAPBSLV - 1)\n")
+        f.write("      local_apb_en   : std_logic_vector(0 to NAPBSLV - 1);\n")
+        f.write("      tile_id        : integer := 0\n")
         f.write("    );\n")
         f.write("\n")
         f.write("    port (\n")
@@ -1185,7 +1185,8 @@ def gen_tile_acc(accelerator_list, axi_acceleratorlist, template_dir, out_dir):
           f.write("        has_dvfs       => this_has_dvfs,\n")
           f.write("        has_pll        => this_has_pll,\n")
           f.write("        extra_clk_buf  => this_extra_clk_buf,\n")
-          f.write("        local_apb_en   => this_local_apb_mask)\n")
+          f.write("        local_apb_en   => this_local_apb_mask,\n")
+          f.write("        tile_id        => tile_id)\n")
           f.write("      port map (\n")
           f.write("        rst               => rst,\n")
           f.write("        clk               => clk_feedthru,\n")
@@ -1268,16 +1269,21 @@ spandex_config = {}
 try:
   f = open(spandex_config_file)
   spandex_config = json.load(f)
-  l2_type = spandex_config['l2']
   f.close()
 except:
   print('Spandex Warning: Failed to read Spandex configuration. Using standard MESI cache with Translation Unit.')
 
 
-tmp_l2_dir = caches_rtl_dir + '/{}'.format(l2_type)
+tmp_l2_dir = caches_rtl_dir + '/l2'
+tmp_l2_gpu_dir = caches_rtl_dir + '/l2_gpu'
+tmp_l2_denovo_dir = caches_rtl_dir + '/l2_denovo'
 tmp_llc_dir = caches_rtl_dir + '/llc'
 caches.append('l2')
+caches.append('l2_gpu')
+caches.append('l2_denovo')
 caches.append('llc')
+
+# Spandex TODO existence checking
 
 
 if (len(accelerators) == 0):
@@ -1356,7 +1362,7 @@ for acc in accelerators:
         dp_dma_width = int(item.replace("dma", ""))
         if dp_dma_width != dma_width:
           skip = True
-          break;
+          break
     if skip:
       print("    INFO: System DMA_WIDTH is " + str(dma_width) + "; skipping " + acc + "_" + dp)
       continue
