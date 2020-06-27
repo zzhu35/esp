@@ -39,7 +39,8 @@ entity l2_acc_wrapper is
     mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-    cache_tile_id : cache_attribute_array);
+    cache_tile_id : cache_attribute_array;
+    tile_id     : integer := 0);
   port (
     rst : in std_ulogic;
     clk : in std_ulogic;
@@ -379,15 +380,12 @@ begin  -- architecture rtl of l2_acc_wrapper
   -----------------------------------------------------------------------------
   -- Instantiations
   -----------------------------------------------------------------------------
-
-  -- instantiation of l2 cache on cpu tile
-  l2_i : l2
-
+  l2_gen: if SPANDEX_L2_CONFIG(tile_id) = 0 generate
+    l2_cache_i : l2
     generic map (
       use_rtl => CFG_CACHE_RTL,
       sets => sets,
       ways => ways)
-
     port map (
       clk => clk,
       rst => rst,
@@ -400,7 +398,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
-      l2_cpu_req_data_amo       => (others => '0'), -- @TODO fix me 
+      l2_cpu_req_data_amo       => (others => '0'),
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -442,17 +440,152 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
       l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
       flush_done                => flush_done,
-      -- debug
-      --asserts                   => asserts,
-      --bookmark                  => bookmark,
-      --custom_dbg                => custom_dbg,
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
       l2_stats_data             => stats_data,
       l2_sync_ready             => open,
       l2_sync_valid             => '0',
       l2_sync_data              => '0'
-      );
+    );
+  end generate l2_gen;
+
+  l2_gpu_gen: if SPANDEX_L2_CONFIG(tile_id) = 1 generate
+    l2_cache_i : l2_gpu
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => (others => '0'),
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
+    );
+  end generate l2_gpu_gen;
+
+  l2_denovo_gen: if SPANDEX_L2_CONFIG(tile_id) = 2 generate
+    l2_cache_i : l2_denovo
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => (others => '0'),
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
+    );
+  end generate l2_denovo_gen;
 
 -------------------------------------------------------------------------------
 -- Static signals
