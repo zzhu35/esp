@@ -57,9 +57,10 @@
 #define SPINLOCK 0
 #define SEMAPHORE 1
 
-#define WORD 0
-#define HALFWORD 1
-#define BYTE 2
+#define BYTE		0
+#define HALFWORD	1
+#define WORD_32		2
+#define WORD_64     3
 
 /* Address map */
 #define BASE_CACHEABLE_ADDRESS 0X45000000
@@ -156,17 +157,16 @@ void evict(int *ptr, int offset, int ways, int max_range, int hsize)
     /* 	ptr_char = (char *) ptr; */
     /* } */
 
-    for (i = 0; i <= ways; i++)
-    {
-	curr_offset += tag_offset;
-	/* curr_offset = curr_offset % max_range; */
+    for (i = 0; i <= ways; i++){
+        curr_offset += tag_offset;
+        /* curr_offset = curr_offset % max_range; */
 
-	/* if (hsize == WORD) */
-	ptr[curr_offset] = 0xEEEEEEEE;
-	/* else if (hsize == HALFWORD) */
-	/*     ptr_short[curr_offset] = 0xEEEE; */
-	/* else */
-	/*     ptr_char[curr_offset] = 0xEE; */
+        /* if (hsize == WORD) */
+        ptr[curr_offset] = 0xEEEEEEEE;
+        /* else if (hsize == HALFWORD) */
+        /*     ptr_short[curr_offset] = 0xEEEE; */
+        /* else */
+        /*     ptr_char[curr_offset] = 0xEE; */
     }
 }
 
@@ -191,51 +191,105 @@ int cache_fill(int ways, int ncpu, int size)
 
     if (size == BYTE) {
 
-	no_of_ints = cache_size;
-	mem_ptr_char = (char *) cache_fill_matrix[pid];
+        no_of_ints = cache_size;
+        mem_ptr_char = (char *) cache_fill_matrix[pid];
 
-	/* Fill the whole cache */
-	for (i = 0; i < no_of_ints * 2; i++)
-	    mem_ptr_char[i] = (char) ((pid + 10 + (unsigned int) &mem_ptr_char[i]) % 0x100);
+        /* Fill the whole cache */
+        for (i = 0; i < no_of_ints * 2; i++)
+            mem_ptr_char[i] = (char) ((pid + 10 + (unsigned int) &mem_ptr_char[i]) % 0x100);
+        
+        print_uart("End of Fill cache\n");
 
-	/* Read all values written */
-	for (i = 0; i < no_of_ints * 2; i++) {
-	    if (mem_ptr_char[i] !=  (char) ((pid + 10 + (unsigned int) &mem_ptr_char[i]) % 0x100)) {
-        return 1;
-	    }
-	}
+        /* Read all values written */
+        for (i = 0; i < no_of_ints * 2; i++) {
+            if (mem_ptr_char[i] !=  (char) ((pid + 10 + (unsigned int) &mem_ptr_char[i]) % 0x100)) {
+                print_uart("issue found\n");
+                print_uart_int(i);
+                print_uart("\n");
+                print_uart_int(mem_ptr_char[i]);
+                print_uart("\n");
+                return 1;
+            }
+        }
+        print_uart("no issue\n");
 
     } else if (size == HALFWORD) {
 
-	no_of_ints = cache_size / sizeof(short);
-	mem_ptr_short = (short *) cache_fill_matrix[pid];
+        no_of_ints = cache_size / sizeof(short);
+        mem_ptr_short = (short *) cache_fill_matrix[pid];
 
-	/* Fill the whole cache */
-	for (i = 0; i < no_of_ints * 2; i++)
-	    mem_ptr_short[i] = (short) ((pid + 11 + (unsigned int) &mem_ptr_short[i]) % 0x10000);
+        /* Fill the whole cache */
+        for (i = 0; i < no_of_ints * 2; i++)
+            mem_ptr_short[i] = (short) ((pid + 11 + (unsigned int) &mem_ptr_short[i]) % 0x10000);
+        
+        print_uart("End of Fill cache\n");
 
-	/* Read all values written */
-	for (i = 0; i < no_of_ints * 2; i++) {
-	    if (mem_ptr_short[i] !=  (short) ((pid + 11 + (unsigned int) &mem_ptr_short[i]) % 0x10000)) {
-        return 1;
-	    }
-	}
+        /* Read all values written */
+        for (i = 0; i < no_of_ints * 2; i++) {
+            if (mem_ptr_short[i] !=  (short) ((pid + 11 + (unsigned int) &mem_ptr_short[i]) % 0x10000)) {
+                print_uart("issue found\n");
+                print_uart_int(i);
+                print_uart("\n");
+                print_uart_int(mem_ptr_char[i]);
+                print_uart("\n");
+                return 1;
+            }
+        }
 
-    } else if (size == WORD) {
+        print_uart("no issue\n"); 
+    
+    } else if (size == WORD_32) {
 
-	no_of_ints = cache_size / sizeof(int);
-	mem_ptr_int = (int *) cache_fill_matrix[pid];
+        no_of_ints = cache_size / sizeof(int);
+        mem_ptr_int = (int *) cache_fill_matrix[pid];
 
-	/* Fill the whole cache */
-	for (i = 0; i < no_of_ints * 2; i++)
-	    mem_ptr_int[i] = pid + 12 + (int) &mem_ptr_int[i];
+        /* Fill the whole cache */
+        for (i = 0; i < no_of_ints * 2; i++)
+            mem_ptr_int[i] = pid + 12 + (int) &mem_ptr_int[i];
 
-	/* Read all values written */
-	for (i = 0; i < no_of_ints * 2; i++) {
-	    if (mem_ptr_int[i] !=  pid + 12 + (int) &mem_ptr_int[i]) {
-        return 1;
-	    }
-	}
+        print_uart("End of Fill cache\n");
+
+        /* Read all values written */
+        for (i = 0; i < no_of_ints * 2; i++) {
+            if (mem_ptr_int[i] !=  pid + 12 + (int) &mem_ptr_int[i]) {
+                print_uart("issue found\n");
+                print_uart_int(i);
+                print_uart("\n");
+                print_uart_int(mem_ptr_char[i]);
+                print_uart("\n");
+                return 1;
+            }
+        }
+
+        print_uart("no issue\n");
+
+    } else if (size == WORD_64) {
+
+        long long int *mem_ptr_ll_int;
+        
+        no_of_ints = cache_size / sizeof(long long int);
+        mem_ptr_ll_int = (long long int *) cache_fill_matrix[pid];
+        
+
+        /* Fill the whole cache */
+        for (i = 0; i < no_of_ints * 2; i++)
+            mem_ptr_ll_int[i] = pid + 12 + (long long int) &mem_ptr_ll_int[i];
+        
+        print_uart("End of Fill cache\n");
+
+        /* Read all values written */
+        for (i = 0; i < no_of_ints * 2; i++) {
+            if (mem_ptr_ll_int[i] !=  pid + 12 + (long long int) &mem_ptr_ll_int[i]) {
+                print_uart("issue found\n");
+                print_uart_int(i);
+                print_uart("\n");
+                print_uart_int(mem_ptr_char[i]);
+                print_uart("\n");
+                return 1;
+            }
+        }
+
+        print_uart("no issue\n");
     }
 
     return 0;
@@ -293,16 +347,18 @@ int rand_rw(int words, int ncpu) // words < 256
 
     for (i = 0; i < words; i++) {
 
-	offset = i * 4 ; // rand() % 256;
+        offset = i * 4 ; // rand() % 256;
 
-	ptr[offset] = i + pid + (int) &ptr[offset];
+        ptr[offset] = i + pid + (int) &ptr[offset];
 
-	evict(ptr, offset, L2_WAYS, 0, WORD);
+        evict(ptr, offset, L2_WAYS, 0, WORD_32);
 
-	if (ptr[offset] != i + pid + (int) &ptr[offset]) {
-	    return 1;
-	}
+        if (ptr[offset] != i + pid + (int) &ptr[offset]) {
+            print_uart("issue in rand rw\n");
+            return 1;
+        }
     }
+    print_uart("no issue\n");
 
     return 0;
 }
@@ -314,34 +370,43 @@ int riscv_sp_test()
 
 	data_structures_setup();
 
-    print_uart("cache_fill BYTE\n");
-    if (cache_fill(4, 1, BYTE)) {
-        print_uart("Error!");
+    // print_uart("cache_fill BYTE\n");
+    // if (cache_fill(4, 1, BYTE)) {
+    //     print_uart("Error!\n");
+    //     return 1;
+    // }
+
+    // print_uart("cache_fill HALFWORD\n");
+    // if (cache_fill(4, 1, HALFWORD)) {
+    //     print_uart("Error!\n");
+    //     return 1;
+    // }
+    
+    // print_uart("cache_fill WORD_32\n");
+    // if (cache_fill(4, 11, WORD_32)) {
+    //     print_uart("Error!\n");
+    //     return 1;
+    // }
+
+    // print_uart("cache_fill WORD_64\n");
+    // if (cache_fill(4, 11, WORD_64)) {
+    //     print_uart("Error!\n");
+    //     return 1;
+    // }
+    
+    // print_uart("false_sharing\n");
+    // if (false_sharing(1, 1)) {
+    //     print_uart("Error!\n");
+    //     return 1;
+    // }
+    
+    print_uart("rand_rw\n");
+    if (rand_rw(16, 1)) {
+        print_uart("Error!\n");
         return 1;
     }
 
-    print_uart("cache_fill HALFWORD\n");
-    if (cache_fill(4, 1, HALFWORD)) {
-        print_uart("Error!");
-        return 1;
-    }
-    
-    print_uart("cache_fill WORD\n");
-    if (cache_fill(4, 11, WORD)) {
-        print_uart("Error!");
-        return 1;
-    }
-    
-    print_uart("false_sharing\n");
-    if (false_sharing(1, 1)) {
-        print_uart("Error!");
-        return 1;
-    }
-    
-    print_uart("rand_rw\n");
-    if (rand_rw(1, 1)) {
-        print_uart("Error!");
-        return 1;
-    }
+    print_uart("Pass All\n");
+    print_uart("\n");
     return 0;
 }
