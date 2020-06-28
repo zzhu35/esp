@@ -158,7 +158,7 @@ void l2_denovo::ctrl()
             if (reqs[reqs_hit_i].word_mask == WORD_MASK_ALL){
                 
                 HLS_DEFINE_PROTOCOL("denovo-resp");
-                send_rd_rsp(rsp_in.line);
+                send_rd_rsp(reqs[reqs_hit_i].line);
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
                 put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_V, reqs_hit_i);
@@ -770,7 +770,7 @@ void l2_denovo::fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t 
     reqs[reqs_i].line	     = line;
     reqs[reqs_i].word_mask   = word_mask;
     reqs[reqs_i].retry       = 0;
-    reqs_word_mask_in[reqs_i] = word_mask;
+    reqs_word_mask_in[reqs_i] = ~word_mask;
 
     reqs_cnt--;
 }
