@@ -51,8 +51,8 @@ void l2_gpu::ctrl()
 				do_sync = true;
             } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
-                ongoing_flush = true;
-                do_flush = true;
+                //ongoing_flush = true;
+                //do_flush = true;
 			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
