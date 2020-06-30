@@ -247,6 +247,29 @@ void l2_denovo::ctrl()
                     }
                 }
                 break;
+                case FWD_REQ_S:
+                {
+                    word_mask_t rsp_mask = 0;
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
+                                rsp_mask |= 1 << i;
+                                state_buf[way_hit][i] = DNV_V;
+                            }
+                        }
+                        if (rsp_mask) {
+                            HLS_DEFINE_PROTOCOL("send rsp s");
+                            send_rsp_out(RSP_RVK_O, fwd_in.req_id, false, fwd_in.addr, line_buf[way_hit], rsp_mask);
+                            wait();
+                            send_rsp_out(RSP_S, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], rsp_mask);
+                        }
+
+                    }
+
+                }
+                break;
                 default:
                 break;
             }
