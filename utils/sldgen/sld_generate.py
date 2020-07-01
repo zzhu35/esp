@@ -1262,17 +1262,6 @@ accelerators = next(os.walk(acc_rtl_dir))[1]
 axi_accelerators = next(os.walk(axi_acc_dir))[1]
 
 caches = [ ]
-l2_type = 'l2'
-import json
-spandex_config_file = '{}/spandex/spandex-config.json'.format(sys.argv[3])
-spandex_config = {}
-try:
-  f = open(spandex_config_file)
-  spandex_config = json.load(f)
-  f.close()
-except:
-  print('Spandex Warning: Failed to read Spandex configuration. Using standard MESI cache with Translation Unit.')
-
 
 tmp_l2_dir = caches_rtl_dir + '/l2'
 tmp_l2_gpu_dir = caches_rtl_dir + '/l2_gpu'
