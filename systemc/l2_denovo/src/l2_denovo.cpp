@@ -53,8 +53,8 @@ void l2_denovo::ctrl()
 				do_sync = true;
             } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
-                ongoing_flush = true;
-                do_flush = true;
+                //ongoing_flush = true;
+                //do_flush = true;
 			} else if (l2_rsp_in.nb_can_get()) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
@@ -116,6 +116,7 @@ void l2_denovo::ctrl()
 	    line_br.l2_line_breakdown(rsp_in.addr);
 
         base = line_br.set << L2_WAY_BITS;
+        read_set(line_br.set);
 	    reqs_lookup(line_br, reqs_hit_i);
 
 	    switch (rsp_in.coh_msg) {
@@ -244,6 +245,29 @@ void l2_denovo::ctrl()
                         }
 
                     }
+                }
+                break;
+                case FWD_REQ_S:
+                {
+                    word_mask_t rsp_mask = 0;
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
+                                rsp_mask |= 1 << i;
+                                state_buf[way_hit][i] = DNV_V;
+                            }
+                        }
+                        if (rsp_mask) {
+                            HLS_DEFINE_PROTOCOL("send rsp s");
+                            send_rsp_out(RSP_RVK_O, fwd_in.req_id, false, fwd_in.addr, line_buf[way_hit], rsp_mask);
+                            wait();
+                            send_rsp_out(RSP_S, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], rsp_mask);
+                        }
+
+                    }
+
                 }
                 break;
                 default:
@@ -430,12 +454,13 @@ void l2_denovo::ctrl()
 			}
 	    }
 	}
-
-    for (int i = 0; i < L2_WAYS; i++) {
-        for (int j = 0; j < WORDS_PER_LINE; j++) {
-            states[base + i][j] = state_buf[i][j];
+    if ((do_cpu_req && !set_conflict) || (do_fwd && !fwd_stall) || do_rsp){
+        for (int i = 0; i < L2_WAYS; i++) {
+            for (int j = 0; j < WORDS_PER_LINE; j++) {
+                states[base + i][j] = state_buf[i][j];
+            }
         }
-	}
+    }
 
 #ifdef L2_DEBUG
 	// update debug vectors

@@ -19,8 +19,8 @@ int fft_comp(float *data, unsigned int n, unsigned int logn, int sign, bool rev)
 #ifndef __linux__
 #ifdef __riscv
 double sin(double x);
-float rand(void);
-#define RAND_MAX 32768.0
+float rand_fft(void);
+#define RAND_MAX_FFT 32768.0
 #endif
 #endif
 
