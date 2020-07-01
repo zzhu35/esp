@@ -576,7 +576,9 @@ void l2::ctrl()
 					fill_reqs(0, addr_br, 0, way_hit, 0, MIA, 0, 0, line_buf[way_hit], reqs_hit_i); // @TODO maybe not needed, but put wb request anyways
 					reqs[reqs_hit_i].word_mask = fwd_in.word_mask;
 				} 
-				else
+				else{
+					
+				}
 	#endif
 
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
