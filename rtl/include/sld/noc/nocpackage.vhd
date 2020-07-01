@@ -64,28 +64,37 @@ package nocpackage is
   -- -- Message type encoding
   -- -- Cachable data plane 1 -> request messages
   constant REQ_S          : noc_msg_type := "00000";  -- Writer-invalidated Read
-  constant REQ_O          : noc_msg_type := "00001";  -- Ownership Write (overwrites all requested data)
+  constant REQ_Odata      : noc_msg_type := "00001";  -- Ownership Write (overwrites all requested data)
   constant REQ_WT         : noc_msg_type := "00010";  -- Write-through Write (overwrites all requested data)
   constant REQ_WB         : noc_msg_type := "00011";  -- Write-back owned data
-  constant REQ_WTdata     : noc_msg_type := "00100";  -- Write-through Write (returns the value before update)
-  constant REQ_Odata      : noc_msg_type := "00101";  -- Ownership Write (returns the value before update)
-  constant REQ_V          : noc_msg_type := "00110";  -- Self-invalidated Read
+  constant REQ_O          : noc_msg_type := "00100";  -- Ownership Write (returns the value before update)
+  constant REQ_V          : noc_msg_type := "00101";  -- Self-invalidated Read
+  constant REQ_WTdata     : noc_msg_type := "00110";  -- Write-through Write (returns the value before update)
+  constant REQ_AMO_SWAP   : noc_msg_type := "00110";
+  constant REQ_AMO_ADD    : noc_msg_type := "00111";
+  constant REQ_AMO_AND    : noc_msg_type := "01000";
+  constant REQ_AMO_OR     : noc_msg_type := "01001";
+  constant REQ_AMO_XOR    : noc_msg_type := "01010";
+  constant REQ_AMO_MAX    : noc_msg_type := "01011";
+  constant REQ_AMO_MAXU   : noc_msg_type := "01100";
+  constant REQ_AMO_MIN    : noc_msg_type := "01101";
+  constant REQ_AMO_MINU   : noc_msg_type := "01110";
   -- Cachable data plane 2 -> forwarded messages
   constant FWD_REQ_S      : noc_msg_type := "00000";
-  constant FWD_REQ_O      : noc_msg_type := "00001";
+  constant FWD_REQ_Odata  : noc_msg_type := "00001";
   constant FWD_INV_SPDX   : noc_msg_type := "00010";
   constant FWD_WB_ACK     : noc_msg_type := "00011";
   constant FWD_RVK_O      : noc_msg_type := "00100";
-  constant FWD_REQ_V      : noc_msg_type := "00101";
-  constant FWD_REQ_Odata  : noc_msg_type := "00110";
+  constant FWD_REQ_V      : noc_msg_type := "00111";
+  constant FWD_REQ_O      : noc_msg_type := "00110";
   -- Cachable data plane 3 -> response messages
   constant RSP_S              : noc_msg_type := "00000";
-  constant RSP_O              : noc_msg_type := "00001";
+  constant RSP_Odata          : noc_msg_type := "00001";
   constant RSP_INV_ACK_SPDX   : noc_msg_type := "00010";
   constant RSP_NACK           : noc_msg_type := "00011";
   constant RSP_RVK_O          : noc_msg_type := "00100";
   constant RSP_V              : noc_msg_type := "00101";
-  constant RSP_Odata          : noc_msg_type := "00110";
+  constant RSP_O              : noc_msg_type := "00110";
   constant RSP_WT             : noc_msg_type := "00111";
   constant RSP_WTdata         : noc_msg_type := "01000";
 
@@ -124,6 +133,7 @@ package nocpackage is
   constant REQ_P2P       : noc_msg_type := "11101";
   constant REQ_DMA_READ  : noc_msg_type := "11110";  -- Read coherent with LLC
   constant REQ_DMA_WRITE : noc_msg_type := "11111";  -- Write coherent with LLC
+  constant CPU_DMA       : std_logic_vector(4 downto 0) := "11100";  -- identify DMA from CPU
   -- Configuration plane 5 -> RD/WR registers
   constant REQ_REG_RD   : noc_msg_type := "11000";
   constant REQ_REG_WR   : noc_msg_type := "11001";
@@ -152,14 +162,6 @@ package nocpackage is
 
   type yx_vec is array (natural range <>) of std_logic_vector(2 downto 0);
 
-  -- WARNING: The following constants and types must be changed to scale up;
-  --          We need to hardcode this value because of VHDL limitations, but
-  --          the *_MAX and *_NUM values are not limited in practice.
-  --          These values should match those set in utils/socmap/
-  constant MEM_MAX_NUM : integer := GLOB_MEM_MAX_NUM;
-  constant CPU_MAX_NUM : integer := GLOB_CPU_MAX_NUM;
-  constant TILES_MAX_NUM : integer := GLOB_TILES_MAX_NUM;
-
   type tile_mem_info is record
     x     : local_yx;
     y     : local_yx;
@@ -175,9 +177,7 @@ package nocpackage is
     );
 
   type tile_mem_info_vector is array (natural range <>) of tile_mem_info;
-  type mem_attribute_array is array (0 to MEM_MAX_NUM - 1) of integer;
-  type cpu_attribute_array is array (0 to CPU_MAX_NUM - 1) of integer;
-  type tile_attribute_array is array (0 to TILES_MAX_NUM - 1) of integer;
+  type attribute_vector is array (natural range <>) of integer;
 
   -- Components
   component fifo0

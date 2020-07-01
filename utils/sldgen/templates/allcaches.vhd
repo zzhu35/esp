@@ -29,6 +29,7 @@ package allcaches is
   constant OFFSET_BITS    : integer := WORD_OFFSET_BITS + BYTE_OFFSET_BITS;
   constant LINE_ADDR_BITS : integer := ADDR_BITS - OFFSET_BITS;
   constant WORDS_PER_LINE : integer := 2**WORD_OFFSET_BITS;
+  constant AMO_BITS       : integer := 6;
   constant BYTES_PER_WORD : integer := 2**BYTE_OFFSET_BITS;
   constant BYTES_PER_LINE : integer := WORDS_PER_LINE * BYTES_PER_WORD;
   constant BITS_PER_WORD  : integer := (BYTES_PER_WORD * 8);
@@ -49,7 +50,7 @@ package allcaches is
   --constant BOOKMARK_WIDTH : integer := 32;
   --constant LLC_ASSERTS_WIDTH : integer := 6;
   --constant LLC_BOOKMARK_WIDTH : integer := 10;
-  constant ASSERTS_AHBS_WIDTH     : integer := 13;
+  constant ASSERTS_AHBS_WIDTH     : integer := 14;
   constant ASSERTS_AHBM_WIDTH     : integer := 1;
   constant ASSERTS_REQ_WIDTH      : integer := 1;
   constant ASSERTS_RSP_IN_WIDTH   : integer := 1;
@@ -72,6 +73,7 @@ package allcaches is
       l2_cpu_req_data_hprot     : in  std_logic_vector(HPROT_WIDTH - 1 downto 0);
       l2_cpu_req_data_addr      : in  std_logic_vector(ADDR_BITS - 1 downto 0);
       l2_cpu_req_data_word      : in  std_logic_vector(BITS_PER_WORD - 1 downto 0);
+      l2_cpu_req_data_amo       : in  std_logic_vector(5 downto 0);
       l2_fwd_in_valid           : in  std_ulogic;
       l2_fwd_in_data_coh_msg    : in  std_logic_vector(MIX_MSG_TYPE_WIDTH - 1 downto 0);
       l2_fwd_in_data_addr       : in  std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
@@ -113,7 +115,10 @@ package allcaches is
       l2_rsp_out_data_addr      : out std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
       l2_rsp_out_data_line      : out std_logic_vector(BITS_PER_LINE - 1 downto 0);
       l2_stats_valid            : out std_ulogic;
-      l2_stats_data             : out std_ulogic
+      l2_stats_data             : out std_ulogic;
+      l2_sync_ready             : out std_ulogic;
+      l2_sync_valid             : in  std_ulogic;
+      l2_sync_data              : in  std_ulogic
       );
   end component;
 

@@ -36,10 +36,11 @@ entity l2_acc_wrapper is
     local_y     : local_yx;
     local_x     : local_yx;
     mem_num     : integer := 1;
-    mem_info    : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+    mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-    cache_tile_id : cache_attribute_array);
+    cache_tile_id : cache_attribute_array;
+    tile_id     : integer := 0);
   port (
     rst : in std_ulogic;
     clk : in std_ulogic;
@@ -88,8 +89,6 @@ end l2_acc_wrapper;
 architecture rtl of l2_acc_wrapper is
 
   -- Interface with L2 cache
-
-  -- TODO: Replace AHB with DMA handling
 
   -- AHB to cache
   signal cpu_req_ready          : std_ulogic;
@@ -152,9 +151,10 @@ architecture rtl of l2_acc_wrapper is
   -------------------------------------------------------------------------------
   -- Flush FSM signals
   -------------------------------------------------------------------------------
-  type flush_fsm is (idle, issue);
+  type flush_fsm is (idle, hold, issue);
   signal flush_state      : flush_fsm := idle;
   signal flush_state_next : flush_fsm := idle;
+  signal flush_hold : std_ulogic;
 
   -------------------------------------------------------------------------------
   -- FSM: Requests/Responses from/to accelerator (handled one at a time)
@@ -248,6 +248,7 @@ architecture rtl of l2_acc_wrapper is
     state   : fwd_in_fsm;
     coh_msg : mix_msg_t;
     req_id  : cache_id_t;
+    word_mask : word_mask_t;
     asserts : asserts_fwd_t;
   end record fwd_in_reg_type;
 
@@ -255,6 +256,7 @@ architecture rtl of l2_acc_wrapper is
     state   => rcv_header,
     coh_msg => (others => '0'),
     req_id  => (others => '0'),
+    word_mask => (others => '0'),
     asserts => (others => '0'));
 
   signal fwd_in_reg      : fwd_in_reg_type := FWD_IN_REG_DEFAULT;
@@ -273,6 +275,7 @@ architecture rtl of l2_acc_wrapper is
     addr       : line_addr_t;
     line       : line_t;
     word_cnt   : natural range 0 to 3;
+    word_mask  : word_mask_t;
     asserts    : asserts_rsp_in_t;
   end record rsp_in_reg_type;
 
@@ -282,6 +285,7 @@ architecture rtl of l2_acc_wrapper is
     invack_cnt => (others => '0'),
     addr       => (others => '0'),
     line       => (others => '0'),
+    word_mask  => (others => '0'),
     word_cnt   => 0,
     asserts    => (others => '0'));
 
@@ -292,7 +296,7 @@ architecture rtl of l2_acc_wrapper is
   -- Others
   -------------------------------------------------------------------------------
 
-  signal empty_offset : std_logic_vector(OFFSET_BITS - 1 downto 0) := (others => '0');
+  constant empty_offset : std_logic_vector(OFFSET_BITS - 1 downto 0) := (others => '0');
 
   -------------------------------------------------------------------------------
   -- Debug
@@ -313,82 +317,79 @@ architecture rtl of l2_acc_wrapper is
 
   attribute mark_debug : string;
 
-  attribute mark_debug of req_acc_reg_state   : signal is "true";
-  attribute mark_debug of req_reg_state    : signal is "true";
-  attribute mark_debug of rsp_out_reg_state    : signal is "true";
-  attribute mark_debug of rsp_in_reg_state : signal is "true";
+  -- attribute mark_debug of req_acc_reg_state   : signal is "true";
+  -- attribute mark_debug of req_reg_state    : signal is "true";
+  -- attribute mark_debug of rsp_out_reg_state    : signal is "true";
+  -- attribute mark_debug of rsp_in_reg_state : signal is "true";
 
-  attribute mark_debug of flush_state : signal is "true";
+  -- attribute mark_debug of flush_state : signal is "true";
 
-  -- attribute mark_debug of req_asserts    : signal is "true";
-  -- attribute mark_debug of rsp_out_asserts    : signal is "true";
-  -- attribute mark_debug of rsp_in_asserts : signal is "true";
+  -- -- attribute mark_debug of req_asserts    : signal is "true";
+  -- -- attribute mark_debug of rsp_out_asserts    : signal is "true";
+  -- -- attribute mark_debug of rsp_in_asserts : signal is "true";
 
-  -- AHB to cache
-  attribute mark_debug of cpu_req_ready          : signal is "true";
-  attribute mark_debug of cpu_req_valid          : signal is "true";
-  attribute mark_debug of cpu_req_data_cpu_msg   : signal is "true";
-  attribute mark_debug of cpu_req_data_hsize     : signal is "true";
-  attribute mark_debug of cpu_req_data_hprot     : signal is "true";
-  attribute mark_debug of cpu_req_data_addr      : signal is "true";
-  attribute mark_debug of cpu_req_data_word      : signal is "true";
-  attribute mark_debug of flush_ready            : signal is "true";
-  attribute mark_debug of flush_valid            : signal is "true";
-  attribute mark_debug of flush_data             : signal is "true";
-  -- cache to AHB
-  attribute mark_debug of rd_rsp_ready           : signal is "true";
-  attribute mark_debug of rd_rsp_valid           : signal is "true";
-  -- attribute mark_debug of rd_rsp_data_line       : signal is "true";
-  -- cache to NoC
-  attribute mark_debug of req_out_ready          : signal is "true";
-  attribute mark_debug of req_out_valid          : signal is "true";
-  attribute mark_debug of req_out_data_coh_msg   : signal is "true";
-  attribute mark_debug of req_out_data_hprot     : signal is "true";
-  attribute mark_debug of req_out_data_addr      : signal is "true";
-  -- attribute mark_debug of req_out_data_line      : signal is "true";
-  attribute mark_debug of rsp_out_ready          : signal is "true";
-  attribute mark_debug of rsp_out_valid          : signal is "true";
-  attribute mark_debug of rsp_out_data_coh_msg   : signal is "true";
-  attribute mark_debug of rsp_out_data_req_id    : signal is "true";
-  attribute mark_debug of rsp_out_data_to_req    : signal is "true";
-  attribute mark_debug of rsp_out_data_addr      : signal is "true";
-  -- attribute mark_debug of rsp_out_data_line      : signal is "true";
-  -- NoC to cache
-  attribute mark_debug of fwd_in_ready           : signal is "true";
-  attribute mark_debug of fwd_in_valid           : signal is "true";
-  attribute mark_debug of fwd_in_data_coh_msg    : signal is "true";
-  attribute mark_debug of fwd_in_data_addr       : signal is "true";
-  attribute mark_debug of fwd_in_data_req_id     : signal is "true";
-  attribute mark_debug of rsp_in_valid           : signal is "true";
-  attribute mark_debug of rsp_in_ready           : signal is "true";
-  attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
-  attribute mark_debug of rsp_in_data_addr       : signal is "true";
-  -- attribute mark_debug of rsp_in_data_line       : signal is "true";
-  attribute mark_debug of rsp_in_data_invack_cnt : signal is "true";
-  -- debug
-  --attribute mark_debug of asserts                : signal is "true";
-  --attribute mark_debug of bookmark               : signal is "true";
-  -- attribute mark_debug of custom_dbg             : signal is "true";
-  attribute mark_debug of flush_done             : signal is "true";
-  -- statistics
-  attribute mark_debug of stats_ready            : signal is "true";
-  attribute mark_debug of stats_valid            : signal is "true";
-  attribute mark_debug of stats_data             : signal is "true";
+  -- -- AHB to cache
+  -- attribute mark_debug of cpu_req_ready          : signal is "true";
+  -- attribute mark_debug of cpu_req_valid          : signal is "true";
+  -- attribute mark_debug of cpu_req_data_cpu_msg   : signal is "true";
+  -- attribute mark_debug of cpu_req_data_hsize     : signal is "true";
+  -- attribute mark_debug of cpu_req_data_hprot     : signal is "true";
+  -- attribute mark_debug of cpu_req_data_addr      : signal is "true";
+  -- attribute mark_debug of cpu_req_data_word      : signal is "true";
+  -- attribute mark_debug of flush_ready            : signal is "true";
+  -- attribute mark_debug of flush_valid            : signal is "true";
+  -- attribute mark_debug of flush_data             : signal is "true";
+  -- -- cache to AHB
+  -- attribute mark_debug of rd_rsp_ready           : signal is "true";
+  -- attribute mark_debug of rd_rsp_valid           : signal is "true";
+  -- -- attribute mark_debug of rd_rsp_data_line       : signal is "true";
+  -- -- cache to NoC
+  -- attribute mark_debug of req_out_ready          : signal is "true";
+  -- attribute mark_debug of req_out_valid          : signal is "true";
+  -- attribute mark_debug of req_out_data_coh_msg   : signal is "true";
+  -- attribute mark_debug of req_out_data_hprot     : signal is "true";
+  -- attribute mark_debug of req_out_data_addr      : signal is "true";
+  -- -- attribute mark_debug of req_out_data_line      : signal is "true";
+  -- attribute mark_debug of rsp_out_ready          : signal is "true";
+  -- attribute mark_debug of rsp_out_valid          : signal is "true";
+  -- attribute mark_debug of rsp_out_data_coh_msg   : signal is "true";
+  -- attribute mark_debug of rsp_out_data_req_id    : signal is "true";
+  -- attribute mark_debug of rsp_out_data_to_req    : signal is "true";
+  -- attribute mark_debug of rsp_out_data_addr      : signal is "true";
+  -- -- attribute mark_debug of rsp_out_data_line      : signal is "true";
+  -- -- NoC to cache
+  -- attribute mark_debug of fwd_in_ready           : signal is "true";
+  -- attribute mark_debug of fwd_in_valid           : signal is "true";
+  -- attribute mark_debug of fwd_in_data_coh_msg    : signal is "true";
+  -- attribute mark_debug of fwd_in_data_addr       : signal is "true";
+  -- attribute mark_debug of fwd_in_data_req_id     : signal is "true";
+  -- attribute mark_debug of rsp_in_valid           : signal is "true";
+  -- attribute mark_debug of rsp_in_ready           : signal is "true";
+  -- attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
+  -- attribute mark_debug of rsp_in_data_addr       : signal is "true";
+  -- -- attribute mark_debug of rsp_in_data_line       : signal is "true";
+  -- attribute mark_debug of rsp_in_data_invack_cnt : signal is "true";
+  -- -- debug
+  -- --attribute mark_debug of asserts                : signal is "true";
+  -- --attribute mark_debug of bookmark               : signal is "true";
+  -- -- attribute mark_debug of custom_dbg             : signal is "true";
+  -- attribute mark_debug of flush_done             : signal is "true";
+  -- -- statistics
+  -- attribute mark_debug of stats_ready            : signal is "true";
+  -- attribute mark_debug of stats_valid            : signal is "true";
+  -- attribute mark_debug of stats_data             : signal is "true";
 
 begin  -- architecture rtl of l2_acc_wrapper
 
   -----------------------------------------------------------------------------
   -- Instantiations
   -----------------------------------------------------------------------------
-
-  -- instantiation of l2 cache on cpu tile
-  l2_i : l2
-
+  l2_gen: if SPANDEX_L2_CONFIG(tile_id) = 0 generate
+    l2_cache_i : l2
     generic map (
       use_rtl => CFG_CACHE_RTL,
       sets => sets,
       ways => ways)
-
     port map (
       clk => clk,
       rst => rst,
@@ -401,6 +402,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => (others => '0'),
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -442,14 +444,152 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
       l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
       flush_done                => flush_done,
-      -- debug
-      --asserts                   => asserts,
-      --bookmark                  => bookmark,
-      --custom_dbg                => custom_dbg,
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
-      l2_stats_data             => stats_data
-      );
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
+    );
+  end generate l2_gen;
+
+  l2_gpu_gen: if SPANDEX_L2_CONFIG(tile_id) = 1 generate
+    l2_cache_i : l2_gpu
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => (others => '0'),
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
+    );
+  end generate l2_gpu_gen;
+
+  l2_denovo_gen: if SPANDEX_L2_CONFIG(tile_id) = 2 generate
+    l2_cache_i : l2_denovo
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => (others => '0'),
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
+    );
+  end generate l2_denovo_gen;
 
 -------------------------------------------------------------------------------
 -- Static signals
@@ -457,7 +597,12 @@ begin  -- architecture rtl of l2_acc_wrapper
 
   flush_data           <= '0';
   inval_ready          <= '1'; -- inval not used by accelerators
-  cpu_req_data_hsize   <= "010";
+  hsize32_gen: if ARCH_BITS = 32 generate
+    cpu_req_data_hsize   <= "010";
+  end generate hsize32_gen;
+  hsize64_gen: if ARCH_BITS = 64 generate
+    cpu_req_data_hsize   <= "011";
+  end generate hsize64_gen;
   cpu_req_data_hprot   <= "01";
 
   stats_ready    <= '1';
@@ -496,7 +641,9 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
 -- FSM: L2 flush management
 -------------------------------------------------------------------------------
-  fsm_flush : process (flush_state, flush, flush_ready)
+  flush_hold <= dma_read or dma_write or (not cpu_req_ready);
+
+  fsm_flush : process (flush_state, flush, flush_ready, flush_hold)
 
   begin
 
@@ -505,27 +652,42 @@ begin  -- architecture rtl of l2_acc_wrapper
       -- IDLE
       when idle =>
 
+        flush_valid <= '0';
+
         if flush = '1' then
 
-          flush_valid <= '1';
-
-          if flush_ready = '0' then
+          if flush_hold = '0' then
 
             flush_state_next <= issue;
 
           else
 
-            flush_state_next <= idle;
+            flush_state_next <= hold;
 
           end if;
 
         else
 
-          flush_valid <= '0';
-
           flush_state_next <= idle;
 
         end if;
+
+
+      -- HOLD
+      when hold =>
+
+        flush_valid <= '0';
+
+        if flush_hold = '0' then
+
+          flush_state_next <= issue;
+
+        else
+
+          flush_state_next <= hold;
+
+        end if;
+
 
       -- ISSUE
       when issue =>
@@ -732,10 +894,11 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_req : process (req_reg, coherence_req_full,
                      req_out_valid, req_out_data_coh_msg, req_out_data_hprot,
-                     req_out_data_addr, req_out_data_line) is
+                     req_out_data_addr, req_out_data_line, req_out_data_word_mask) is
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -784,21 +947,24 @@ begin  -- architecture rtl of l2_acc_wrapper
         if coherence_req_full = '0' then
 
           coherence_req_wrreq <= '1';
+          mix_msg := '0' & reg.coh_msg;
 
-          if '0' & reg.coh_msg = REQ_WB then
+          case mix_msg is
+
+            when REQ_WB | REQ_WTdata | REQ_WT =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_data;
             reg.word_cnt          := 0;
 
-          else
+            when others =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_header;
 
-          end if;
+          end case;
         end if;
 
       -- SEND DATA
@@ -839,7 +1005,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          rsp_out_valid, rsp_out_data_coh_msg, rsp_out_data_req_id,
-                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line) is
+                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask) is
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');
@@ -899,12 +1065,21 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata =>
+            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+
+              coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-              reg.word_cnt := 0;
+              reg.state                 := send_data;
+              reg.word_cnt              := 0;
+
             when others =>
+
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+              coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state                 := send_header;
+
           end case;
+
         end if;
 
       -- SEND DATA
@@ -949,6 +1124,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     variable reg          : fwd_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
 
   begin  -- process fsm_fwd_in
@@ -962,6 +1138,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     fwd_in_data_coh_msg <= (others => '0');
     fwd_in_data_addr    <= (others => '0');
     fwd_in_data_req_id  <= (others => '0');
+    fwd_in_data_word_mask    <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_fwd_rdreq <= '0';
@@ -983,6 +1160,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           reg.coh_msg := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved    := get_reserved_field(NOC_FLIT_SIZE, coherence_fwd_data_out);
           reg.req_id  := reserved(reg.req_id'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -998,6 +1176,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           fwd_in_data_coh_msg <= reg.coh_msg;
           fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
           fwd_in_data_req_id  <= reg.req_id;
+          fwd_in_data_word_mask    <= reg.word_mask;
 
           reg.state := rcv_header;
 
@@ -1018,6 +1197,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     variable reg          : rsp_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
 
   begin  -- process fsm_rsp_in
@@ -1032,6 +1212,7 @@ begin  -- architecture rtl of l2_acc_wrapper
     rsp_in_data_addr       <= (others => '0');
     rsp_in_data_line       <= (others => '0');
     rsp_in_data_invack_cnt <= (others => '0');
+    rsp_in_data_word_mask       <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_rsp_rcv_rdreq <= '0';
@@ -1053,6 +1234,7 @@ begin  -- architecture rtl of l2_acc_wrapper
           reg.coh_msg    := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved       := get_reserved_field(NOC_FLIT_SIZE, coherence_rsp_rcv_data_out);
           reg.invack_cnt := reserved(reg.invack_cnt'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -1107,6 +1289,7 @@ begin  -- architecture rtl of l2_acc_wrapper
               rsp_in_data_invack_cnt <= reg.invack_cnt;
               rsp_in_data_addr       <= reg.addr;
               rsp_in_data_line       <= reg.line;
+              rsp_in_data_word_mask  <= reg.word_mask;
             end if;
 
           else

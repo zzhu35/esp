@@ -31,10 +31,10 @@
 #define ADDR_BITS	32 // defined in l2,llc/stratus/project.tcl
 #endif
 #ifndef BYTE_BITS
-#define BYTE_BITS	2 // defined in l2,llc/stratus/project.tcl
+#define BYTE_BITS	3 // defined in l2,llc/stratus/project.tcl
 #endif
 #ifndef WORD_BITS
-#define WORD_BITS	2 // defined in l2,llc/stratus/project.tcl
+#define WORD_BITS	1 // defined in l2,llc/stratus/project.tcl
 #endif
 
 #define OFFSET_BITS	(BYTE_BITS + WORD_BITS)
@@ -58,6 +58,7 @@
 #define BYTES_PER_WORD		(1 << BYTE_BITS)
 #define BITS_PER_WORD		(BYTES_PER_WORD << 3)
 #define BITS_PER_HALFWORD	(BITS_PER_WORD >> 1)
+#define BITS_PER_DOUBLEWORD (BITS_PER_WORD << 1)
 #define BITS_PER_LINE		(BITS_PER_WORD * WORDS_PER_LINE)
 #define WORDS_PER_LINE		(1 << WORD_BITS)
 #define WORD_MASK_ALL       ((1 << WORDS_PER_LINE) - 1)
@@ -211,6 +212,28 @@
 #define LLC_WB      11
 
 
+// DeNovo states
+#define DNV_I       0
+#define DNV_V       1
+#define DNV_R       2
+
+// DeNovo Transient state
+#define DNV_IV      1
+#define DNV_II      2
+#define DNV_AMO     3
+
+// GPU states
+#define GPU_I       0
+#define GPU_V       1
+
+// DeNovo Transient state
+#define GPU_IV      1
+#define GPU_II      2
+#define GPU_AMO     3
+
+#define MAX_RETRY 4
+#define MAX_RETRY_BITS ilog2(MAX_RETRY)
+
 /*
  * Protocol messages
  */
@@ -262,16 +285,26 @@ original ESP messages
 end original ESP messages
 *****************/
 
+#define ARIANE_AMO_BITS 6
+
 
 // requests (L2/TU to L3)
 #define REQ_S          0 // same as gets
 #define REQ_Odata      1 // same as getm
 #define REQ_WT         2
 #define REQ_WB         3 // same as putm
-#define REQ_WTdata     4
-#define REQ_O          5
-#define REQ_V          6
-
+#define REQ_O          4
+#define REQ_V          5
+#define REQ_WTdata     6
+#define REQ_AMO_SWAP    REQ_WTdata
+#define REQ_AMO_ADD     7 // ADD
+#define REQ_AMO_AND     8 // CLR
+#define REQ_AMO_OR      9 // SET
+#define REQ_AMO_XOR     10 // EOR
+#define REQ_AMO_MAX     11 // SMAX
+#define REQ_AMO_MAXU    12 // UMAX
+#define REQ_AMO_MIN     13 // SMIN
+#define REQ_AMO_MINU    14 // UMIN
 /* DMA currently not used by Spandex */
 
 
@@ -281,7 +314,7 @@ end original ESP messages
 #define FWD_INV_SPDX   2 // same as fwd_inv
 #define FWD_WB_ACK     3 // same as fwd_putack
 #define FWD_RVK_O      4 // same as getm_llc
-#define FWD_REQ_V      5
+#define FWD_REQ_V      7 // non existent in ESP
 #define FWD_REQ_O      6
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
@@ -296,6 +329,17 @@ end original ESP messages
 #define RSP_WTdata     8
 
 
+// AMOS
+#define AMO_SWAP    48      // 0b110000 // SWAP
+#define AMO_ADD     32      // 0b100000 // ADD
+#define AMO_AND     33      // 0b100001 // CLR
+#define AMO_OR      35      // 0b100011 // SET
+#define AMO_XOR     34      // 0b100010 // EOR
+#define AMO_MAX     36      // 0b100100 // SMAX
+#define AMO_MAXU    38      // 0b100110 // UMAX
+#define AMO_MIN     37      // 0b100101 // SMIN
+#define AMO_MINU    39      // 0b100111 // UMIN
+
 // DMA burst not currently supported in Spandex
 
 /*
@@ -305,10 +349,15 @@ end original ESP messages
 // hsize
 #define BYTE		0
 #define HALFWORD	1
-#define WORD		2
-#define WORDS_4		4
-#define WORDS_8		5
+#define WORD_32		2
+#define WORD_64     3
+#define WORDS_128   4
+#define WORDS_256   5
 
+//used for LLC transactions to memory
+//byte bits matches hsize encoding for a word
+//for both LEON(2) and ARIANE(3)
+#define WORD BYTE_BITS
 // hprot
 #define INSTR 0
 #define DATA  1
