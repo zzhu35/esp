@@ -556,10 +556,14 @@ void l2::ctrl()
 	#if (USE_SPANDEX == 0)
 				send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
 	#else
-				send_rsp_out_word_mask(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit], fwd_in.word_mask); // to requestor
+				{
+					HLS_DEFINE_PROTOCOL("partial resp out");
+					send_rsp_out_word_mask(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit], fwd_in.word_mask); // to requestor
+				}
 				if (fwd_in.word_mask != WORD_MASK_ALL)
 				{
-					send_req_out_word_mask(REQ_WB, 0, fwd_in.addr, line_buf[way_hit], ~fwd_in.word_mask);
+					HLS_DEFINE_PROTOCOL("partial req out");
+					send_req_out_word_mask(REQ_WB, hprot_buf[way_hit], fwd_in.addr, line_buf[way_hit], ~fwd_in.word_mask);
 					sc_uint<REQS_BITS> reqs_hit_i;
 					set_conflict = reqs_peek_req(line_br.set, reqs_hit_i);
 					addr_breakdown_t addr_br;
@@ -1371,6 +1375,22 @@ void l2::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_ad
 
     l2_rsp_out.nb_put(rsp_out);
 }
+
+void l2::send_req_out_word_mask(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line, word_mask_t word_mask)
+{
+    l2_req_out_t req_out;
+
+    req_out.coh_msg = coh_msg;
+    req_out.hprot = hprot;
+    req_out.addr = line_addr;
+    req_out.line = line;
+	req_out.word_mask = word_mask;
+
+    while (!l2_req_out.nb_can_put()) wait();
+
+    l2_req_out.nb_put(req_out);
+}
+
 
 void l2::send_rsp_out_word_mask(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line, word_mask_t word_mask)
 {
