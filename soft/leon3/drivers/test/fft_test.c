@@ -27,7 +27,7 @@ double sin(double x)
 
 /* simple not quite random implementation of rand() when stdlib is not available */
 static unsigned long int next = 42;
-float rand(void)
+float rand_fft(void)
 {
 	unsigned int rand_tmp;
 	next = next * 1103515245 + 12345;
