@@ -387,10 +387,11 @@ void l2::ctrl()
 				send_req_out(coh_msg_tmp, reqs[reqs_hit_i].hprot, line_addr_tmp, 0);
 
 			} else {
-
-				reqs[reqs_hit_i].state = INVALID;
-				reqs_cnt++;
-
+				// if already set invalid because of a second FWD_GETM, do nothing
+				if(reqs_hit){
+					reqs[reqs_hit_i].state = INVALID;
+					reqs_cnt++;
+				}
 			}
 
 	    } else if (fwd_stall) {
@@ -458,13 +459,13 @@ void l2::ctrl()
 					wait();
 				}
 	#else
-							{
-									HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
-									send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
-									wait();
-									send_rsp_out(RSP_S, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
-									wait();
-							}
+				{
+					HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
+					send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
+					wait();
+					send_rsp_out(RSP_S, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
+					wait();
+				}
 	#endif
 
 				reqs[reqs_hit_i].state = SIA;
@@ -477,7 +478,11 @@ void l2::ctrl()
 	#else
 					send_rsp_out_word_mask(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line, fwd_in.word_mask); // to requestor
 					// if all ownerships are taken away, LLC will not send us a RespWB, so we must go to I state here
-					if (fwd_in.word_mask == WORD_MASK_ALL) reqs[reqs_hit_i].state = INVALID;
+					if ((fwd_in.word_mask | reqs[reqs_hit_i].word_mask) == WORD_MASK_ALL){
+						reqs[reqs_hit_i].state = INVALID;
+						reqs_cnt++;
+						break;
+					}
 	#endif
 				}
 				else
@@ -569,6 +574,7 @@ void l2::ctrl()
 					addr_breakdown_t addr_br;
 					addr_br.tag = line_br.tag; addr_br.set = line_br.set; // all that's important is the tag and set
 					fill_reqs(0, addr_br, 0, way_hit, 0, MIA, 0, 0, line_buf[way_hit], reqs_hit_i); // @TODO maybe not needed, but put wb request anyways
+					reqs[reqs_hit_i].word_mask = fwd_in.word_mask;
 				} 
 				else
 	#endif
