@@ -1474,7 +1474,8 @@ void llc::ctrl()
                                         for (int i = 0; i < WORDS_PER_LINE; i++) {
                                                 HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
                                                 if (req_in.word_mask & (1 << i)) {
-                                                        reqs[reqs_empty_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                        lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                        owners_buf[way] = owners_buf[way] & (~ (1 << i)); // clear owner bit
                                                 }
                                         }
                                 } else {
@@ -1547,7 +1548,6 @@ void llc::ctrl()
     		    {
     			// REQO_V;
                             word_owner_mask = owners_buf[way] & req_in.word_mask;
-                            // @TODO more complicated for word granularity accs
                             if (word_owner_mask) {
                                     send_fwd_with_owner_mask(FWD_REQ_Odata, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                             }
