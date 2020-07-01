@@ -41,6 +41,8 @@ typedef sc_uint<LLC_WAY_BITS>		    llc_way_t;
 typedef sc_uint<OFFSET_BITS>		    offset_t;
 typedef sc_uint<WORD_BITS>		    word_offset_t;
 typedef sc_uint<WORDS_PER_LINE>             word_mask_t;
+typedef sc_uint<MAX_RETRY_BITS>		retry_t;
+typedef sc_uint<ARIANE_AMO_BITS>		amo_t;
 typedef sc_uint<BYTE_BITS>		    byte_offset_t;
 typedef sc_uint<STABLE_STATE_BITS>	    state_t;
 typedef sc_uint<LLC_STABLE_STATE_BITS>      llc_state_t;
@@ -67,13 +69,15 @@ public:
     hprot_t	hprot;
     addr_t	addr;
     word_t	word;
+	amo_t	amo;
 
     l2_cpu_req_t() :
 	cpu_msg(0),
 	hsize(0),
 	hprot(0),
 	addr(0),
-	word(0)
+	word(0),
+	amo(0)
     {}
 
     inline l2_cpu_req_t& operator  = (const l2_cpu_req_t& x) {
@@ -82,6 +86,7 @@ public:
 	hprot   = x.hprot;
 	addr    = x.addr;
 	word    = x.word;
+	amo     = x.amo;
 	return *this;
     }
     inline bool operator  == (const l2_cpu_req_t& x) const {
@@ -89,7 +94,8 @@ public:
 		x.hsize   == hsize	&&
 		x.hprot   == hprot	&&
 		x.addr    == addr	&&
-		x.word    == word);
+		x.word    == word   &&
+		x.amo     == amo);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_cpu_req_t& x, const std::string & name) {
 	sc_trace(tf, x.cpu_msg , name + ".cpu_msg ");
@@ -742,6 +748,8 @@ public:
     invack_cnt_calc_t	invack_cnt;
     word_t		word;
     line_t		line;
+	word_mask_t word_mask;
+	retry_t 	retry;
 
     reqs_buf_t() :
 	cpu_msg(0),
@@ -755,8 +763,9 @@ public:
 	state(0),
 	hprot(0),
 	invack_cnt(0),
-    	word(0),
-    	line(0)
+	word(0),
+	line(0),
+	word_mask(0)
     {}
 
     inline reqs_buf_t& operator = (const reqs_buf_t& x) {
@@ -849,6 +858,7 @@ public:
     word_t		word;
     line_t		line;
 	word_mask_t word_mask;
+	bool is_amo;
 
     llc_reqs_buf_t() :
 	msg(0),
@@ -863,7 +873,8 @@ public:
 	invack_cnt(0),
     	word(0),
     	line(0),
-		word_mask(0)
+		word_mask(0),
+		is_amo(0)
     {}
 
     inline llc_reqs_buf_t& operator = (const llc_reqs_buf_t& x) {

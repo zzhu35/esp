@@ -117,6 +117,9 @@ architecture rtl of tile_cpu is
   -- L2 wrapper and cache debug reset
   signal l2_rstn : std_ulogic;
 
+  -- Sync L2
+  signal sync_l2 : std_logic;
+
   -- Interrupt controller
   signal irqi : l3_irq_in_type;
   signal irqo : l3_irq_out_type;
@@ -134,6 +137,13 @@ architecture rtl of tile_cpu is
   signal coherence_rsp_snd_wrreq    : std_ulogic;
   signal coherence_rsp_snd_data_in  : noc_flit_type;
   signal coherence_rsp_snd_full     : std_ulogic;
+  signal dma_rcv_rdreq              : std_ulogic;
+  signal dma_rcv_data_out           : noc_flit_type;
+  signal dma_rcv_empty              : std_ulogic;
+  signal dma_snd_wrreq              : std_ulogic;
+  signal dma_snd_data_in_cpu        : noc_flit_type;
+  signal dma_snd_data_in            : noc_flit_type;
+  signal dma_snd_full               : std_ulogic;
   signal remote_ahbs_snd_wrreq      : std_ulogic;
   signal remote_ahbs_snd_data_in    : misc_noc_flit_type;
   signal remote_ahbs_snd_full       : std_ulogic;
@@ -163,6 +173,7 @@ architecture rtl of tile_cpu is
   signal ahbsi      : ahb_slv_in_type;
   signal ahbso      : ahb_slv_out_vector;
   signal noc_ahbso  : ahb_slv_out_vector;
+  signal noc_ahbso_2  : ahb_slv_out_vector;
   signal ctrl_ahbso : ahb_slv_out_vector;
   signal ahbmi      : ahb_mst_in_type;
   signal ahbmo      : ahb_mst_out_vector;
@@ -172,8 +183,17 @@ architecture rtl of tile_cpu is
   signal noc_apbo   : apb_slv_out_vector;
   signal apb_req    : std_ulogic;
   signal apb_ack    : std_ulogic;
-  signal mosi       : axi_mosi_vector(0 to 2);
-  signal somi       : axi_somi_vector(0 to 2);
+  signal mosi       : axi_mosi_vector(0 to 3);
+  signal somi       : axi_somi_vector(0 to 3);
+
+  signal ariane_drami : axi_mosi_type;
+  signal ariane_dramo : axi_somi_type;
+
+  signal cache_drami : axi_mosi_type;
+  signal cache_dramo : axi_somi_type;
+
+  signal cache_ahbsi : ahb_slv_in_type;
+  signal cache_ahbso : ahb_slv_out_type;
 
   -- GRLIB parameters
   constant disas : integer := CFG_DISAS;
@@ -199,19 +219,7 @@ architecture rtl of tile_cpu is
   constant this_local_y           : local_yx                           := tile_y(tile_id);
   constant this_local_x           : local_yx                           := tile_x(tile_id);
 
-  -- attribute keep : string;
   -- attribute mark_debug : string;
-
-  -- attribute keep of apbi : signal is "true";
-  -- attribute keep of apbo : signal is "true";
-  -- attribute keep of apb_req : signal is "true";
-  -- attribute keep of apb_ack : signal is "true";
-  -- attribute keep of remote_apb_snd_wrreq : signal is "true";
-  -- attribute keep of remote_apb_snd_data_in : signal is "true";
-  -- attribute keep of remote_apb_snd_full : signal is "true";
-  -- attribute keep of remote_apb_rcv_rdreq : signal is "true";
-  -- attribute keep of remote_apb_rcv_data_out : signal is "true";
-  -- attribute keep of remote_apb_rcv_empty : signal is "true";
 
   -- attribute mark_debug of apbi : signal is "true";
   -- attribute mark_debug of apbo : signal is "true";
@@ -234,11 +242,15 @@ begin
 
   leon3_bus_gen: if GLOB_CPU_ARCH = leon3 generate
 
-  hbus_pnp_gen : process (ahbso, noc_ahbso) is
+  hbus_pnp_gen : process (ahbso, noc_ahbso, noc_ahbso_2) is
   begin  -- process hbus_pnp_gen
     ctrl_ahbso <= noc_ahbso;
 
     for i in 0 to NAHBSLV - 1 loop
+      if slm_ahb_mask(i) = '1' then
+        ctrl_ahbso(i) <= noc_ahbso_2(i);
+      end if;
+
       if this_local_ahb_en(i) = '1' then
         ctrl_ahbso(i) <= ahbso(i);
       end if;
@@ -422,18 +434,19 @@ begin
   -- Ariane
   ariane_cpu_gen: if GLOB_CPU_ARCH = ariane generate
 
-    -- TODO: fix irq delivery and move everything into wrapper
     ariane_axi_wrap_1: ariane_axi_wrap
       generic map (
         HART_ID          => this_cpu_id_lv,
         NMST             => 2,
-        NSLV             => 4,
+        NSLV             => 5,
         ROMBase          => X"0000_0000_0001_0000",
         ROMLength        => X"0000_0000_0001_0000",
         APBBase          => X"0000_0000" & conv_std_logic_vector(CFG_APBADDR, 12) & X"0_0000",
         APBLength        => X"0000_0000_1000_0000",
         CLINTBase        => X"0000_0000_0200_0000",
         CLINTLength      => X"0000_0000_000C_0000",
+        SLMBase          => X"0000_0000_0400_0000",
+        SLMLength        => X"0000_0000_0400_0000",  -- Reserving up to 64MB; devtree can set less
         DRAMBase         => X"0000_0000" & conv_std_logic_vector(ddr_haddr(0), 12) & X"0_0000",
         DRAMLength       => X"0000_0000_6000_0000",
         DRAMCachedLength => X"0000_0000_2000_0000")  -- TODO: length set automatically to match devtree
@@ -443,19 +456,26 @@ begin
         irq         => irq,
         timer_irq   => timer_irq,
         ipi         => ipi,
+        sync_l2     => sync_l2,
         romi        => mosi(0),
         romo        => somi(0),
-        drami       => mosi(1),
-        dramo       => somi(1),
+        drami       => ariane_drami,
+        dramo       => ariane_dramo,
         clinti      => mosi(2),
         clinto      => somi(2),
+        slmi        => mosi(3),
+        slmo        => somi(3),
         apbi        => apbi,
         apbo        => apbo,
         apb_req     => apb_req,
         apb_ack     => apb_ack);
 
-    -- TODO: find a way to flag end of program from Ariane as well.
-    cpuerr <= '0';
+    -- exit() writes to this address right before completing the program
+    -- Next instruction is a jump to current PC.
+    cpuerr <= '1' when ariane_drami.aw.addr = X"80001000" and ariane_drami.aw.valid = '1' else '0';
+
+    -- L1 can't be flushed on Ariane. So flush upon command.
+    dflush <= '1';
 
   end generate ariane_cpu_gen;
 
@@ -463,9 +483,64 @@ begin
   -- Services
   -----------------------------------------------------------------------------
 
+  l2_rstn <= cpurstn and rst;
+
+  with_cache_coherence : if CFG_L2_ENABLE /= 0 generate
+
+    -- Memory access w/ cache coherence (write-back L2 cache)
+    l2_wrapper_1 : l2_wrapper
+      generic map (
+        tech          => CFG_FABTECH,
+        sets          => CFG_L2_SETS,
+        ways          => CFG_L2_WAYS,
+        hindex_mst    => CFG_NCPU_TILE,
+        pindex        => this_l2_pindex,
+        pirq          => CFG_SLD_L2_CACHE_IRQ,
+        pconfig       => this_l2_pconfig,
+        local_y       => this_local_y,
+        local_x       => this_local_x,
+        mem_hindex    => ddr_hindex(0),
+        mem_hconfig   => cpu_tile_mig7_hconfig,
+        mem_num       => CFG_NMEM_TILE,
+        mem_info      => tile_mem_list(0 to CFG_NMEM_TILE - 1),
+        cache_y       => cache_y,
+        cache_x       => cache_x,
+        cache_id      => this_cache_id,
+        cache_tile_id => cache_tile_id,
+        tile_id       => tile_id)
+      port map (
+        rst                        => l2_rstn,
+        clk                        => clk_feedthru,
+        ahbsi                      => cache_ahbsi,
+        ahbso                      => cache_ahbso,
+        ahbmi                      => ahbmi,
+        ahbmo                      => ahbmo(CFG_NCPU_TILE),
+        mosi                       => cache_drami,
+        somi                       => cache_dramo,
+        apbi                       => noc_apbi,
+        apbo                       => noc_apbo(this_l2_pindex),
+        flush                      => dflush,
+        sync_l2                    => sync_l2,
+        coherence_req_wrreq        => coherence_req_wrreq,
+        coherence_req_data_in      => coherence_req_data_in,
+        coherence_req_full         => coherence_req_full,
+        coherence_fwd_rdreq        => coherence_fwd_rdreq,
+        coherence_fwd_data_out     => coherence_fwd_data_out,
+        coherence_fwd_empty        => coherence_fwd_empty,
+        coherence_rsp_rcv_rdreq    => coherence_rsp_rcv_rdreq,
+        coherence_rsp_rcv_data_out => coherence_rsp_rcv_data_out,
+        coherence_rsp_rcv_empty    => coherence_rsp_rcv_empty,
+        coherence_rsp_snd_wrreq    => coherence_rsp_snd_wrreq,
+        coherence_rsp_snd_data_in  => coherence_rsp_snd_data_in,
+        coherence_rsp_snd_full     => coherence_rsp_snd_full,
+        mon_cache                  => mon_cache
+        );
+
+  end generate with_cache_coherence;
+
   leon3_cpu_tile_services_gen: if GLOB_CPU_ARCH = leon3 generate
 
-  no_cache_coherence : if CFG_L2_ENABLE = 0 generate
+  leon3_no_cache_coherence : if CFG_L2_ENABLE = 0 generate
     coherence_rsp_snd_data_in <= (others => '0');
     coherence_rsp_snd_wrreq   <= '0';
     coherence_fwd_rdreq       <= '0';
@@ -506,11 +581,13 @@ begin
         remote_ahbs_rcv_data_out   => remote_ahbs_rcv_data_out,
         remote_ahbs_rcv_empty      => remote_ahbs_rcv_empty);
 
-  end generate no_cache_coherence;
+  end generate leon3_no_cache_coherence;
 
-  l2_rstn <= cpurstn and rst;
+  leon3_with_cache_coherence : if CFG_L2_ENABLE /= 0 generate
 
-  with_cache_coherence : if CFG_L2_ENABLE /= 0 generate
+    ahbso(ddr_hindex(0)) <= cache_ahbso;
+    cache_ahbsi <= ahbsi;
+
 
     -- Remote uncached slaves
     cpu_ahbs2noc_1 : cpu_ahbs2noc
@@ -546,60 +623,93 @@ begin
         remote_ahbs_rcv_data_out   => remote_ahbs_rcv_data_out,
         remote_ahbs_rcv_empty      => remote_ahbs_rcv_empty);
 
-    -- Memory access w/ cache coherence (write-back L2 cache)
-    l2_wrapper_1 : l2_wrapper
-      generic map (
-        tech          => CFG_FABTECH,
-        sets          => CFG_L2_SETS,
-        ways          => CFG_L2_WAYS,
-        hindex_mst    => CFG_NCPU_TILE,
-        pindex        => this_l2_pindex,
-        pirq          => CFG_SLD_L2_CACHE_IRQ,
-        pconfig       => this_l2_pconfig,
-        local_y       => this_local_y,
-        local_x       => this_local_x,
-        mem_hindex    => ddr_hindex(0),
-        mem_hconfig   => cpu_tile_mig7_hconfig,
-        mem_num       => CFG_NMEM_TILE,
-        mem_info      => tile_mem_list,
-        cache_y       => cache_y,
-        cache_x       => cache_x,
-        cache_id      => this_cache_id,
-        cache_tile_id => cache_tile_id)
-      port map (
-        rst                        => l2_rstn,
-        clk                        => clk_feedthru,
-        ahbsi                      => ahbsi,
-        ahbso                      => ahbso(ddr_hindex(0)),
-        ahbmi                      => ahbmi,
-        ahbmo                      => ahbmo(CFG_NCPU_TILE),
-        apbi                       => noc_apbi,
-        apbo                       => noc_apbo(this_l2_pindex),
-        flush                      => dflush,
-        coherence_req_wrreq        => coherence_req_wrreq,
-        coherence_req_data_in      => coherence_req_data_in,
-        coherence_req_full         => coherence_req_full,
-        coherence_fwd_rdreq        => coherence_fwd_rdreq,
-        coherence_fwd_data_out     => coherence_fwd_data_out,
-        coherence_fwd_empty        => coherence_fwd_empty,
-        coherence_rsp_rcv_rdreq    => coherence_rsp_rcv_rdreq,
-        coherence_rsp_rcv_data_out => coherence_rsp_rcv_data_out,
-        coherence_rsp_rcv_empty    => coherence_rsp_rcv_empty,
-        coherence_rsp_snd_wrreq    => coherence_rsp_snd_wrreq,
-        coherence_rsp_snd_data_in  => coherence_rsp_snd_data_in,
-        coherence_rsp_snd_full     => coherence_rsp_snd_full,
-        mon_cache                  => mon_cache
-        );
+  end generate leon3_with_cache_coherence;
 
-  end generate with_cache_coherence;
+  -- Remote uncached slaves: shared-local memory; using DMA planes
+  cpu_ahbs2noc_3 : cpu_ahbs2noc
+    generic map (
+      tech             => CFG_FABTECH,
+      hindex           => slm_ahb_mask,
+      hconfig          => cpu_tile_fixed_ahbso_hconfig,
+      local_y          => this_local_y,
+      local_x          => this_local_x,
+      mem_hindex       => slm_hindex(0),
+      mem_num          => CFG_NSLM_TILE,
+      mem_info         => tile_slm_list,
+      slv_y            => tile_y(io_tile_id),
+      slv_x            => tile_x(io_tile_id),
+      retarget_for_dma => 0,
+      dma_length       => CFG_DLINE)
+    port map (
+      rst                        => rst,
+      clk                        => clk_feedthru,
+      ahbsi                      => ahbsi,
+      ahbso                      => noc_ahbso_2,
+      dma_selected               => '0',
+      coherence_req_wrreq        => dma_snd_wrreq,
+      coherence_req_data_in      => dma_snd_data_in_cpu,
+      coherence_req_full         => dma_snd_full,
+      coherence_rsp_rcv_rdreq    => dma_rcv_rdreq,
+      coherence_rsp_rcv_data_out => dma_rcv_data_out,
+      coherence_rsp_rcv_empty    => dma_rcv_empty,
+      remote_ahbs_snd_wrreq      => open,
+      remote_ahbs_snd_data_in    => open,
+      remote_ahbs_snd_full       => '0',
+      remote_ahbs_rcv_rdreq      => open,
+      remote_ahbs_rcv_data_out   => (others => '0'),
+      remote_ahbs_rcv_empty      => '1');
 
   end generate leon3_cpu_tile_services_gen;
 
 
   ariane_cpu_tile_services_gen: if GLOB_CPU_ARCH = ariane generate
 
-    -- TODO: handle caches!!!
-    no_cache_coherence : if CFG_L2_ENABLE = 0 generate
+    ariane_with_cache_coherence: if CFG_L2_ENABLE /= 0 generate
+      cache_drami <= ariane_drami;
+      ariane_dramo <= cache_dramo;
+
+      mosi(1) <= axi_mosi_none;
+
+      cache_ahbsi <= ahbs_in_none;
+
+      cpu_axi2noc_1: cpu_axi2noc
+        generic map (
+          tech         => CFG_FABTECH,
+          nmst         => 3,
+          local_y      => this_local_y,
+          local_x      => this_local_x,
+          retarget_for_dma => 0,
+          mem_axi_port => 1,
+          mem_num      => CFG_NMEM_TILE,
+          mem_info     => tile_mem_list,
+          slv_y        => tile_y(io_tile_id),
+          slv_x        => tile_x(io_tile_id))
+        port map (
+          rst                        => rst,
+          clk                        => clk_feedthru,
+          mosi                       => mosi(0 to 2),
+          somi                       => somi(0 to 2),
+          coherence_req_wrreq        => open,
+          coherence_req_data_in      => open,
+          coherence_req_full         => '0',
+          coherence_rsp_rcv_rdreq    => open,
+          coherence_rsp_rcv_data_out => (others => '0'),
+          coherence_rsp_rcv_empty    => '1',
+          remote_ahbs_snd_wrreq      => remote_ahbs_snd_wrreq,
+          remote_ahbs_snd_data_in    => remote_ahbs_snd_data_in,
+          remote_ahbs_snd_full       => remote_ahbs_snd_full,
+          remote_ahbs_rcv_rdreq      => remote_ahbs_rcv_rdreq,
+          remote_ahbs_rcv_data_out   => remote_ahbs_rcv_data_out,
+          remote_ahbs_rcv_empty      => remote_ahbs_rcv_empty);
+
+    end generate ariane_with_cache_coherence;
+
+    ariane_no_cache_coherence : if CFG_L2_ENABLE = 0 generate
+      cache_drami <= axi_mosi_none;
+
+      mosi(1) <= ariane_drami;
+      ariane_dramo <= somi(1);
+
       coherence_rsp_snd_data_in <= (others => '0');
       coherence_rsp_snd_wrreq   <= '0';
       coherence_fwd_rdreq       <= '0';
@@ -620,8 +730,8 @@ begin
         port map (
           rst                        => rst,
           clk                        => clk_feedthru,
-          mosi                       => mosi,
-          somi                       => somi,
+          mosi                       => mosi(0 to 2),
+          somi                       => somi(0 to 2),
           coherence_req_wrreq        => coherence_req_wrreq,
           coherence_req_data_in      => coherence_req_data_in,
           coherence_req_full         => coherence_req_full,
@@ -635,7 +745,38 @@ begin
           remote_ahbs_rcv_data_out   => remote_ahbs_rcv_data_out,
           remote_ahbs_rcv_empty      => remote_ahbs_rcv_empty);
 
-    end generate no_cache_coherence;
+    end generate ariane_no_cache_coherence;
+
+    -- Remote uncached slaves: shared-local memory; using DMA planes
+    cpu_axi2noc_3: cpu_axi2noc
+      generic map (
+        tech         => CFG_FABTECH,
+        nmst         => 1,
+        local_y      => this_local_y,
+        local_x      => this_local_x,
+        retarget_for_dma => 0,
+        mem_axi_port => 0,
+        mem_num      => CFG_NSLM_TILE,
+        mem_info     => tile_slm_list,
+        slv_y        => tile_y(io_tile_id),
+        slv_x        => tile_x(io_tile_id))
+      port map (
+        rst                        => rst,
+        clk                        => clk_feedthru,
+        mosi                       => mosi(3 to 3),
+        somi                       => somi(3 to 3),
+        coherence_req_wrreq        => dma_snd_wrreq,
+        coherence_req_data_in      => dma_snd_data_in_cpu,
+        coherence_req_full         => dma_snd_full,
+        coherence_rsp_rcv_rdreq    => dma_rcv_rdreq,
+        coherence_rsp_rcv_data_out => dma_rcv_data_out,
+        coherence_rsp_rcv_empty    => dma_rcv_empty,
+        remote_ahbs_snd_wrreq      => open,
+        remote_ahbs_snd_data_in    => open,
+        remote_ahbs_snd_full       => '0',
+        remote_ahbs_rcv_rdreq      => open,
+        remote_ahbs_rcv_data_out   => (others => '0'),
+        remote_ahbs_rcv_empty      => '1');
 
   end generate ariane_cpu_tile_services_gen;
 
@@ -767,6 +908,16 @@ begin
   -- Tile queues
   -----------------------------------------------------------------------------
 
+  -- Mark CPU DMA
+  set_cpu_dma: process (dma_snd_data_in_cpu) is
+  begin
+    dma_snd_data_in <= dma_snd_data_in_cpu;
+    if get_preamble(NOC_FLIT_SIZE, dma_snd_data_in_cpu) = PREAMBLE_HEADER then
+      dma_snd_data_in(NOC_FLIT_SIZE - PREAMBLE_WIDTH - 4*YX_WIDTH - MSG_TYPE_WIDTH - 2 downto
+                      NOC_FLIT_SIZE - PREAMBLE_WIDTH - 4*YX_WIDTH - MSG_TYPE_WIDTH - RESERVED_WIDTH) <= CPU_DMA;
+    end if;
+  end process set_cpu_dma;
+
   cpu_tile_q_1 : cpu_tile_q
     generic map (
       tech => CFG_FABTECH)
@@ -785,6 +936,12 @@ begin
       coherence_rsp_snd_wrreq    => coherence_rsp_snd_wrreq,
       coherence_rsp_snd_data_in  => coherence_rsp_snd_data_in,
       coherence_rsp_snd_full     => coherence_rsp_snd_full,
+      dma_rcv_rdreq              => dma_rcv_rdreq,
+      dma_rcv_data_out           => dma_rcv_data_out,
+      dma_rcv_empty              => dma_rcv_empty,
+      dma_snd_wrreq              => dma_snd_wrreq,
+      dma_snd_data_in            => dma_snd_data_in,
+      dma_snd_full               => dma_snd_full,
       remote_ahbs_snd_wrreq      => remote_ahbs_snd_wrreq,
       remote_ahbs_snd_data_in    => remote_ahbs_snd_data_in,
       remote_ahbs_snd_full       => remote_ahbs_snd_full,

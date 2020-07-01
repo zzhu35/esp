@@ -69,6 +69,7 @@ public:
     nb_get_initiator<l2_fwd_in_t>	l2_fwd_in;
     nb_get_initiator<l2_rsp_in_t>	l2_rsp_in;
     nb_get_initiator<bool>		l2_flush;
+    nb_get_initiator<bool>		    l2_sync;
 
     // Output ports
     put_initiator<l2_rd_rsp_t>	l2_rd_rsp;
@@ -116,6 +117,7 @@ public:
 	, l2_fwd_in("l2_fwd_in")
 	, l2_rsp_in("l2_rsp_in")
 	, l2_flush("l2_flush")
+    , l2_sync("l2_sync")
 	, l2_rd_rsp("l2_rd_rsp")
 	, l2_inval("l2_inval")
 	, l2_req_out("l2_req_out")
@@ -134,6 +136,7 @@ public:
 	    l2_fwd_in.clk_rst (clk, rst);
 	    l2_rsp_in.clk_rst (clk, rst);
 	    l2_flush.clk_rst (clk, rst);
+        l2_sync.clk_rst (clk, rst);
 	    l2_rd_rsp.clk_rst(clk, rst);
 	    l2_inval.clk_rst(clk, rst);
 	    l2_req_out.clk_rst(clk, rst);
@@ -172,7 +175,9 @@ public:
     void send_rd_rsp(line_t lines);
     void send_inval(line_addr_t addr_inval);
     void send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t lines);
+    void send_req_out_word_mask(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t lines, word_mask_t word_mask);
     void send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line);
+    void send_rsp_out_word_mask(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line, word_mask_t word_mask);
 
     /* Functions to move around buffered lines */
     void fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t tag_estall, l2_way_t way_hit, 

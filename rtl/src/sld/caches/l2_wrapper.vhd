@@ -26,6 +26,7 @@ use work.allcaches.all;
 use work.cachepackage.all;              -- contains l2 cache component
 use work.sldcommon.all;
 
+
 entity l2_wrapper is
   generic (
     tech        : integer := virtex7;
@@ -40,23 +41,27 @@ entity l2_wrapper is
     mem_hindex  : integer := 4;
     mem_hconfig : ahb_config_type;
     mem_num     : integer := 1;
-    mem_info    : tile_mem_info_vector(0 to MEM_MAX_NUM - 1);
+    mem_info    : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_id      : integer := 0;
-    cache_tile_id : cache_attribute_array);
+    cache_tile_id : cache_attribute_array;
+    tile_id     : integer := 0);
   port (
     rst : in std_ulogic;
     clk : in std_ulogic;
 
-    -- frontend (cache - AHB/CPU)
+    -- frontend (L2 cache - CPU L1)
     ahbsi : in  ahb_slv_in_type;
     ahbso : out ahb_slv_out_type;
     ahbmi : in  ahb_mst_in_type;
     ahbmo : out ahb_mst_out_type;
+    mosi  : in  axi_mosi_type;
+    somi  : out axi_somi_type;
     apbi  : in  apb_slv_in_type;
     apbo  : out apb_slv_out_type;
     flush : in  std_ulogic;             -- flush request from CPU
+    sync_l2 : in std_logic;
 
     -- backend (cache - NoC)
     -- tile->NoC1
@@ -93,6 +98,7 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
+  signal cpu_req_data_amo       : amo_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -163,7 +169,8 @@ architecture rtl of l2_wrapper is
   -------------------------------------------------------------------------------
   -- AHB slave FSM signals
   -------------------------------------------------------------------------------
-  type ahbs_fsm is (idle, load_req, load_rsp, load_alloc, store_req, flush_req, mem_req);
+  type ahbs_fsm is (idle, load_req, load_rsp, load_alloc, store_req, flush_req, mem_req,
+                    send_wr_ack);
 
   type ahbs_reg_type is record
     state         : ahbs_fsm;
@@ -186,6 +193,49 @@ architecture rtl of l2_wrapper is
 
   signal ahbs_reg      : ahbs_reg_type := AHBS_REG_DEFAULT;
   signal ahbs_reg_next : ahbs_reg_type := AHBS_REG_DEFAULT;
+
+  -------------------------------------------------------------------------------
+  -- AXI slave FSM signals
+  -------------------------------------------------------------------------------
+  type axi_reg_type is record
+    id    : std_logic_vector (XID_WIDTH-1 downto 0);
+    len   : std_logic_vector (7 downto 0);
+    lock  : std_logic;
+    cache : std_logic_vector (3 downto 0);
+    atop  : std_logic_vector(5 downto 0);
+  end record;
+
+  constant AXI_REG_DEFAULT : axi_reg_type := (
+    id       => (others => '0'),
+    len      => (others => '0'),
+    lock     => '0',
+    cache    => (others => '0'),
+    atop     => (others => '0'));
+
+  signal axi_reg      : axi_reg_type := AXI_REG_DEFAULT;
+  signal axi_reg_next : axi_reg_type := AXI_REG_DEFAULT;
+
+  constant axi_len_zero : std_logic_vector(7 downto 0) := (others => '0');
+
+  -- address increment
+  function addr_incr (
+    hsize : hsize_t)
+    return addr_t is
+    variable incr : addr_t;
+  begin
+    incr := (others => '0');
+
+    case hsize is
+      when HSIZE_BYTE  => incr(3 downto 0) := "0001";
+      when HSIZE_HWORD => incr(3 downto 0) := "0010";
+      when HSIZE_WORD  => incr(3 downto 0) := "0100";
+      when HSIZE_DWORD => incr(3 downto 0) := "1000";
+      when others      => incr(3 downto 0) := "0000";
+    end case;
+
+    return incr;
+
+  end addr_incr;
 
   -----------------------------------------------------------------------------
   -- AHB master FSM signals
@@ -365,6 +415,13 @@ architecture rtl of l2_wrapper is
 
   attribute mark_debug : string;
 
+  -- attribute mark_debug of ahbsi            : signal is "true";
+  -- attribute mark_debug of ahbso            : signal is "true";
+  -- attribute mark_debug of ahbmi            : signal is "true";
+  -- attribute mark_debug of ahbmo            : signal is "true";
+  attribute mark_debug of mosi             : signal is "true";
+  attribute mark_debug of somi             : signal is "true";
+
   attribute mark_debug of ahbs_reg_state   : signal is "true";
   attribute mark_debug of ahbm_reg_state   : signal is "true";
   attribute mark_debug of req_reg_state    : signal is "true";
@@ -375,13 +432,13 @@ architecture rtl of l2_wrapper is
 
   -- attribute mark_debug of inv_fifo_empty        : signal is "true";
   -- attribute mark_debug of inv_fifo_almost_empty : signal is "true";
-  attribute mark_debug of inv_fifo_full         : signal is "true";
+  -- attribute mark_debug of inv_fifo_full         : signal is "true";
   -- attribute mark_debug of inv_fifo_rdreq        : signal is "true";
   -- attribute mark_debug of inv_fifo_wrreq        : signal is "true";
   -- attribute mark_debug of inv_fifo_data_in      : signal is "true";
   -- attribute mark_debug of inv_fifo_data_out     : signal is "true";
 
-  --attribute mark_debug of ahbs_asserts : signal is "true";
+  -- attribute mark_debug of ahbs_asserts : signal is "true";
   -- attribute mark_debug of ahbm_asserts   : signal is "true";
   -- attribute mark_debug of req_asserts    : signal is "true";
   -- attribute mark_debug of rsp_out_asserts    : signal is "true";
@@ -395,13 +452,14 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of cpu_req_data_hprot     : signal is "true";
   attribute mark_debug of cpu_req_data_addr      : signal is "true";
   attribute mark_debug of cpu_req_data_word      : signal is "true";
+  attribute mark_debug of cpu_req_data_amo       : signal is "true";
   attribute mark_debug of flush_ready            : signal is "true";
   attribute mark_debug of flush_valid            : signal is "true";
   attribute mark_debug of flush_data             : signal is "true";
   -- cache to AHB
   attribute mark_debug of rd_rsp_ready           : signal is "true";
   attribute mark_debug of rd_rsp_valid           : signal is "true";
-  -- attribute mark_debug of rd_rsp_data_line       : signal is "true";
+  attribute mark_debug of rd_rsp_data_line       : signal is "true";
   attribute mark_debug of inval_ready            : signal is "true";
   attribute mark_debug of inval_valid            : signal is "true";
   attribute mark_debug of inval_data             : signal is "true";
@@ -411,7 +469,7 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of req_out_data_coh_msg   : signal is "true";
   attribute mark_debug of req_out_data_hprot     : signal is "true";
   attribute mark_debug of req_out_data_addr      : signal is "true";
-  -- attribute mark_debug of req_out_data_line      : signal is "true";
+  attribute mark_debug of req_out_data_line      : signal is "true";
   attribute mark_debug of rsp_out_ready          : signal is "true";
   attribute mark_debug of rsp_out_valid          : signal is "true";
   attribute mark_debug of rsp_out_data_coh_msg   : signal is "true";
@@ -429,11 +487,11 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of rsp_in_ready           : signal is "true";
   attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
   attribute mark_debug of rsp_in_data_addr       : signal is "true";
-  -- attribute mark_debug of rsp_in_data_line       : signal is "true";
+  attribute mark_debug of rsp_in_data_line       : signal is "true";
   attribute mark_debug of rsp_in_data_invack_cnt : signal is "true";
   -- debug
-  --attribute mark_debug of asserts                : signal is "true";
-  --attribute mark_debug of bookmark               : signal is "true";
+  -- attribute mark_debug of asserts                : signal is "true";
+  -- attribute mark_debug of bookmark               : signal is "true";
   -- attribute mark_debug of custom_dbg             : signal is "true";
   attribute mark_debug of flush_done             : signal is "true";
   -- statistics
@@ -446,8 +504,8 @@ begin  -- architecture rtl of l2_wrapper
   -----------------------------------------------------------------------------
   -- Instantiations
   -----------------------------------------------------------------------------
-
-  l2_cache_i : l2
+  l2_gen: if SPANDEX_L2_CONFIG(tile_id) = 0 generate
+    l2_cache_i : l2
     generic map (
       use_rtl => CFG_CACHE_RTL,
       sets => sets,
@@ -464,6 +522,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -507,8 +566,150 @@ begin  -- architecture rtl of l2_wrapper
       flush_done                => flush_done,
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
-      l2_stats_data             => stats_data
-      );
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_gen;
+
+  l2_gpu_gen: if SPANDEX_L2_CONFIG(tile_id) = 1 generate
+    l2_cache_i : l2_gpu
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_gpu_gen;
+
+  l2_denovo_gen: if SPANDEX_L2_CONFIG(tile_id) = 2 generate
+    l2_cache_i : l2_denovo
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_denovo_gen;
 
   Invalidate_fifo : fifo_custom
     generic map (
@@ -624,8 +825,10 @@ begin  -- architecture rtl of l2_wrapper
 
   end process cmd_state_fsm;
 
+  flush_data  <= cmd_reg(2);           -- Flush data (0) / flush all (1)
+
 -------------------------------------------------------------------------------
--- Static outputs: AHB slave, AHB master, NoC
+-- Static outputs: AHB/AXI slave, AHB master, ACE, NoC
 -------------------------------------------------------------------------------
   ahbso.hresp   <= HRESP_OKAY;
   ahbso.hsplit  <= (others => '0');
@@ -658,6 +861,7 @@ begin  -- architecture rtl of l2_wrapper
     if rst = '0' then
 
       ahbs_reg       <= AHBS_REG_DEFAULT;
+      axi_reg        <= AXI_REG_DEFAULT;
       ahbm_reg       <= AHBM_REG_DEFAULT;
       req_reg        <= REQ_REG_DEFAULT;
       rsp_out_reg    <= RSP_OUT_REG_DEFAULT;
@@ -668,6 +872,7 @@ begin  -- architecture rtl of l2_wrapper
     elsif clk'event and clk = '1' then
 
       ahbs_reg       <= ahbs_reg_next;
+      axi_reg        <= axi_reg_next;
       ahbm_reg       <= ahbm_reg_next;
       req_reg        <= req_reg_next;
       fwd_in_reg     <= fwd_in_reg_next;
@@ -678,11 +883,31 @@ begin  -- architecture rtl of l2_wrapper
     end if;
   end process fsms_state_update;
 
+  ahb_frontend_gen: if GLOB_CPU_AXI = 0 generate
+    -- Set unused AXI outputs
+    -- aw
+    somi.aw.ready <= '0';
+    -- ar
+    somi.ar.ready <= '0';
+    -- w
+    somi.w.ready <= '0';
+    -- r
+    somi.r.id    <= (others => '0');
+    somi.r.resp  <= HRESP_OKAY;
+    somi.r.last  <= '0';
+    somi.r.user  <= (others => '0');
+    somi.r.valid <= '0';
+    somi.r.data(ARCH_BITS - 1 downto 0) <= (others => '0');
+    somi.r.data(31 downto 0) <= x"dadecace";
+    -- b
+    somi.b.id    <= (others => '0');
+    somi.b.resp  <= HRESP_OKAY;
+    somi.b.user  <= (others => '0');
+    somi.b.valid <= '0';
+
 -------------------------------------------------------------------------------
 -- FSM: Bridge from AHB slave to L2 cache frontend input
 -------------------------------------------------------------------------------
-  flush_data  <= cmd_reg(2);           -- Flush data (0) / flush all (1)
-
   fsm_ahbs : process (ahbsi, flush, ahbs_reg,
                       cpu_req_ready, flush_ready, flush_due,
                       rd_rsp_valid, rd_rsp_data_line, load_alloc_reg,
@@ -710,6 +935,7 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
     cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
 
     flush_valid <= '0';
 
@@ -955,6 +1181,8 @@ begin  -- architecture rtl of l2_wrapper
 
 
       -- STORE REQUEST
+      -- TODO: we don't check for htrans = HTRANS_BUSY because Leon3 never sets
+      -- it, however this would be necessary to be AHB 2.0 compliant.
       when store_req =>
 
         cpu_req_data_cpu_msg <= reg.cpu_msg;
@@ -1045,6 +1273,10 @@ begin  -- architecture rtl of l2_wrapper
         if flush_due = '1' then
           reg.asserts(AS_AHBS_MEM_DUE) := '1';
         end if;
+
+      when send_wr_ack =>
+        reg.asserts(AS_INV_STATE) := '1';
+        reg.state := idle;
 
     end case;
 
@@ -1143,6 +1375,7 @@ begin  -- architecture rtl of l2_wrapper
     ahbm_reg_next <= reg;
 
   end process fsm_ahbm;
+  end generate ahb_frontend_gen;
 
 -------------------------------------------------------------------------------
 -- FSM: Requests to NoC
@@ -1153,6 +1386,7 @@ begin  -- architecture rtl of l2_wrapper
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -1202,20 +1436,24 @@ begin  -- architecture rtl of l2_wrapper
 
           coherence_req_wrreq <= '1';
 
-          if '0' & reg.coh_msg = REQ_WB then
+          mix_msg := '0' & reg.coh_msg;
+
+          case mix_msg is
+
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_data;
             reg.word_cnt          := 0;
 
-          else
+            when others =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_header;
 
-          end if;
+          end case;
         end if;
 
       -- SEND DATA
@@ -1311,7 +1549,7 @@ begin  -- architecture rtl of l2_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
+            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1555,6 +1793,604 @@ begin  -- architecture rtl of l2_wrapper
     rsp_in_reg_next <= reg;
 
   end process fsm_rsp_in;
+
+
+
+  axi_frontend_gen: if GLOB_CPU_AXI /= 0 generate
+
+    -- Set unused outputs for AHB BUS
+    ahbso.hready <= '0';
+    ahbso.hrdata <= (others => '0');
+    ahbso.hrdata(31 downto 0) <= x"dadecace";
+
+
+-------------------------------------------------------------------------------
+-- FSM: Bridge from AXI slave to L2 cache frontend input
+-------------------------------------------------------------------------------
+  fsm_axi : process (mosi, flush, ahbs_reg, axi_reg,
+                     cpu_req_ready, flush_ready, flush_due,
+                     rd_rsp_valid, rd_rsp_data_line, load_alloc_reg,
+                     inv_fifo_full)
+
+    variable reg           : ahbs_reg_type;
+    variable xreg          : axi_reg_type;
+    variable alloc_reg     : load_alloc_reg_type;
+    variable selected      : std_ulogic;
+    variable valid_axi_req : std_ulogic;
+    constant err_marker    : std_logic_vector(31 downto 0) := x"dadecace";
+
+  begin
+    -- copy current state into a variable
+    reg         := ahbs_reg;
+    xreg        := axi_reg;
+    reg.asserts := (others => '0');
+    alloc_reg   := load_alloc_reg;
+
+    -- Default bus slave response
+    -- aw
+    somi.aw.ready <= '0';
+    -- ar
+    somi.ar.ready <= '0';
+    -- w
+    somi.w.ready <= '0';
+    -- r
+    somi.r.id    <= axi_reg.id;
+    somi.r.resp  <= HRESP_OKAY;
+    somi.r.last  <= '0';
+    somi.r.user  <= (others => '0');
+    somi.r.valid <= '0';
+    somi.r.data  <= ahbdrivedata(err_marker);
+    -- b
+    somi.b.id    <= axi_reg.id;
+    somi.b.resp  <= HRESP_OKAY;
+    somi.b.user  <= (others => '0');
+    somi.b.valid <= '0';
+
+    -- Default cache request
+    cpu_req_valid        <= '0';
+    cpu_req_data_cpu_msg <= (others => '0');
+    cpu_req_data_hsize   <= (others => '0');
+    cpu_req_data_hprot   <= (others => '0');
+    cpu_req_data_addr    <= (others => '0');
+    cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
+
+    flush_valid <= '0';
+
+    rd_rsp_ready <= '0';
+
+    -- check if memory is selected
+    selected := mosi.aw.valid or mosi.ar.valid;
+    valid_axi_req := selected;
+
+    case ahbs_reg.state is
+
+      -- IDLE
+      when idle =>
+
+        if valid_axi_req = '1' then
+          if mosi.aw.valid = '0' then
+            reg.cpu_msg := '0' & mosi.ar.lock;
+            reg.hsize   := mosi.ar.size;
+            reg.hprot   := '0' & not mosi.ar.prot(2);
+            reg.haddr   := mosi.ar.addr;
+            xreg.id     := mosi.ar.id;
+            xreg.len    := mosi.ar.len;
+            xreg.lock   := mosi.ar.lock;
+            xreg.cache  := mosi.ar.cache;
+            xreg.atop   := (others => '0');
+
+            somi.ar.ready <= '1';
+          else
+            reg.cpu_msg := '1' & mosi.aw.lock;
+            reg.hsize   := mosi.aw.size;
+            reg.hprot   := '0' & not mosi.aw.prot(2);
+            reg.haddr   := mosi.aw.addr;
+            xreg.id     := mosi.aw.id;
+            xreg.len    := mosi.aw.len;
+            xreg.lock   := mosi.aw.lock;
+            xreg.cache  := mosi.aw.cache;
+            xreg.atop   := mosi.aw.atop;
+
+            somi.aw.ready <= '1';
+          end if;
+        end if;
+
+        if flush_due = '1' and xreg.lock = '0' then
+          flush_valid <= '1';
+
+          if valid_axi_req = '1' then
+
+            if flush_ready = '0' then
+              reg.state := flush_req;
+            else
+              reg.state := mem_req;
+            end if;
+
+          end if;
+
+        elsif valid_axi_req = '1' then
+
+          if mosi.aw.valid = '0' then
+
+            cpu_req_valid  <= '1';
+            alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+
+            if cpu_req_ready = '1' then
+              reg.state := load_rsp;
+            else
+              reg.state := load_req;
+            end if;
+
+          else
+
+            reg.state := store_req;
+
+          end if;
+        end if;
+
+        cpu_req_data_cpu_msg <= reg.cpu_msg;
+        cpu_req_data_hsize   <= reg.hsize;
+        cpu_req_data_hprot   <= reg.hprot;
+        cpu_req_data_addr    <= reg.haddr;
+
+
+
+      -- LOAD REQUEST
+      when load_req =>
+        cpu_req_data_cpu_msg <= reg.cpu_msg;
+        cpu_req_data_hsize   <= reg.hsize;
+        cpu_req_data_hprot   <= reg.hprot;
+        cpu_req_data_addr    <= reg.haddr;
+
+        cpu_req_valid <= '1';
+
+        if cpu_req_ready = '1' then
+          reg.state := load_rsp;
+        end if;
+
+
+      -- LOAD RESPONSE
+      when load_rsp =>
+        rd_rsp_ready <= mosi.r.ready;
+
+        alloc_reg.line := rd_rsp_data_line;
+
+        if rd_rsp_valid = '1' then
+          somi.r.data <= read_from_line(reg.haddr, rd_rsp_data_line);
+          somi.r.valid <= '1';
+        end if;
+
+        if rd_rsp_valid = '1' and mosi.r.ready = '1' then
+
+          if xreg.len = axi_len_zero then
+            somi.r.last <= '1';
+
+            if valid_axi_req = '1' then
+              if mosi.aw.valid = '0' then
+                reg.cpu_msg := '0' & mosi.ar.lock;
+                reg.hsize   := mosi.ar.size;
+                reg.hprot   := '0' & not mosi.ar.prot(2);
+                reg.haddr   := mosi.ar.addr;
+                xreg.id     := mosi.ar.id;
+                xreg.len    := mosi.ar.len;
+                xreg.lock   := mosi.ar.lock;
+                xreg.cache  := mosi.ar.cache;
+                xreg.atop   := (others => '0');
+
+                somi.ar.ready <= '1';
+              else
+                reg.cpu_msg := '1' & mosi.aw.lock;
+                reg.hsize   := mosi.aw.size;
+                reg.hprot   := '0' & not mosi.aw.prot(2);
+                reg.haddr   := mosi.aw.addr;
+                xreg.id     := mosi.aw.id;
+                xreg.len    := mosi.aw.len;
+                xreg.lock   := mosi.aw.lock;
+                xreg.cache  := mosi.aw.cache;
+                xreg.atop   := mosi.aw.atop;
+
+                somi.aw.ready <= '1';
+              end if;
+
+            end if;
+
+          else
+
+            valid_axi_req := '1';
+
+          end if;
+
+          if flush_due = '1' and xreg.lock = '0' and
+            not (reg.hprot(0) = '0' and valid_axi_req = '1') then
+
+            flush_valid <= '1';
+
+            if valid_axi_req = '1' then
+              if flush_ready = '0' then
+                reg.state := flush_req;
+              else
+                reg.state := mem_req;
+              end if;
+            else
+              reg.state := idle;
+            end if;
+
+          elsif valid_axi_req = '1' then
+
+            if mosi.aw.valid = '0' or xreg.len /= axi_len_zero then
+
+              if load_alloc_reg.addr = reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO) then
+
+                reg.state := load_alloc;
+
+              else
+
+                cpu_req_valid  <= '1';
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+
+                if cpu_req_ready = '1' then
+                  reg.state := load_rsp;
+                else
+                  reg.state := load_req;
+                end if;
+              end if;
+
+            else
+
+              reg.state := store_req;
+
+            end if;
+
+          else
+
+            reg.state := idle;
+
+          end if;
+
+          if xreg.len /= axi_len_zero then
+            reg.haddr := reg.haddr + addr_incr(reg.hsize);
+            xreg.len := xreg.len - 1;
+          end if;
+
+        end if;
+
+
+      -- LOAD_ALLOC
+      -- TODO: invalidate load_alloc if invalidation is issued for the same
+      -- cache line cached in the read buffer. (never happens on AHB w/ Leon3
+      -- because L1 always reads a full line with HTRANS set to HTRANS_SEQ, so
+      -- the bus arbiter won't allow the invalidation to go through becore the
+      -- entire read buffer has been read.
+      when load_alloc =>
+
+        somi.r.data <= read_from_line(reg.haddr, load_alloc_reg.line);
+        somi.r.valid <= '1';
+
+        if mosi.r.ready = '1' then
+
+          if xreg.len = axi_len_zero then
+            somi.r.last <= '1';
+
+            if valid_axi_req = '1' then
+              if mosi.aw.valid = '0' then
+                reg.cpu_msg := '0' & mosi.ar.lock;
+                reg.hsize   := mosi.ar.size;
+                reg.hprot   := '0' & not mosi.ar.prot(2);
+                reg.haddr   := mosi.ar.addr;
+                xreg.id     := mosi.ar.id;
+                xreg.len    := mosi.ar.len;
+                xreg.lock   := mosi.ar.lock;
+                xreg.cache  := mosi.ar.cache;
+                xreg.atop   := (others => '0');
+
+                somi.ar.ready <= '1';
+              else
+                reg.cpu_msg := '1' & mosi.aw.lock;
+                reg.hsize   := mosi.aw.size;
+                reg.hprot   := '0' & not mosi.aw.prot(2);
+                reg.haddr   := mosi.aw.addr;
+                xreg.id     := mosi.aw.id;
+                xreg.len    := mosi.aw.len;
+                xreg.lock   := mosi.aw.lock;
+                xreg.cache  := mosi.aw.cache;
+                xreg.atop   := mosi.aw.atop;
+
+                somi.aw.ready <= '1';
+              end if;
+            end if;
+
+          else
+
+            valid_axi_req := '1';
+
+          end if;
+
+          if flush_due = '1' and xreg.lock = '0' and
+            not (reg.hprot(0) = '0' and valid_axi_req = '1') then
+
+            flush_valid <= '1';
+
+            if valid_axi_req = '1' then
+
+              if flush_ready = '0' then
+                reg.state := flush_req;
+              else
+                reg.state := mem_req;
+              end if;
+
+            else
+
+              reg.state := idle;
+
+            end if;
+
+          elsif valid_axi_req = '1' then
+
+            if mosi.aw.valid = '0' or xreg.len /= axi_len_zero then
+
+              if load_alloc_reg.addr = reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO) then
+
+                reg.state := load_alloc;
+
+              else
+
+                cpu_req_valid  <= '1';
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+
+                if cpu_req_ready = '1' then
+                  reg.state := load_rsp;
+                else
+                  reg.state := load_req;
+                end if;
+              end if;
+
+            else
+
+              reg.state := store_req;
+
+            end if;
+
+          else
+
+            reg.state := idle;
+
+          end if;
+
+          if xreg.len /= axi_len_zero then
+            reg.haddr := reg.haddr + addr_incr(reg.hsize);
+            xreg.len := xreg.len - 1;
+          end if;
+
+        end if;
+
+
+      -- STORE REQUEST
+      when store_req =>
+
+        somi.w.ready <= cpu_req_ready;
+
+        if mosi.w.valid = '1' then
+
+          if mosi.w.last = '1' then
+            somi.b.valid <= '1';
+          end if;
+
+          cpu_req_data_cpu_msg <= reg.cpu_msg;
+          cpu_req_data_hsize   <= reg.hsize;
+          cpu_req_data_hprot   <= reg.hprot;
+          cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_word    <= mosi.w.data;
+          cpu_req_data_amo     <= xreg.atop;
+          cpu_req_valid <= '1';
+
+          if cpu_req_ready = '1' then
+
+            if valid_axi_req = '1' and mosi.w.last = '1' and mosi.b.ready = '1' then
+              if valid_axi_req = '1' then
+                if mosi.aw.valid = '0' then
+                  reg.cpu_msg := '0' & mosi.ar.lock;
+                  reg.hsize   := mosi.ar.size;
+                  reg.hprot   := '0' & not mosi.ar.prot(2);
+                  reg.haddr   := mosi.ar.addr;
+                  xreg.id     := mosi.ar.id;
+                  xreg.len    := mosi.ar.len;
+                  xreg.lock   := mosi.ar.lock;
+                  xreg.cache  := mosi.ar.cache;
+                  xreg.atop   := (others => '0');
+
+                  somi.ar.ready <= '1';
+                else
+                  reg.cpu_msg := '1' & mosi.aw.lock;
+                  reg.hsize   := mosi.aw.size;
+                  reg.hprot   := '0' & not mosi.aw.prot(2);
+                  reg.haddr   := mosi.aw.addr;
+                  xreg.id     := mosi.aw.id;
+                  xreg.len    := mosi.aw.len;
+                  xreg.lock   := mosi.aw.lock;
+                  xreg.cache  := mosi.aw.cache;
+                  xreg.atop   := mosi.aw.atop;
+
+                  somi.aw.ready <= '1';
+                end if;
+              end if;
+
+            end if;
+
+            if mosi.w.last = '1' then
+
+              if mosi.b.ready = '0' then
+                reg.state := send_wr_ack;
+
+              elsif flush_due = '1' and xreg.lock = '0' and
+                not (reg.hprot(0) = '0' and valid_axi_req = '1') then
+
+                flush_valid <= '1';
+
+                if valid_axi_req = '1' then
+                  if flush_ready = '0' then
+                    reg.state := flush_req;
+                  else
+                    reg.state := mem_req;
+                  end if;
+                else
+                  reg.state := idle;
+                end if;
+
+              elsif valid_axi_req = '1' then
+
+                if mosi.ar.valid = '1' then
+
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state      := load_req;
+
+                else
+
+                  reg.state := store_req;
+
+                end if;
+
+              else
+
+                reg.state := idle;
+
+              end if;
+
+            else                        -- mosi.w.last = '0'
+              reg.haddr := reg.haddr + addr_incr(reg.hsize);
+              xreg.len := xreg.len - 1;
+            end if;
+
+          end if;
+
+        end if;
+
+      -- STORE ACK
+      when send_wr_ack =>
+        somi.b.valid <= '1';
+
+        if mosi.b.ready = '1' then
+
+          if unsigned(xreg.atop) > 0 then
+            reg.state := load_rsp;
+
+          elsif valid_axi_req = '1' then
+            if mosi.aw.valid = '0' then
+              reg.cpu_msg := '0' & mosi.ar.lock;
+              reg.hsize   := mosi.ar.size;
+              reg.hprot   := '0' & not mosi.ar.prot(2);
+              reg.haddr   := mosi.ar.addr;
+              xreg.id     := mosi.ar.id;
+              xreg.len    := mosi.ar.len;
+              xreg.lock   := mosi.ar.lock;
+              xreg.cache  := mosi.ar.cache;
+              xreg.atop   := (others => '0');
+
+              somi.ar.ready <= '1';
+            else
+              reg.cpu_msg := '1' & mosi.aw.lock;
+              reg.hsize   := mosi.aw.size;
+              reg.hprot   := '0' & not mosi.aw.prot(2);
+              reg.haddr   := mosi.aw.addr;
+              xreg.id     := mosi.aw.id;
+              xreg.len    := mosi.aw.len;
+              xreg.lock   := mosi.aw.lock;
+              xreg.cache  := mosi.aw.cache;
+              xreg.atop   := mosi.aw.atop;
+
+              somi.aw.ready <= '1';
+            end if;
+          end if;
+
+          if flush_due = '1' and xreg.lock = '0' then
+            flush_valid <= '1';
+
+            if valid_axi_req = '1' then
+
+              if flush_ready = '0' then
+                reg.state := flush_req;
+              else
+                reg.state := mem_req;
+              end if;
+
+            end if;
+
+          elsif valid_axi_req = '1' then
+
+            if mosi.aw.valid = '0' then
+
+              cpu_req_valid  <= '1';
+              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+
+              if cpu_req_ready = '1' then
+                reg.state := load_rsp;
+              else
+                reg.state := load_req;
+              end if;
+
+            else
+
+              reg.state := store_req;
+
+            end if;
+          end if;
+
+          cpu_req_data_cpu_msg <= reg.cpu_msg;
+          cpu_req_data_hsize   <= reg.hsize;
+          cpu_req_data_hprot   <= reg.hprot;
+          cpu_req_data_addr    <= reg.haddr;
+
+        else
+
+          reg.state := idle;
+
+        end if;
+
+      -- FLUSH REQUEST
+      when flush_req =>
+
+        flush_valid <= '1';
+
+        if flush_ready = '1' then
+          reg.state := mem_req;
+        end if;
+
+
+      -- MEMORIZED REQUEST
+      when mem_req =>
+
+        if reg.cpu_msg = CPU_READ or reg.cpu_msg = CPU_READ_ATOM then
+          alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+          reg.state      := load_req;
+        else
+          reg.state := store_req;
+        end if;
+
+    end case;
+
+    axi_reg_next        <= xreg;
+    ahbs_reg_next       <= reg;
+    load_alloc_reg_next <= alloc_reg;
+
+  end process fsm_axi;
+
+-------------------------------------------------------------------------------
+-- FSM: Bridge from L2 cache frontend output to AHB master (L1 invalidation)
+-------------------------------------------------------------------------------
+  inval_ready      <= '1';
+  inv_fifo_rdreq   <= '0';
+  inv_fifo_wrreq   <= '0';
+  inv_fifo_data_in <= (others => '0');
+
+  ahbmo.hbusreq    <= '0';
+  ahbmo.htrans     <=  HTRANS_IDLE;
+  ahbmo.hlock      <= '0';
+  ahbmo.haddr      <= (others => '0');
+
+  -- -- TODO!!!
+  -- -- Forward invalidate to AXI-ACE compliant interface to Ariane.
+
+  end generate axi_frontend_gen;
 
 
 -------------------------------------------------------------------------------
