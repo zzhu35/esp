@@ -287,6 +287,7 @@ void l2_denovo::ctrl()
 	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
         base = addr_br.set << L2_WAY_BITS;
 
+
         if (set_conflict) {
 		SET_CONFLICT;
 
@@ -300,6 +301,8 @@ void l2_denovo::ctrl()
 			l2_way_t empty_way;
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
+
+            touched_buf[way_hit][addr_br.w_off] = true;
 
 
             if (cpu_req.amo) {
@@ -337,14 +340,23 @@ void l2_denovo::ctrl()
                     default:
                         break;
                 }
-                // if we already have this word, evict it
-                // @TODO
-                if (word_hit) state_buf[way_hit][addr_br.w_off] = DNV_I;
-                fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_hit_i);
                 line_t line;
                 line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = cpu_req.word;
-				send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
 
+                if (word_hit && (state_buf[way_hit][addr_br.w_off] == DNV_R || (state_buf[way_hit][addr_br.w_off] == DNV_V && touched_buf[way_hit][addr_br.w_off]))) {
+                    state_buf[way_hit][addr_br.w_off] = DNV_R;
+
+                    calc_amo(line_buf[way_hit], line, msg, 1 << addr_br.w_off);
+                    lines.port1[0][base + way_hit] = line_buf[way_hit];
+                    line = line >> (BITS_PER_WORD * addr_br.w_off);
+                    send_rd_rsp(line);
+                }
+                else
+                {
+                    fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_hit_i);
+                    send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
+
+                }
             }
 
             else if (cpu_req.cpu_msg == WRITE)
@@ -458,6 +470,7 @@ void l2_denovo::ctrl()
         for (int i = 0; i < L2_WAYS; i++) {
             for (int j = 0; j < WORDS_PER_LINE; j++) {
                 states[base + i][j] = state_buf[i][j];
+                touched[base + i][j] = touched_buf[i][j];
             }
         }
     }

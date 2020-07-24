@@ -206,8 +206,6 @@ public:
 
     inline bool is_amo(coh_msg_t coh_msg);
 
-    inline void calc_amo(line_t& line, line_t& data, coh_msg_t req, word_mask_t word_mask);
-
     /* Functions to move around buffered lines */
     void fill_reqs(mix_msg_t msg, cache_id_t req_id, addr_breakdown_llc_t addr_br, llc_tag_t tag_estall, llc_way_t way_hit,
 		   llc_unstable_state_t state, hprot_t hprot, word_t word, line_t line, word_mask_t word_mask, sc_uint<LLC_REQS_BITS> reqs_i);
