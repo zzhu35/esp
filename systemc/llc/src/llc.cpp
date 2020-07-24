@@ -26,59 +26,6 @@ inline bool llc::is_amo(coh_msg_t coh_msg)
 
 }
 
-// line gets stored, data gets sent back
-inline void llc::calc_amo(line_t& line, line_t& data, coh_msg_t req, word_mask_t word_mask)
-{
-        // word_mask must contain only one bit set
-        int i;
-        for (i = 0; i < WORDS_PER_LINE; i++)
-        {
-                HLS_UNROLL_LOOP("amo");
-                if (word_mask & (1 << i)) break;
-        }
-        wait();
-        int old = line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
-        int dataw = data.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
-
-        // @TODO MAX MIN might not work, depending on if to_int() sign_extends
-
-        data = line; // send old data back
-        switch (req)
-        {
-                case REQ_AMO_SWAP:
-                        old = dataw;
-                        break;
-                case REQ_AMO_ADD:
-                        old += dataw;
-                        break;
-                case REQ_AMO_AND:
-                        old &= dataw;
-                        break;
-                case REQ_AMO_OR:
-                        old |= dataw;
-                        break;
-                case REQ_AMO_XOR:
-                        old ^= dataw;
-                        break;
-                case REQ_AMO_MAX:
-                        old = (old > dataw) ? old : dataw;
-                        break;
-                case REQ_AMO_MAXU:
-                        old = ((unsigned)old > (unsigned)dataw) ? old : dataw;
-                        break;
-                case REQ_AMO_MIN:
-                        old = (old < dataw) ? old : dataw;
-                        break;
-                case REQ_AMO_MINU:
-                        old = ((unsigned)old < (unsigned)dataw) ? old : dataw;
-                        break;
-                default:
-                break;
-        }
-        line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD) = old; // store calculated new word in the line
-
-}       
-
 
 inline void llc::reset_io()
 {
