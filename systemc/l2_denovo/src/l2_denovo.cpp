@@ -211,6 +211,9 @@ void l2_denovo::ctrl()
                         {
                             HLS_UNROLL_LOOP(ON, "1");
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
+                                // go to valid state
+                                state_buf[way_hit][i] = DNV_V;
+                                touched_buf[way_hit][i] = false; // enable flush on next sync
                                 ack_mask |= 1 << i;
                             }
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_R) { // if reqo and we do not have this word in registered
@@ -226,6 +229,43 @@ void l2_denovo::ctrl()
                             send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
                         }
                     }
+                    else
+                    {
+                        send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
+                    }
+                    
+                }
+                break;
+                case FWD_REQ_V:
+                {
+                    word_mask_t nack_mask = 0;
+                    word_mask_t ack_mask = 0;
+                    // line exists
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++)
+                        {
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_I) { // if reqv and we have this word in registered
+                                ack_mask |= 1 << i;
+                            }
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_I) { // if reqo and we do not have this word in registered
+                                nack_mask |= 1 << i;
+                            }
+                        }
+
+                        if (nack_mask) {
+                            send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
+                        }
+
+                        if (ack_mask) {
+                            send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                        }
+                    }
+                    else
+                    {
+                        send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
+                    }
+                    
                 }
                 break;
                 case FWD_RVK_O:
@@ -1064,9 +1104,9 @@ void l2_denovo::self_invalidate()
         for (int j = 0; j < WORDS_PER_LINE; j++)
         {
             HLS_UNROLL_LOOP(ON, "reset-states");
-            if (state_buf[i][j] != DNV_R && touched[i][j] != true)
+            if (states[i][j] == DNV_V && !touched[i][j])
             {
-                state_buf[i][j] = DNV_I;
+                states[i][j] = DNV_I;
             }
             touched[i][j] = false;
         }
