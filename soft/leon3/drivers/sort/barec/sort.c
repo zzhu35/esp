@@ -31,6 +31,20 @@
 #define SORT_LEN_MAX_REG	0x4c
 #define SORT_BATCH_MAX_REG	0x50
 
+static void sync()
+{
+	volatile int tmp;
+	volatile int* d = (volatile int*)&tmp;
+
+	asm volatile (
+	" amoswap.w.aq t0, t0, (%1);"
+	: "=&r"(d)
+	: "0" (d)
+	: "memory", "t0"
+	);
+
+}
+
 
 static int validate_sorted(float *array, int len)
 {
@@ -179,6 +193,7 @@ int main(int argc, char * argv[])
 
 		/* Validation */
 		printf("  validating...\n");
+		sync();
 
 		for (j = 0; j < SORT_BATCH; j++) {
 			int err = validate_sorted((float *) &mem[j * SORT_LEN], SORT_LEN);
