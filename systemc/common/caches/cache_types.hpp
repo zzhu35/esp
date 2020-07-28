@@ -20,6 +20,7 @@ typedef sc_uint<COH_MSG_TYPE_WIDTH>	coh_msg_t; // Requests without DMA, Forwards
 typedef sc_uint<MIX_MSG_TYPE_WIDTH>	mix_msg_t; // Requests if including DMA
 typedef sc_uint<HSIZE_WIDTH>		hsize_t;
 typedef sc_uint<HPROT_WIDTH>    	hprot_t;
+typedef sc_uint<DCS_WIDTH>          dcs_t;
 typedef sc_uint<INVACK_CNT_WIDTH>	invack_cnt_t;
 typedef sc_uint<INVACK_CNT_CALC_WIDTH>	invack_cnt_calc_t;
 typedef sc_uint<ADDR_BITS>		addr_t;
@@ -70,6 +71,11 @@ public:
     addr_t	addr;
     word_t	word;
 	amo_t	amo;
+	bool    dcs_en;
+	bool    use_owner_pred;
+	dcs_t   dcs;
+	cache_id_t pred_cid;
+
 
     l2_cpu_req_t() :
 	cpu_msg(0),
@@ -77,7 +83,11 @@ public:
 	hprot(0),
 	addr(0),
 	word(0),
-	amo(0)
+	amo(0),
+	dcs_en(0),
+	use_owner_pred(0),
+	dcs(0),
+	pred_cid(0)
     {}
 
     inline l2_cpu_req_t& operator  = (const l2_cpu_req_t& x) {
@@ -87,6 +97,10 @@ public:
 	addr    = x.addr;
 	word    = x.word;
 	amo     = x.amo;
+	dcs_en  = x.dcs_en;
+	use_owner_pred = x.use_owner_pred;
+	dcs     = x.dcs;
+	pred_cid = x.pred_cid;
 	return *this;
     }
     inline bool operator  == (const l2_cpu_req_t& x) const {
@@ -95,7 +109,10 @@ public:
 		x.hprot   == hprot	&&
 		x.addr    == addr	&&
 		x.word    == word   &&
-		x.amo     == amo);
+		x.dcs_en  == dcs_en    &&
+		x.use_owner_pred == use_owner_pred    &&
+		x.dcs     == dcs    &&
+		x.pred_cid == pred_cid);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_cpu_req_t& x, const std::string & name) {
 	sc_trace(tf, x.cpu_msg , name + ".cpu_msg ");
@@ -103,6 +120,10 @@ public:
 	sc_trace(tf, x.hprot,    name + ".hprot");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.word,     name + ".word");
+	sc_trace(tf, x.dcs_en,   name + ".dcs_en");
+	sc_trace(tf, x.use_owner_pred, name + ".use_owner_pred");
+	sc_trace(tf, x.dcs,      name + ".dcs");
+	sc_trace(tf, x.pred_cid, name + ".pred_cid");
     }
     inline friend ostream & operator<<(ostream& os, const l2_cpu_req_t& x) {
 	os << hex << "("
@@ -110,7 +131,11 @@ public:
 	   << ", hsize: "   << x.hsize
 	   << ", hprot: "   << x.hprot
 	   << ", addr: "    << x.addr
-	   << ", word: "    << x.word << ")";
+	   << ", word: "    << x.word
+	   << ", dcs_en: "  << x.dcs_en
+	   << ", use_owner_pred: " << x.use_owner_pred
+	   << ", dcs: "     << x.dcs
+	   << ", pred_cid: "<< x.pred_cid  << ")";
 	return os;
     }
 };

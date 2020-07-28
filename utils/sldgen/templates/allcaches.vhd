@@ -30,6 +30,7 @@ package allcaches is
   constant LINE_ADDR_BITS : integer := ADDR_BITS - OFFSET_BITS;
   constant WORDS_PER_LINE : integer := 2**WORD_OFFSET_BITS;
   constant AMO_BITS       : integer := 6;
+  constant DCS_BITS       : integer := 2;
   constant BYTES_PER_WORD : integer := 2**BYTE_OFFSET_BITS;
   constant BYTES_PER_LINE : integer := WORDS_PER_LINE * BYTES_PER_WORD;
   constant BITS_PER_WORD  : integer := (BYTES_PER_WORD * 8);
@@ -74,6 +75,10 @@ package allcaches is
       l2_cpu_req_data_addr      : in  std_logic_vector(ADDR_BITS - 1 downto 0);
       l2_cpu_req_data_word      : in  std_logic_vector(BITS_PER_WORD - 1 downto 0);
       l2_cpu_req_data_amo       : in  std_logic_vector(5 downto 0);
+      l2_cpu_req_data_dcs_en    : in  std_ulogic;
+      l2_cpu_req_data_use_owner_pred : in  std_ulogic;
+      l2_cpu_req_data_dcs       : in  std_logic_vector(DCS_BITS - 1 downto 0);
+      l2_cpu_req_data_pred_cid  : in  std_logic_vector(NL2_MAX_LOG2 - 1 downto 0);
       l2_fwd_in_valid           : in  std_ulogic;
       l2_fwd_in_data_coh_msg    : in  std_logic_vector(MIX_MSG_TYPE_WIDTH - 1 downto 0);
       l2_fwd_in_data_addr       : in  std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);

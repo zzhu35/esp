@@ -98,6 +98,10 @@ architecture rtl of l2_acc_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
+  signal cpu_req_data_dcs_en    : std_ulogic;
+  signal cpu_req_data_use_owner_pred : std_ulogic;
+  signal cpu_req_data_dcs       : dcs_t;
+  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -403,6 +407,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -472,6 +480,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -541,6 +553,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,

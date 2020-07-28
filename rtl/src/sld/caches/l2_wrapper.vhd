@@ -99,6 +99,10 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
   signal cpu_req_data_amo       : amo_t;
+  signal cpu_req_data_dcs_en    : std_ulogic;
+  signal cpu_req_data_use_owner_pred : std_ulogic;
+  signal cpu_req_data_dcs       : dcs_t;
+  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -178,6 +182,10 @@ architecture rtl of l2_wrapper is
     hsize         : hsize_t;
     hprot         : hprot_t;
     haddr         : addr_t;
+    dcs_en        : std_ulogic;
+    use_owner_pred: std_ulogic;
+    dcs           : dcs_t;
+    pred_cid      : cache_id_t;
     req_memorized : std_ulogic;
     asserts       : asserts_ahbs_t;
   end record;
@@ -188,6 +196,10 @@ architecture rtl of l2_wrapper is
     hsize         => HSIZE_W,           -- 1 word
     hprot         => DEFAULT_HPROT,     -- bufferable, non cacheable
     haddr         => (others => '0'),
+    dcs_en        => '0',
+    use_owner_pred=> '0',
+    dcs           => (others => '0'),
+    pred_cid      => (others => '0'),
     req_memorized => '0',
     asserts       => (others => '0'));
 
@@ -453,6 +465,11 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of cpu_req_data_addr      : signal is "true";
   attribute mark_debug of cpu_req_data_word      : signal is "true";
   attribute mark_debug of cpu_req_data_amo       : signal is "true";
+  attribute mark_debug of cpu_req_data_dcs_en    : signal is "true";
+  attribute mark_debug of cpu_req_data_use_owner_pred : signal is "true";
+  attribute mark_debug of cpu_req_data_dcs       : signal is "true";
+  attribute mark_debug of cpu_req_data_pred_cid  : signal is "true";
+  
   attribute mark_debug of flush_ready            : signal is "true";
   attribute mark_debug of flush_valid            : signal is "true";
   attribute mark_debug of flush_data             : signal is "true";
@@ -523,6 +540,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -590,6 +611,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hsize     => cpu_req_data_hsize,
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
@@ -659,6 +684,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hsize     => cpu_req_data_hsize,
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
@@ -1852,6 +1881,10 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hsize   <= (others => '0');
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
+    cpu_req_data_dcs_en  <= '0';
+    cpu_req_data_use_owner_pred <= '0';
+    cpu_req_data_dcs     <= (others => '0');
+    cpu_req_data_pred_cid<= (others => '0');
     cpu_req_data_word    <= (others => '0');
     cpu_req_data_amo     <= (others => '0');
 
@@ -1874,6 +1907,10 @@ begin  -- architecture rtl of l2_wrapper
             reg.hsize   := mosi.ar.size;
             reg.hprot   := '0' & not mosi.ar.prot(2);
             reg.haddr   := mosi.ar.addr;
+            reg.dcs_en  := mosi.ar.user(7);
+            reg.use_owner_pred := mosi.ar.user(6);
+            reg.dcs     := mosi.ar.user(5 downto 4);
+            reg.pred_cid:= mosi.ar.user(3 downto 0);
             xreg.id     := mosi.ar.id;
             xreg.len    := mosi.ar.len;
             xreg.lock   := mosi.ar.lock;
@@ -1886,6 +1923,10 @@ begin  -- architecture rtl of l2_wrapper
             reg.hsize   := mosi.aw.size;
             reg.hprot   := '0' & not mosi.aw.prot(2);
             reg.haddr   := mosi.aw.addr;
+            reg.dcs_en  := mosi.aw.user(7);
+            reg.use_owner_pred := mosi.aw.user(6);
+            reg.dcs     := mosi.aw.user(5 downto 4);
+            reg.pred_cid:= mosi.aw.user(3 downto 0);
             xreg.id     := mosi.aw.id;
             xreg.len    := mosi.aw.len;
             xreg.lock   := mosi.aw.lock;
@@ -1933,7 +1974,10 @@ begin  -- architecture rtl of l2_wrapper
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
 
 
       -- LOAD REQUEST
@@ -1942,7 +1986,10 @@ begin  -- architecture rtl of l2_wrapper
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
         cpu_req_valid <= '1';
 
         if cpu_req_ready = '1' then
@@ -1972,6 +2019,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -1984,6 +2035,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -2078,6 +2133,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -2090,6 +2149,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -2180,6 +2243,10 @@ begin  -- architecture rtl of l2_wrapper
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
           cpu_req_data_word    <= mosi.w.data;
           cpu_req_data_amo     <= xreg.atop;
           cpu_req_valid <= '1';
@@ -2193,6 +2260,10 @@ begin  -- architecture rtl of l2_wrapper
                   reg.hsize   := mosi.ar.size;
                   reg.hprot   := '0' & not mosi.ar.prot(2);
                   reg.haddr   := mosi.ar.addr;
+                  reg.dcs_en  := mosi.ar.user(7);
+                  reg.use_owner_pred := mosi.ar.user(6);
+                  reg.dcs     := mosi.ar.user(5 downto 4);
+                  reg.pred_cid:= mosi.ar.user(3 downto 0);
                   xreg.id     := mosi.ar.id;
                   xreg.len    := mosi.ar.len;
                   xreg.lock   := mosi.ar.lock;
@@ -2205,6 +2276,10 @@ begin  -- architecture rtl of l2_wrapper
                   reg.hsize   := mosi.aw.size;
                   reg.hprot   := '0' & not mosi.aw.prot(2);
                   reg.haddr   := mosi.aw.addr;
+                  reg.dcs_en  := mosi.aw.user(7);
+                  reg.use_owner_pred := mosi.aw.user(6);
+                  reg.dcs     := mosi.aw.user(5 downto 4);
+                  reg.pred_cid:= mosi.aw.user(3 downto 0);
                   xreg.id     := mosi.aw.id;
                   xreg.len    := mosi.aw.len;
                   xreg.lock   := mosi.aw.lock;
@@ -2280,6 +2355,10 @@ begin  -- architecture rtl of l2_wrapper
               reg.hsize   := mosi.ar.size;
               reg.hprot   := '0' & not mosi.ar.prot(2);
               reg.haddr   := mosi.ar.addr;
+              reg.dcs_en  := mosi.ar.user(7);
+              reg.use_owner_pred := mosi.ar.user(6);
+              reg.dcs     := mosi.ar.user(5 downto 4);
+              reg.pred_cid:= mosi.ar.user(3 downto 0);
               xreg.id     := mosi.ar.id;
               xreg.len    := mosi.ar.len;
               xreg.lock   := mosi.ar.lock;
@@ -2292,6 +2371,10 @@ begin  -- architecture rtl of l2_wrapper
               reg.hsize   := mosi.aw.size;
               reg.hprot   := '0' & not mosi.aw.prot(2);
               reg.haddr   := mosi.aw.addr;
+              reg.dcs_en  := mosi.aw.user(7);
+              reg.use_owner_pred := mosi.aw.user(6);
+              reg.dcs     := mosi.aw.user(5 downto 4);
+              reg.pred_cid:= mosi.aw.user(3 downto 0);
               xreg.id     := mosi.aw.id;
               xreg.len    := mosi.aw.len;
               xreg.lock   := mosi.aw.lock;
@@ -2339,6 +2422,10 @@ begin  -- architecture rtl of l2_wrapper
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
 
         else
 

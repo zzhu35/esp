@@ -106,6 +106,7 @@ package cachepackage is
   subtype hsize_t is std_logic_vector(HSIZE_WIDTH - 1 downto 0);
   subtype hprot_t is std_logic_vector(HPROT_WIDTH - 1 downto 0);
   subtype word_t is std_logic_vector(BITS_PER_WORD - 1 downto 0);
+  subtype dcs_t is std_logic_vector(DCS_BITS - 1 downto 0);
   subtype line_t is std_logic_vector(BITS_PER_LINE - 1 downto 0);
   subtype word_mask_t is std_logic_vector(WORDS_PER_LINE - 1 downto 0);
   subtype amo_t is std_logic_vector(AMO_BITS - 1 downto 0);
