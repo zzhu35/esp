@@ -170,6 +170,7 @@ architecture rtl of llc_wrapper is
   signal llc_fwd_out_data_req_id  : cache_id_t;
   signal llc_fwd_out_data_dest_id : cache_id_t;
   signal llc_fwd_out_data_word_mask : word_mask_t;
+  signal llc_fwd_out_data_line    : line_t;
 
   -- AHB to cache
   signal llc_mem_rsp_ready     : std_ulogic;
@@ -255,12 +256,14 @@ architecture rtl of llc_wrapper is
   -------------------------------------------------------------------------------
   -- FSM: Forward to NoC
   -------------------------------------------------------------------------------
-  type fwd_out_fsm is (send_header, send_addr);
+  type fwd_out_fsm is (send_header, send_addr, send_data);
 
   type fwd_out_reg_type is record
     state   : fwd_out_fsm;
     addr    : line_addr_t;
-    word_mask : word_mask_t;
+    word_cnt : natural range 0 to 3;
+    coh_msg : mix_msg_t;
+    line    : line_t;
     asserts : asserts_fwd_t;
   end record fwd_out_reg_type;
 
@@ -268,7 +271,10 @@ architecture rtl of llc_wrapper is
     state   => send_header,
     addr    => (others => '0'),
     asserts => (others => '0'),
-    word_mask => (others => '0'));
+    line    => (others => '0'),
+    coh_msg => (others => '0'),
+    word_cnt => 0
+  );
 
   signal fwd_out_reg      : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
   signal fwd_out_reg_next : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
@@ -527,6 +533,8 @@ architecture rtl of llc_wrapper is
   attribute mark_debug of llc_fwd_out_data_addr    : signal is "true";
   attribute mark_debug of llc_fwd_out_data_req_id  : signal is "true";
   attribute mark_debug of llc_fwd_out_data_dest_id : signal is "true";
+  attribute mark_debug of llc_fwd_out_data_word_mask : signal is "true";
+  attribute mark_debug of llc_fwd_out_data_line    : signal is "true";
 
   attribute mark_debug of llc_mem_rsp_ready : signal is "true";
   attribute mark_debug of llc_mem_rsp_valid : signal is "true";
@@ -1351,7 +1359,8 @@ begin  -- architecture rtl
 -------------------------------------------------------------------------------
   fsm_fwd_out : process (fwd_out_reg, coherence_fwd_full,
                          llc_fwd_out_valid, llc_fwd_out_data_coh_msg, llc_fwd_out_data_addr,
-                         llc_fwd_out_data_req_id, llc_fwd_out_data_dest_id, llc_fwd_out_data_word_mask) is
+                         llc_fwd_out_data_req_id, llc_fwd_out_data_dest_id, llc_fwd_out_data_word_mask,
+                         llc_fwd_out_data_line) is
 
     variable reg       : fwd_out_reg_type;
     variable dest_init : integer;
@@ -1387,6 +1396,8 @@ begin  -- architecture rtl
           if llc_fwd_out_valid = '1' then
 
             reg.addr := llc_fwd_out_data_addr;
+            reg.coh_msg := llc_fwd_out_data_coh_msg;
+            reg.line := llc_fwd_out_data_line;
 
             if llc_fwd_out_data_dest_id >= "0" then
               dest_init := to_integer(unsigned(llc_fwd_out_data_dest_id));
@@ -1414,9 +1425,46 @@ begin  -- architecture rtl
         if coherence_fwd_full = '0' then
 
           coherence_fwd_wrreq <= '1';
-          coherence_fwd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-          coherence_fwd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-          reg.state := send_header;
+
+          case reg.coh_msg is
+
+            when FWD_WTfwd =>
+
+              coherence_fwd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+              coherence_fwd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state             := send_data;
+              reg.word_cnt          := 0;
+
+            when others =>
+
+              coherence_fwd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+              coherence_fwd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state := send_header;
+
+          end case;
+
+        end if;
+
+      when send_data =>
+        if coherence_fwd_full = '0' then
+
+          coherence_fwd_wrreq <= '1';
+
+          if reg.word_cnt = WORDS_PER_LINE - 1 then
+
+            coherence_fwd_data_in <= PREAMBLE_TAIL & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                                                              (BITS_PER_WORD * reg.word_cnt));
+
+            reg.state := send_header;
+
+          else
+
+            coherence_fwd_data_in <= PREAMBLE_BODY & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                                                              (BITS_PER_WORD * reg.word_cnt));
+
+            reg.word_cnt := reg.word_cnt + 1;
+
+          end if;
 
         end if;
 
@@ -1805,6 +1853,7 @@ begin  -- architecture rtl
       llc_fwd_out_data_req_id  => llc_fwd_out_data_req_id,
       llc_fwd_out_data_dest_id => llc_fwd_out_data_dest_id,
       llc_fwd_out_data_word_mask => llc_fwd_out_data_word_mask,
+      llc_fwd_out_data_line    => llc_fwd_out_data_line,
 
       -- AHB to cache
       llc_mem_rsp_ready     => llc_mem_rsp_ready,

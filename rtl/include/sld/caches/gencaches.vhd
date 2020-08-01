@@ -36,6 +36,7 @@ package gencaches is
       l2_fwd_in_data_addr : in line_addr_t;
       l2_fwd_in_data_req_id : in cache_id_t;
       l2_fwd_in_data_word_mask : in word_mask_t;
+      l2_fwd_in_data_line : in line_t;
       l2_rsp_in_valid : in std_ulogic;
       l2_rsp_in_data_coh_msg : in coh_msg_t;
       l2_rsp_in_data_addr : in line_addr_t;
@@ -105,6 +106,7 @@ package gencaches is
       l2_fwd_in_data_addr : in line_addr_t;
       l2_fwd_in_data_req_id : in cache_id_t;
       l2_fwd_in_data_word_mask : in word_mask_t;
+      l2_fwd_in_data_line : in line_t;
       l2_rsp_in_valid : in std_ulogic;
       l2_rsp_in_data_coh_msg : in coh_msg_t;
       l2_rsp_in_data_addr : in line_addr_t;
@@ -174,6 +176,7 @@ package gencaches is
       l2_fwd_in_data_addr : in line_addr_t;
       l2_fwd_in_data_req_id : in cache_id_t;
       l2_fwd_in_data_word_mask : in word_mask_t;
+      l2_fwd_in_data_line : in line_t;
       l2_rsp_in_valid : in std_ulogic;
       l2_rsp_in_data_coh_msg : in coh_msg_t;
       l2_rsp_in_data_addr : in line_addr_t;
@@ -289,6 +292,7 @@ package gencaches is
       llc_fwd_out_data_addr : out line_addr_t;
       llc_fwd_out_data_req_id : out cache_id_t;
       llc_fwd_out_data_word_mask : out word_mask_t;
+      llc_fwd_out_data_line : out line_t;
       llc_fwd_out_data_dest_id : out cache_id_t;
       llc_mem_req_valid : out std_ulogic;
       llc_mem_req_data_hwrite : out std_ulogic;

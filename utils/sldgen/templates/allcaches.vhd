@@ -84,6 +84,7 @@ package allcaches is
       l2_fwd_in_data_addr       : in  std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
       l2_fwd_in_data_req_id     : in  std_logic_vector(NL2_MAX_LOG2 - 1 downto 0);
       l2_fwd_in_data_word_mask  : in  std_logic_vector(WORDS_PER_LINE - 1 downto 0);
+      l2_fwd_in_data_line       : in  std_logic_vector(BITS_PER_LINE - 1 downto 0);
       l2_rsp_in_valid           : in  std_ulogic;
       l2_rsp_in_data_coh_msg    : in  std_logic_vector(COH_MSG_TYPE_WIDTH - 1 downto 0);
       l2_rsp_in_data_addr       : in  std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
@@ -194,6 +195,7 @@ package allcaches is
       llc_fwd_out_data_req_id          : out std_logic_vector(NL2_MAX_LOG2 - 1 downto 0);
       llc_fwd_out_data_dest_id         : out std_logic_vector(NL2_MAX_LOG2 - 1 downto 0);
       llc_fwd_out_data_word_mask       : out std_logic_vector(WORDS_PER_LINE - 1 downto 0);
+      llc_fwd_out_data_line            : out std_logic_vector(BITS_PER_LINE - 1 downto 0);
       llc_mem_req_valid                : out std_ulogic;
       llc_mem_req_data_hwrite          : out std_ulogic;
       llc_mem_req_data_hsize           : out std_logic_vector(HSIZE_WIDTH - 1 downto 0);

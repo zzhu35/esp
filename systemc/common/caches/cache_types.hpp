@@ -188,12 +188,14 @@ public:
     mix_msg_t	coh_msg; // fwd-gets, fwd-getm, fwd-invalidate
     line_addr_t	addr;
     cache_id_t  req_id;
+	line_t      line;
 	word_mask_t word_mask;
 
     l2_fwd_in_t() :
 	coh_msg(0),
 	addr(0),
 	req_id(0),
+	line(0),
 	word_mask(0)
     { }
 
@@ -201,6 +203,7 @@ public:
 	coh_msg = x.coh_msg;
 	addr    = x.addr;
 	req_id  = x.req_id;
+	line    = x.line;
 	word_mask = x.word_mask;
 	return *this;
     }
@@ -208,12 +211,14 @@ public:
 	return (x.coh_msg == coh_msg	&&
 		x.addr    == addr       &&
 		x.req_id  == req_id &&
+		x.line    == line &&
 		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file *tf, const l2_fwd_in_t& x, const std::string & name) {
 	sc_trace(tf, x.coh_msg , name + ".coh_msg ");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.req_id,     name + ".req_id");
+	sc_trace(tf, x.line,     name + ".line");
 	sc_trace(tf, x.word_mask,     name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const l2_fwd_in_t& x) {
@@ -221,6 +226,7 @@ public:
 	   << "coh_msg: " << x.coh_msg
 	   << ", addr: "  << x.addr
 	   << ", req_id: "  << x.req_id
+	   << ", line: " << x.line
 	   << ", word_mask:" << x.word_mask << ")";
 	return os;
     }
@@ -372,6 +378,7 @@ public:
     line_addr_t		addr;
     cache_id_t          req_id;
     cache_id_t          dest_id;
+	line_t      line;
 	word_mask_t word_mask;
 
     llc_fwd_out_t() :
@@ -379,6 +386,7 @@ public:
 	addr(0),
 	req_id(0),
 	dest_id(0),
+	line(0),
 	word_mask(0)
     {}
 
@@ -387,6 +395,7 @@ public:
 	addr       = x.addr;
 	req_id     = x.req_id;
 	dest_id    = x.dest_id;
+	line       = x.line;
 	word_mask = x.word_mask;
 	return *this;
     }
@@ -395,6 +404,7 @@ public:
 		x.addr       == addr    &&
 		x.req_id     == req_id &&
 		x.dest_id    == dest_id &&
+		x.line       == line &&
 		x.word_mask == word_mask);
     }
     inline friend void sc_trace(sc_trace_file	*tf, const llc_fwd_out_t& x, const std::string & name) {
@@ -402,6 +412,7 @@ public:
 	sc_trace(tf, x.addr,       name + ".addr");
 	sc_trace(tf, x.req_id, name + ".req_id");
 	sc_trace(tf, x.dest_id, name + ".dest_id");
+	sc_trace(tf, x.line, name + ".line");
 	sc_trace(tf, x.word_mask, name + ".word_mask");
     }
     inline friend ostream & operator<<(ostream& os, const llc_fwd_out_t& x) {
@@ -413,10 +424,12 @@ public:
         case FWD_REQ_Odata : os << "FWD_REQ_Odata"; break;
         case FWD_RVK_O : os << "FWD_RVK_O"; break;
         case FWD_INV_SPDX : os << "FWD_INV"; break;
+		case FWD_WTfwd : os << "FWD_WTfwd"; break;
         default: os << "UNKNOWN"; break;
         }
         os << ", addr: "       << x.addr
 	   << ", req_id: " << x.req_id
+	   << ", line: " << x.line
 	   << ", word_mask" << x.word_mask
 	   << ", dest_id: " << x.dest_id << ")";
 	return os;
