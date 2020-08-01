@@ -436,6 +436,7 @@ void l2_denovo::ctrl()
                 lines.port1[0][base + way_write] = line_buf[way_write];
                 hprots.port1[0][base + way_write] = cpu_req.hprot;
                 tags.port1[0][base + way_write] = addr_br.tag;
+                evict_ways.port1[0][addr_br.set] = way_write + 1;
                 if ((!word_hit) || (word_hit && (state_buf[way_write][addr_br.w_off] != DNV_R))) { // if no hit or not in registered
                     HLS_DEFINE_PROTOCOL("spandex_dual_req");
 				    send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
@@ -461,7 +462,7 @@ void l2_denovo::ctrl()
                 if (word_mask) // some words are present but not whole line. send reqv
                 {
                     send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
-				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], ~word_mask, reqs_hit_i);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_hit_i);
                 }
                 else send_rd_rsp(line_buf[way_hit]);
                 
