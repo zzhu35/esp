@@ -185,7 +185,8 @@ void l2_denovo::ctrl()
 	} else if (do_fwd) {
 	    addr_breakdown_t addr_br;
 	    addr_br.breakdown(fwd_in.addr << OFFSET_BITS);
-	    fwd_stall = reqs_peek_fwd(addr_br);
+        fwd_stall_ended = false;
+	    reqs_peek_fwd(addr_br);
         if (fwd_stall) {
 		    SET_CONFLICT;
             // @TODO optimization
@@ -258,7 +259,7 @@ void l2_denovo::ctrl()
                         }
 
                         if (ack_mask) {
-                            send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                            send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], ack_mask);
                         }
                     }
                     else
@@ -324,7 +325,7 @@ void l2_denovo::ctrl()
 
 	    addr_br.breakdown(cpu_req.addr);
 
-	    set_conflict = reqs_peek_req(addr_br.set, reqs_hit_i);
+	    reqs_peek_req(addr_br.set, reqs_hit_i);
         base = addr_br.set << L2_WAY_BITS;
 
 
@@ -872,7 +873,7 @@ void l2_denovo::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, 
 
     // if necessary end the forward messages stall
     if (fwd_stall && reqs_fwd_stall_i == reqs_i) {
-	fwd_stall_ended = true;
+        fwd_stall_ended = true;
     }
 }
 
@@ -1040,7 +1041,7 @@ void l2_denovo::reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uin
     // REQS_LOOKUP_ASSERT;
 }
 
-bool l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
+void l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 {
     REQS_PEEK_REQ;
 
@@ -1052,15 +1053,15 @@ bool l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 	if (reqs[i].state == DNV_I)
 	    reqs_i = i;
 
-	if (reqs[i].set == set && reqs[i].state != DNV_I)
-	    set_conflict = true;
+	if (reqs[i].set == set && reqs[i].state != DNV_I){
+        set_conflict = true;
+        reqs_fwd_stall_i = i;
+    }
     }
 
 #ifdef L2_DEBUG
     peek_reqs_i_dbg.write(reqs_i);
 #endif
-
-    return set_conflict;
 }
 
 void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
@@ -1080,20 +1081,18 @@ void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 }
 
 
-bool l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
+void l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
 {
     REQS_PEEK_REQ;
 
-    set_conflict = false;
+    fwd_stall = false;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
 	REQS_PEEK_REQ_LOOP;
 
 	if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I)
-	    set_conflict = true;
+	    fwd_stall = true;
     }
-
-    return set_conflict;
 }
 
 

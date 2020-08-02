@@ -185,9 +185,9 @@ public:
     void tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &way_hit, bool &empty_way_found, l2_way_t &empty_way, bool &word_hit);
     void reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_addr_br,
 		     sc_uint<REQS_BITS> &reqs_hit_i);
-    bool reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
+    void reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
     void reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);
-    bool reqs_peek_fwd(addr_breakdown_t addr_br);
+    void reqs_peek_fwd(addr_breakdown_t addr_br);
 
     void self_invalidate();
 #ifdef STATS_ENABLE
