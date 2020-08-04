@@ -172,11 +172,6 @@ void l2_denovo::ctrl()
                 send_rd_rsp(reqs[reqs_hit_i].line);
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
-
-                // TODO
-                // possible fix for slow sort test, ONLY works for 2 ways
-                // evict_ways.port1[0][line_br.set] = (reqs[reqs_hit_i].way + 1) % 2;
-
                 put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_V, reqs_hit_i);
             }
 	    }
@@ -452,15 +447,12 @@ void l2_denovo::ctrl()
                 hprots.port1[0][base + way_write] = cpu_req.hprot;
                 tags.port1[0][base + way_write] = addr_br.tag;
                 evict_ways.port1[0][addr_br.set] = way_write + 1;
-                if ((!word_hit) || (word_hit && (state_buf[way_write][addr_br.w_off] != DNV_R))) { // if no hit or not in registered
+                if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
                     HLS_DEFINE_PROTOCOL("spandex_dual_req");
 				    send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
                     wait();
                     state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
                 }
-                // TODO
-                // possible fix for slow sort test, ONLY works for 2 ways
-                evict_ways.port1[0][addr_br.set] = (way_write + 1) % 2;
 
             }
             // else if read
