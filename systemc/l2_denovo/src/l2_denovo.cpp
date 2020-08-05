@@ -465,7 +465,9 @@ void l2_denovo::ctrl()
                     if (word_mask) {
                         HLS_DEFINE_PROTOCOL("spandex_dual_req");
                         send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                        wait();
                         fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
                     }
 
                     for (int i = 0; i < WORDS_PER_LINE; i ++)
@@ -540,9 +542,11 @@ void l2_denovo::ctrl()
                     {
                         send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                         fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
                         wait();
                     }
                     send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                    wait();
                 }   
 
 
