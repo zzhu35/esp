@@ -197,20 +197,54 @@ void l2_denovo::ctrl()
 	    addr_br.breakdown(fwd_in.addr << OFFSET_BITS);
         fwd_stall_ended = false;
 	    reqs_peek_fwd(addr_br);
+        base = addr_br.set << L2_WAY_BITS;
+        bool tag_hit, word_hit;
+        l2_way_t way_hit;
+        bool empty_way_found;
+        l2_way_t empty_way;
+        tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
         if (fwd_stall) {
 		    SET_CONFLICT;
-            // @TODO optimization
-            // fwd_stall will block everything
             fwd_in_stalled = fwd_in;
+            // try to handle this fwd_in as much as we can and resolve fwd_stall
+            bool success = false;
+            switch (fwd_in.coh_msg)
+            {
+                case FWD_WB_ACK:
+                {
+                    if (reqs[reqs_fwd_stall_i].state == DNV_RI)
+                    {
+                        // erase this line when WB complete
+                        // no need to call put_reqs here because there is no state change to either SRAM or xxx_buf
+                        reqs[reqs_fwd_stall_i].state = DNV_I;
+                        reqs_cnt++;
+                        success = true;
+                    }
+
+                }
+                break;
+                case FWD_RVK_O:
+                {
+                    if (reqs[reqs_fwd_stall_i].state == DNV_RI)
+                    {
+                        // handle DNV_RI - LLC_OV deadlock
+                        HLS_DEFINE_PROTOCOL("deadlock-solver-1");
+                        send_rsp_out(RSP_RVK_O, 0, false, addr_br.line_addr, reqs[reqs_fwd_stall_i].line, reqs[reqs_fwd_stall_i].word_mask);
+                        success = true;
+                    }
+
+                }
+                break;
+                default:
+                break;
+
+            }
+
+            // if we are able to serve this fwd_in, resolve fwd_stall
+            if (success)
+                fwd_stall = false;
 
 	    } else {
-            base = addr_br.set << L2_WAY_BITS;
-            bool tag_hit, word_hit;
-            l2_way_t way_hit;
-            bool empty_way_found;
-            l2_way_t empty_way;
-            tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
-
             switch (fwd_in.coh_msg) {
                 case FWD_REQ_O:
                 {
@@ -332,11 +366,11 @@ void l2_denovo::ctrl()
 	} else if (do_cpu_req) { // assuming HPROT cacheable
 
 	    addr_breakdown_t addr_br;
-	    sc_uint<REQS_BITS> reqs_hit_i;
+	    sc_uint<REQS_BITS> reqs_empty_i;
 
 	    addr_br.breakdown(cpu_req.addr);
 
-	    reqs_peek_req(addr_br.set, reqs_hit_i);
+	    reqs_peek_req(addr_br.set, reqs_empty_i);
         base = addr_br.set << L2_WAY_BITS;
 
 
@@ -402,7 +436,7 @@ void l2_denovo::ctrl()
                 }
                 else
                 {
-                    fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_hit_i);
+                    fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_empty_i);
                     send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
 
                 }
@@ -427,10 +461,12 @@ void l2_denovo::ctrl()
                         }
                     }
 
-                    {
+                    if (word_mask) {
                         HLS_DEFINE_PROTOCOL("spandex_dual_req");
                         send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                         wait();
+                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
                     }
 
                     for (int i = 0; i < WORDS_PER_LINE; i ++)
@@ -471,7 +507,7 @@ void l2_denovo::ctrl()
                 if (word_mask) // some words are present but not whole line. send reqv
                 {
                     send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
-				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_hit_i);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
                 }
                 else {
                     touched_buf[way_hit][addr_br.w_off] = true;
@@ -483,7 +519,7 @@ void l2_denovo::ctrl()
             else if (empty_way_found) {
 
 				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_hit_i);
+				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
 
 			} else {
 
@@ -501,22 +537,31 @@ void l2_denovo::ctrl()
 
                 {
                     HLS_DEFINE_PROTOCOL("spandex_dual_req");
-                    send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
-                    wait();
-                    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-                    wait();
+                    if (word_mask)
+                    {
+                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
+                        //wait();
+                    }
                 }   
+
 
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
                     HLS_UNROLL_LOOP(ON, "4");
-                    state_buf[evict_way][i] = DNV_I;
-                    touched_buf[evict_way][i] = false;
+                    // Update it now b/c set_conflict will be true
+                    // state_buf[evict_way][i] = DNV_I;
+                    // touched_buf[evict_way][i] = false;
+                    states[base + evict_way][i] = DNV_I;
+                    touched[base + evict_way][i] = false;
                 }
 
                 send_inval(line_addr_evict);
-                fill_reqs(cpu_req.cpu_msg, addr_br, tag_buf[evict_way], evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_hit_i);
                 
+                // make it set_conflict so that next ctrl loop there is an empty way
+                set_conflict = 1;
+                cpu_req_conflict = cpu_req;
 			}
 	    }
 	}
@@ -1061,7 +1106,7 @@ void l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 {
     REQS_PEEK_REQ;
 
-    set_conflict = false;
+    set_conflict = reqs_cnt == 0; // if no empty reqs left, cannot process CPU request
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
 	REQS_PEEK_REQ_LOOP;
@@ -1071,7 +1116,6 @@ void l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
 
 	if (reqs[i].set == set && reqs[i].state != DNV_I){
         set_conflict = true;
-        reqs_fwd_stall_i = i;
     }
     }
 
@@ -1085,10 +1129,10 @@ void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
     REQS_PEEK_REQ;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_REQ_LOOP;
+        REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state == DNV_I)
-	    reqs_i = i;
+        if (reqs[i].state == DNV_I)
+            reqs_i = i;
     }
 
 #ifdef L2_DEBUG
@@ -1104,10 +1148,12 @@ void l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
     fwd_stall = false;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_REQ_LOOP;
+        REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I)
-	    fwd_stall = true;
+        if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I){
+            fwd_stall = true;
+            reqs_fwd_stall_i = i;
+        }
     }
 }
 
