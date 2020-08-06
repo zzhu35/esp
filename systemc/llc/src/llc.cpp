@@ -1550,6 +1550,15 @@ void llc::ctrl()
                                 word_owner_mask = owners_buf[way] & req_in.word_mask;
                                 if (word_owner_mask) {
                                         send_fwd_with_owner_mask_data(FWD_WTfwd, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way], req_in.line);
+                                        if(!owners_buf[way] & req_in.word_mask){
+                                                // some words do not have owner, WT them
+                                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                                        if ((!owners_buf[way] & req_in.word_mask) & (1 << i)) {
+                                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                        }
+                                                }
+                                        }
                                         //fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
                                 
                                         // write new data
@@ -1567,7 +1576,8 @@ void llc::ctrl()
                                                         lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
                                                 }
                                         }
-                                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                        // Not send RSP_O for now
+                                        //send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
 
                                 }
                                 dirty_bits_buf[way] = 1;

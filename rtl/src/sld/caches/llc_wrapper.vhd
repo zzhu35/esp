@@ -972,7 +972,7 @@ begin  -- architecture rtl
         if coherence_req_empty = '0' then
 
           case reg.coh_msg is
-            when REQ_WB | REQ_WTdata | REQ_WT | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
          
 
             coherence_req_rdreq <= '1';
@@ -1272,7 +1272,7 @@ begin  -- architecture rtl
 
           case reg.coh_msg is
 
-            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata =>
             
               reg.word_cnt := 0;
               reg.state    := rcv_data;
