@@ -26,10 +26,10 @@ int main(int argc, char **argv)
 	char str[50];
 	int tmp, tmp2;
     cprintf("Hello from CPP!\n");
-	volatile int* c = (volatile int*)&tmp;
-	volatile int* d = (volatile int*)&tmp2;
+	// volatile int* c = (volatile int*)&tmp;
+	// volatile int* d = (volatile int*)&tmp2;
 
-	atomic<int> atom(0);
+	// atomic<int> atom(0);
 
 	// memory_order_relaxed
 	// memory_order_consume
@@ -39,11 +39,11 @@ int main(int argc, char **argv)
 	// memory_order_seq_cst
 
 	// tmp = atom.fetch_add(0, std::memory_order_seq_cst); // atomic read
-	atom.store(0, std::memory_order_relaxed);
-	cprintint(atom.load(std::memory_order_relaxed)); cprintf("\n");
+	// atom.store(0, std::memory_order_relaxed);
+	// cprintint(atom.load(std::memory_order_relaxed)); cprintf("\n");
 
-	atom.store(1, std::memory_order_seq_cst); // atomic write
-    cprintf("You should see a single cycle spike in sync_l2\n");
+	// atom.store(1, std::memory_order_seq_cst); // atomic write
+    // cprintf("You should see a single cycle spike in sync_l2\n");
 
 	// atom.store(1, std::memory_order_seq_cst);
 	// tmp = atom.load(std::memory_order_seq_cst);
@@ -52,6 +52,8 @@ int main(int argc, char **argv)
 	// cprintint(tmp); cprintf("\n");
 
 	// riscv_sp_test();
+
+	lock_test(1);
 
 	return 0;
 }

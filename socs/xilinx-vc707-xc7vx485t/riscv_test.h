@@ -170,6 +170,48 @@ void evict(int *ptr, int offset, int ways, int max_range, int hsize)
     }
 }
 
+void spin_lock(volatile int* l)
+{
+    int lock = 1;
+    print_uart("Lock Function\n");
+    print_uart("Lock old: ");
+    print_uart_int(lock);
+    print_uart("\n");
+
+    int busy;
+    int tmp = 1;
+
+    __asm__ __volatile__ (
+		"amoswap.w    %0, %2, %1  \n"
+    : "=r" (busy), "+A" (lock)
+    : "r" (tmp)
+    : "memory");
+
+    print_uart("Lock new: ");
+    print_uart_int(lock);
+    print_uart("\n");
+    print_uart("Busy: ");
+    print_uart_int(busy);
+    print_uart("\n");
+    print_uart("Tmp: ");
+    print_uart_int(tmp);
+    print_uart("\n");
+
+
+}
+
+void lock_test(int loop)
+{
+
+    volatile uint32_t l = 0;
+    for (; loop > 0; loop--)
+    {
+
+        spin_lock(&l);
+
+    }
+}
+
 
 void data_structures_setup()
 {
