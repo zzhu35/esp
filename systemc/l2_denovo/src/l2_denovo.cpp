@@ -197,6 +197,12 @@ void l2_denovo::ctrl()
 	    addr_br.breakdown(fwd_in.addr << OFFSET_BITS);
         fwd_stall_ended = false;
 	    reqs_peek_fwd(addr_br);
+        base = addr_br.set << L2_WAY_BITS;
+        bool tag_hit, word_hit;
+        l2_way_t way_hit;
+        bool empty_way_found;
+        l2_way_t empty_way;
+        tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
         if (fwd_stall) {
 		    SET_CONFLICT;
             fwd_in_stalled = fwd_in;
@@ -239,13 +245,6 @@ void l2_denovo::ctrl()
                 fwd_stall = false;
 
 	    } else {
-            base = addr_br.set << L2_WAY_BITS;
-            bool tag_hit, word_hit;
-            l2_way_t way_hit;
-            bool empty_way_found;
-            l2_way_t empty_way;
-            tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
-
             switch (fwd_in.coh_msg) {
                 case FWD_REQ_O:
                 {
@@ -543,23 +542,26 @@ void l2_denovo::ctrl()
                         send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                         fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
                         reqs[reqs_empty_i].tag = tag_buf[evict_way];
-                        wait();
+                        //wait();
                     }
-                    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-                    wait();
                 }   
 
 
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
                     HLS_UNROLL_LOOP(ON, "4");
-                    state_buf[evict_way][i] = DNV_I;
-                    touched_buf[evict_way][i] = false;
+                    // Update it now b/c set_conflict will be true
+                    // state_buf[evict_way][i] = DNV_I;
+                    // touched_buf[evict_way][i] = false;
+                    states[base + evict_way][i] = DNV_I;
+                    touched[base + evict_way][i] = false;
                 }
 
                 send_inval(line_addr_evict);
-                fill_reqs(cpu_req.cpu_msg, addr_br, tag_buf[evict_way], evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
                 
+                // make it set_conflict so that next ctrl loop there is an empty way
+                set_conflict = 1;
+                cpu_req_conflict = cpu_req;
 			}
 	    }
 	}
@@ -1127,10 +1129,10 @@ void l2_denovo::reqs_peek_flush(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
     REQS_PEEK_REQ;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_REQ_LOOP;
+        REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state == DNV_I)
-	    reqs_i = i;
+        if (reqs[i].state == DNV_I)
+            reqs_i = i;
     }
 
 #ifdef L2_DEBUG
@@ -1146,11 +1148,12 @@ void l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
     fwd_stall = false;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_REQ_LOOP;
+        REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I)
-	    fwd_stall = true;
-        reqs_fwd_stall_i = i;
+        if (reqs[i].tag == addr_br.tag && reqs[i].set == addr_br.set && reqs[i].state != DNV_I){
+            fwd_stall = true;
+            reqs_fwd_stall_i = i;
+        }
     }
 }
 
