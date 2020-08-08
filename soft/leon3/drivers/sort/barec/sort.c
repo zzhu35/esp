@@ -45,6 +45,13 @@ static void sync()
 
 }
 
+static void print_counter(){
+	volatile long long int* ptr = 0xb0000000;
+	long long int data = *ptr;
+	printf("count: %x", (int) (data >> 32 & 0xffffffff));
+	printf("%x\n", (int) (data & 0xffffffff));
+}
+
 
 static int validate_sorted(float *array, int len)
 {
@@ -86,11 +93,15 @@ int main(int argc, char * argv[])
 	struct esp_device *espdevs = NULL;
 	unsigned coherence;
 
+	print_counter();
+
 	ndev = probe(&espdevs, SLD_SORT, DEV_NAME);
 	if (!ndev) {
 		printf("Error: %s device not found!\n", DEV_NAME);
 		exit(EXIT_FAILURE);
 	}
+
+	print_counter();
 
 	printf("Test parameters: [LEN, BATCH] = [%d, %d]\n\n", SORT_LEN, SORT_BATCH);
 	for (n = 0; n < ndev; n++) {
@@ -175,6 +186,7 @@ int main(int argc, char * argv[])
 
 		// Start accelerator
 		printf("  Start..\n");
+		print_counter();
 		iowrite32(dev, CMD_REG, CMD_MASK_START);
 
 		done = 0;
@@ -183,6 +195,7 @@ int main(int argc, char * argv[])
 			done &= STATUS_MASK_DONE;
 		}
 		iowrite32(dev, CMD_REG, 0x0);
+		print_counter();
 		printf("  Done\n");
 
 		/* /\* Print output *\/ */

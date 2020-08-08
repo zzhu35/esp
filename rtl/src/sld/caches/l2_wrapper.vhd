@@ -153,6 +153,8 @@ architecture rtl of l2_wrapper is
   signal stats_ready            : std_ulogic;
   signal stats_valid            : std_ulogic;
   signal stats_data             : std_ulogic;
+  -- counter
+  signal counter_data           : std_logic_vector(63 downto 0);
 
 ----------------------------------------------------------------------------
 -- APB slave signals
@@ -175,7 +177,7 @@ architecture rtl of l2_wrapper is
   -- AHB slave FSM signals
   -------------------------------------------------------------------------------
   type ahbs_fsm is (idle, load_req, load_rsp, load_alloc, store_req, flush_req, mem_req,
-                    send_wr_ack);
+                    send_wr_ack, load_rsp_counter);
 
   type ahbs_reg_type is record
     state         : ahbs_fsm;
@@ -908,6 +910,7 @@ begin  -- architecture rtl of l2_wrapper
       fwd_in_reg     <= FWD_IN_REG_DEFAULT;
       rsp_in_reg     <= RSP_IN_REG_DEFAULT;
       load_alloc_reg <= LOAD_ALLOC_REG_DEFAULT;
+      counter_data   <= (others => '0');
 
     elsif clk'event and clk = '1' then
 
@@ -919,6 +922,7 @@ begin  -- architecture rtl of l2_wrapper
       rsp_out_reg    <= rsp_out_reg_next;
       rsp_in_reg     <= rsp_in_reg_next;
       load_alloc_reg <= load_alloc_reg_next;
+      counter_data   <= counter_data + 1;
 
     end if;
   end process fsms_state_update;
@@ -1316,6 +1320,10 @@ begin  -- architecture rtl of l2_wrapper
 
       when send_wr_ack =>
         reg.asserts(AS_INV_STATE) := '1';
+        reg.state := idle;
+
+      -- needed because of the counter state
+      when others =>
         reg.state := idle;
 
     end case;
@@ -1903,7 +1911,10 @@ begin  -- architecture rtl of l2_wrapper
     variable alloc_reg     : load_alloc_reg_type;
     variable selected      : std_ulogic;
     variable valid_axi_req : std_ulogic;
+    variable read_counter  : std_ulogic;
+    variable counter_data_line : line_t;
     constant err_marker    : std_logic_vector(31 downto 0) := x"dadecace";
+    constant counter_addr  : std_logic_vector(31 downto 0) := x"b0000000";
 
   begin
     -- copy current state into a variable
@@ -1911,6 +1922,9 @@ begin  -- architecture rtl of l2_wrapper
     xreg        := axi_reg;
     reg.asserts := (others => '0');
     alloc_reg   := load_alloc_reg;
+    read_counter := '0';
+    counter_data_line := (others => '0');
+    counter_data_line(63 downto 0) := counter_data;
 
     -- Default bus slave response
     -- aw
@@ -2010,14 +2024,18 @@ begin  -- architecture rtl of l2_wrapper
         elsif valid_axi_req = '1' then
 
           if mosi.aw.valid = '0' then
+            if reg.haddr /= counter_addr then
+              cpu_req_valid  <= '1';
+              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
 
-            cpu_req_valid  <= '1';
-            alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-            if cpu_req_ready = '1' then
-              reg.state := load_rsp;
+              if cpu_req_ready = '1' then
+                reg.state := load_rsp;
+              else
+                reg.state := load_req;
+              end if;
             else
-              reg.state := load_req;
+              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+              reg.state := load_rsp_counter;
             end if;
 
           else
@@ -2138,13 +2156,136 @@ begin  -- architecture rtl of l2_wrapper
 
               else
 
-                cpu_req_valid  <= '1';
-                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-                if cpu_req_ready = '1' then
-                  reg.state := load_rsp;
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
                 else
-                  reg.state := load_req;
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
+                end if;
+              end if;
+
+            else
+
+              reg.state := store_req;
+
+            end if;
+
+          else
+
+            reg.state := idle;
+
+          end if;
+
+          if xreg.len /= axi_len_zero then
+            reg.haddr := reg.haddr + addr_incr(reg.hsize);
+            xreg.len := xreg.len - 1;
+          end if;
+
+        end if;
+      
+      -- LOAD RESPONSE FOR COUNTER
+      when load_rsp_counter =>
+        -- rd_rsp_ready <= mosi.r.ready;
+
+        alloc_reg.line := counter_data_line;
+
+        -- if rd_rsp_valid = '1' then
+          somi.r.data <= read_from_line(reg.haddr, counter_data_line);
+          somi.r.valid <= '1';
+        -- end if;
+
+        if mosi.r.ready = '1' then
+
+          if xreg.len = axi_len_zero then
+            somi.r.last <= '1';
+
+            if valid_axi_req = '1' then
+              if mosi.aw.valid = '0' then
+                reg.cpu_msg := '0' & mosi.ar.lock;
+                reg.hsize   := mosi.ar.size;
+                reg.hprot   := '0' & not mosi.ar.prot(2);
+                reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
+                xreg.id     := mosi.ar.id;
+                xreg.len    := mosi.ar.len;
+                xreg.lock   := mosi.ar.lock;
+                xreg.cache  := mosi.ar.cache;
+                xreg.atop   := (others => '0');
+
+                somi.ar.ready <= '1';
+              else
+                reg.cpu_msg := '1' & mosi.aw.lock;
+                reg.hsize   := mosi.aw.size;
+                reg.hprot   := '0' & not mosi.aw.prot(2);
+                reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
+                xreg.id     := mosi.aw.id;
+                xreg.len    := mosi.aw.len;
+                xreg.lock   := mosi.aw.lock;
+                xreg.cache  := mosi.aw.cache;
+                xreg.atop   := mosi.aw.atop;
+
+                somi.aw.ready <= '1';
+              end if;
+
+            end if;
+
+          else
+
+            valid_axi_req := '1';
+
+          end if;
+
+          if flush_due = '1' and xreg.lock = '0' and
+            not (reg.hprot(0) = '0' and valid_axi_req = '1') then
+
+            flush_valid <= '1';
+
+            if valid_axi_req = '1' then
+              if flush_ready = '0' then
+                reg.state := flush_req;
+              else
+                reg.state := mem_req;
+              end if;
+            else
+              reg.state := idle;
+            end if;
+
+          elsif valid_axi_req = '1' then
+
+            if mosi.aw.valid = '0' or xreg.len /= axi_len_zero then
+
+              if load_alloc_reg.addr = reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO) then
+
+                reg.state := load_alloc;
+
+              else
+
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
+                else
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
                 end if;
               end if;
 
@@ -2255,13 +2396,18 @@ begin  -- architecture rtl of l2_wrapper
 
               else
 
-                cpu_req_valid  <= '1';
-                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-                if cpu_req_ready = '1' then
-                  reg.state := load_rsp;
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
                 else
-                  reg.state := load_req;
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
                 end if;
               end if;
 
@@ -2459,13 +2605,18 @@ begin  -- architecture rtl of l2_wrapper
 
             if mosi.aw.valid = '0' then
 
-              cpu_req_valid  <= '1';
-              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+              if reg.haddr /= counter_addr then
+                cpu_req_valid  <= '1';
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
 
-              if cpu_req_ready = '1' then
-                reg.state := load_rsp;
+                if cpu_req_ready = '1' then
+                  reg.state := load_rsp;
+                else
+                  reg.state := load_req;
+                end if;
               else
-                reg.state := load_req;
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                reg.state := load_rsp_counter;
               end if;
 
             else
