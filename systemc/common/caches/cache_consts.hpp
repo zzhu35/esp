@@ -69,6 +69,7 @@
 #define DMA_MSG_TYPE_WIDTH      1
 #define MIX_MSG_TYPE_WIDTH	(COH_MSG_TYPE_WIDTH + DMA_MSG_TYPE_WIDTH)
 #define HSIZE_WIDTH		3
+#define DCS_WIDTH               2
 // TODO: HPROT_WIDTH should be 1, but that triggers a bug of the memory generator
 #define HPROT_WIDTH		2
 #define INVACK_CNT_WIDTH	MAX_N_L2_BITS
@@ -245,6 +246,9 @@
 #define WRITE		2
 #define WRITE_ATOMIC	3
 
+// CPU DCS
+#define DCS_ReqWTfwd    0
+
 // LLC requests (LLC to mem)
 #define LLC_READ  0
 #define LLC_WRITE 1
@@ -307,6 +311,7 @@ end original ESP messages
 #define REQ_AMO_MIN     13 // SMIN
 #define REQ_AMO_MINU    14 // UMIN
 /* DMA currently not used by Spandex */
+#define REQ_WTfwd       15
 
 
 // forwards (L3 to L2/TU)
@@ -317,6 +322,7 @@ end original ESP messages
 #define FWD_RVK_O      4 // same as getm_llc
 #define FWD_REQ_V      7 // non existent in ESP
 #define FWD_REQ_O      6
+#define FWD_WTfwd      5
 
 // response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
 #define RSP_S          0

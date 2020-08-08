@@ -563,6 +563,22 @@ inline void llc::send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t re
     llc_fwd_out.nb_put(fwd_out);
 }
 
+inline void llc::send_fwd_out_data(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id, word_mask_t word_mask, line_t data)
+{
+    SEND_FWD_OUT;
+    llc_fwd_out_t fwd_out;
+
+    fwd_out.coh_msg = coh_msg;
+    fwd_out.addr = addr;
+    fwd_out.req_id = req_id;
+    fwd_out.dest_id = dest_id;
+    fwd_out.word_mask = word_mask;
+    fwd_out.line = data;
+    while (!llc_fwd_out.nb_can_put())
+        wait();
+    llc_fwd_out.nb_put(fwd_out);
+}
+
 inline bool llc::send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data)
 {
         fwd_coal_send_count = 0;
@@ -602,6 +618,44 @@ inline bool llc::send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, c
         return fwd_coal_send_count > 0;
 }
 
+inline bool llc::send_fwd_with_owner_mask_data(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data, line_t data_out)
+{
+        fwd_coal_send_count = 0;
+        for (int i = 0; i < WORDS_PER_LINE; i++) {
+                if (word_mask & (1 << i)) {
+                        int owner = data.range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int();
+                        if (owner != req_id || coh_msg == FWD_RVK_O) { // skip if requestor already owns word, still send if revoke
+                                bool coal = false;
+                                for (int j = 0; j < fwd_coal_send_count; j++)
+                                {
+                                        if (fwd_coal_temp_dest[j] == owner)
+                                        {
+                                                fwd_coal_word_mask[j] = fwd_coal_word_mask[j] | (1 << i);
+                                                coal = true;
+                                                break;
+                                        }
+                                        wait();
+                                }
+                                // new forward dest
+                                if (!coal)
+                                {
+                                        fwd_coal_temp_dest[fwd_coal_send_count] = owner;
+                                        fwd_coal_word_mask[fwd_coal_send_count] = 0 | (1 << i);
+                                        fwd_coal_send_count = fwd_coal_send_count + 1;
+                                }
+                        }
+                }
+                wait();
+        }
+        for (int i = 0; i < fwd_coal_send_count; i++)
+        {
+                HLS_DEFINE_PROTOCOL("inv_owners");
+                send_fwd_out_data(coh_msg, addr, req_id, fwd_coal_temp_dest[i], fwd_coal_word_mask[i], data_out);
+                fwd_coal_word_mask[i] = 0;
+                wait();
+        }
+        return fwd_coal_send_count > 0;
+}
 
 inline int llc::send_inv_with_sharer_list(line_addr_t addr, sharers_t sharer_list)
 {
@@ -1441,6 +1495,97 @@ void llc::ctrl()
                 case LLC_S :
                         {
                             // REQWT_S;
+                            // invalidate
+                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                        if (req_in.word_mask & (1 << i)) {
+                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                        }
+                                }
+                            int cnt = send_inv_with_sharer_list(req_in.addr, sharers_buf[way]);
+                            fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_SV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                            reqs[reqs_empty_i].invack_cnt = cnt;
+                            dirty_bits_buf[way] = 1;
+                        }
+                        break;
+
+                default :
+                    GENERIC_ASSERT;
+                }
+
+                break;
+
+            case REQ_WTfwd :
+
+                switch (states_buf[way]) {
+
+                case LLC_I :
+                        {
+                                {
+                                        HLS_DEFINE_PROTOCOL("send_men_req_wtfwd");
+                                        send_mem_req(READ, req_in.addr, req_in.hprot, 0);
+                                        get_mem_rsp(lines_buf[way]);
+                                }
+
+                                // write new data
+                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1151");
+                                        if (req_in.word_mask & (1 << i)) {
+                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                        }
+                                }
+                                hprots_buf[way]     = req_in.hprot;
+                                tags_buf[way]       = line_br.tag;
+                                dirty_bits_buf[way] = 1;
+                                states_buf[way] = LLC_V;
+                                {
+                                        HLS_DEFINE_PROTOCOL("send_rsp_1157");
+                                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+
+                                }
+                        }
+                        break;
+                case LLC_V :
+                        {
+                                word_owner_mask = owners_buf[way] & req_in.word_mask;
+                                if (word_owner_mask) {
+                                        send_fwd_with_owner_mask_data(FWD_WTfwd, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way], req_in.line);
+                                        if(!owners_buf[way] & req_in.word_mask){
+                                                // some words do not have owner, WT them
+                                                for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                                        HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                                        if ((!owners_buf[way] & req_in.word_mask) & (1 << i)) {
+                                                                lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                        }
+                                                }
+                                        }
+                                        //fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                                
+                                        // write new data
+                                        // for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                        //         HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                        //         if (req_in.word_mask & (1 << i)) {
+                                        //                 lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                        //                 owners_buf[way] = owners_buf[way] & (~ (1 << i)); // clear owner bit
+                                        //         }
+                                        // }
+                                } else {
+                                        for (int i = 0; i < WORDS_PER_LINE; i++) {
+                                                HLS_UNROLL_LOOP(ON, "set-ownermask-1176");
+                                                if (req_in.word_mask & (1 << i)) {
+                                                        lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
+                                                }
+                                        }
+                                        // Not send RSP_O for now
+                                        //send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+
+                                }
+                                dirty_bits_buf[way] = 1;
+                        }
+                        break;
+                case LLC_S :
+                        {
+                            // REQWTfwd_S;
                             // invalidate
                                 for (int i = 0; i < WORDS_PER_LINE; i++) {
                                         HLS_UNROLL_LOOP(ON, "set-ownermask-1176");

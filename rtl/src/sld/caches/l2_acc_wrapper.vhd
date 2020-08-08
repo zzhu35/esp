@@ -52,6 +52,10 @@ entity l2_acc_wrapper is
     dma_length                : in  addr_t;
     dma_address               : in  addr_t;
     dma_ready                 : out std_ulogic;
+    -- dma_dcs_en                : in  std_ulogic;
+    -- dma_use_owner_pred        : in  std_ulogic;
+    -- dma_dcs                   : in  dcs_t;
+    -- dma_pred_cid              : in  cache_id_t;
     -- cache->acc (data only)
     dma_rcv_ready             : in  std_ulogic;
     dma_rcv_data              : out noc_flit_type;
@@ -102,6 +106,10 @@ architecture rtl of l2_acc_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
+  signal cpu_req_data_dcs_en    : std_ulogic;
+  signal cpu_req_data_use_owner_pred : std_ulogic;
+  signal cpu_req_data_dcs       : dcs_t;
+  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -143,6 +151,7 @@ architecture rtl of l2_acc_wrapper is
   signal fwd_in_data_addr       : line_addr_t;
   signal fwd_in_data_req_id     : cache_id_t;
   signal fwd_in_data_word_mask  : word_mask_t;
+  signal fwd_in_data_line       : line_t;
   signal rsp_in_valid           : std_ulogic;
   signal rsp_in_ready           : std_ulogic;
   signal rsp_in_data_coh_msg    : coh_msg_t;
@@ -181,6 +190,10 @@ architecture rtl of l2_acc_wrapper is
     valid_words_cnt : integer range 0 to WORDS_PER_LINE;
     msw             : integer range 0 to WORDS_PER_LINE - 1;
     length          : addr_t;
+    dcs_en          : std_ulogic;
+    use_owner_pred  : std_ulogic;
+    dcs             : dcs_t;
+    pred_cid        : cache_id_t;
     -- rsp
     line            : line_t;
     cnt             : integer range 0 to WORDS_PER_LINE - 1;
@@ -189,6 +202,10 @@ architecture rtl of l2_acc_wrapper is
   constant REQ_ACC_REG_DEFAULT : req_acc_reg_type := (
     state           => idle,
     addr            => (others => '0'),
+    dcs_en          => '0',
+    use_owner_pred  => '0',
+    dcs             => (others => '0'),
+    pred_cid        => (others => '0'),
     offset          => 0,
     valid_words_cnt => 0,
     msw             => 0,
@@ -280,13 +297,16 @@ architecture rtl of l2_acc_wrapper is
   -- FSM: Forward from  NoC
   -------------------------------------------------------------------------------
 
-  type fwd_in_fsm is (rcv_header, rcv_addr);
+  type fwd_in_fsm is (rcv_header, rcv_addr, rcv_data);
 
   type fwd_in_reg_type is record
     state   : fwd_in_fsm;
     coh_msg : mix_msg_t;
     req_id  : cache_id_t;
     word_mask : word_mask_t;
+    addr    : line_addr_t;
+    line    : line_t;
+    word_cnt : natural range 0 to 3;
     asserts : asserts_fwd_t;
   end record fwd_in_reg_type;
 
@@ -295,6 +315,9 @@ architecture rtl of l2_acc_wrapper is
     coh_msg => (others => '0'),
     req_id  => (others => '0'),
     word_mask => (others => '0'),
+    addr    => (others => '0'),
+    line    => (others => '0'),
+    word_cnt => 0,
     asserts => (others => '0'));
 
   signal fwd_in_reg      : fwd_in_reg_type := FWD_IN_REG_DEFAULT;
@@ -441,6 +464,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -482,6 +509,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -518,6 +546,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -559,6 +591,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -595,6 +628,10 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -636,6 +673,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -797,6 +835,10 @@ begin  -- architecture rtl of l2_acc_wrapper
     cpu_req_valid        <= '0';
     cpu_req_data_cpu_msg <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
+    cpu_req_data_dcs_en  <= '0';
+    cpu_req_data_use_owner_pred <= '0';
+    cpu_req_data_dcs     <= (others => '0');
+    cpu_req_data_pred_cid <= (others => '0');
     cpu_req_data_word    <= (others => '0');
 
     rd_rsp_ready <= '0';
@@ -815,6 +857,16 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= dma_address;
+
+            -- cpu_req_data_dcs_en  <= dma_dcs_en;
+            -- cpu_req_data_use_owner_pred <= dma_use_owner_pred;
+            -- cpu_req_data_dcs     <= dma_dcs;
+            -- cpu_req_data_pred_cid <= dma_pred_cid;
+
+            -- reg.dcs_en := dma_dcs_en;
+            -- reg.use_owner_pred := dma_use_owner_pred;
+            -- reg.dcs := dma_dcs;
+            -- reg.pred_cid := dma_pred_cid;
 
             reg.offset := to_integer(unsigned(dma_address(W_OFF_RANGE_HI downto W_OFF_RANGE_LO)));
 
@@ -837,6 +889,11 @@ begin  -- architecture rtl of l2_acc_wrapper
 
             reg.state := store;
 
+            -- reg.dcs_en := dma_dcs_en;
+            -- reg.use_owner_pred := dma_use_owner_pred;
+            -- reg.dcs := dma_dcs;
+            -- reg.pred_cid := dma_pred_cid;
+
           end if;
 
         end if;
@@ -854,6 +911,11 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= reg.addr;
+
+            -- cpu_req_data_dcs_en  <= reg.dcs_en;
+            -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+            -- cpu_req_data_dcs     <= reg.dcs;
+            -- cpu_req_data_pred_cid <= reg.pred_cid;
 
             reg.line   := rd_rsp_data_line;
             reg.offset := 0;
@@ -935,6 +997,17 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_addr    <= reg.addr;
             cpu_req_data_word    <= dma_snd_data(ARCH_BITS - 1 downto 0);
 
+            -- cpu_req_data_dcs_en  <= reg.dcs_en;
+            -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+            -- cpu_req_data_dcs     <= reg.dcs;
+            -- cpu_req_data_pred_cid <= reg.pred_cid;
+
+            -------------------------------------------------------------------------------------------------------------------
+            cpu_req_data_dcs_en  <= '1';
+            cpu_req_data_use_owner_pred <= '0';
+            cpu_req_data_dcs     <= "00";
+            cpu_req_data_pred_cid <= "0000";
+
             reg.addr := reg.addr + BYTES_PER_WORD;
 
             if get_preamble(NOC_FLIT_SIZE, dma_snd_data) = PREAMBLE_TAIL then
@@ -1015,7 +1088,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           case mix_msg is
 
-            when REQ_WB | REQ_WTdata | REQ_WT =>
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1129,7 +1202,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1312,7 +1385,6 @@ end process fsm_fwd_out;
 -----------------------------------------------------------------------------
   fsm_fwd_in : process (fwd_in_reg, fwd_in_ready,
                         coherence_fwd_empty, coherence_fwd_data_out) is
-
     variable reg          : fwd_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
@@ -1331,6 +1403,7 @@ end process fsm_fwd_out;
     fwd_in_data_addr    <= (others => '0');
     fwd_in_data_req_id  <= (others => '0');
     fwd_in_data_word_mask    <= (others => '0');
+    fwd_in_data_line    <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_fwd_rdreq <= '0';
@@ -1360,18 +1433,63 @@ end process fsm_fwd_out;
 
       -- RECEIVE ADDRESS
       when rcv_addr =>
-        if coherence_fwd_empty = '0' and fwd_in_ready = '1' then
+        if coherence_fwd_empty = '0' then
 
-          coherence_fwd_rdreq <= '1';
+          case reg.coh_msg is
+            when FWD_WTfwd =>
 
-          fwd_in_valid        <= '1';
-          fwd_in_data_coh_msg <= reg.coh_msg;
-          fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-          fwd_in_data_req_id  <= reg.req_id;
-          fwd_in_data_word_mask    <= reg.word_mask;
+              coherence_fwd_rdreq <= '1';
 
-          reg.state := rcv_header;
+              reg.addr     := coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+              reg.word_cnt := 0;
+              reg.state    := rcv_data;
 
+            when others =>
+
+              if fwd_in_ready = '1' then
+
+                coherence_fwd_rdreq <= '1';
+
+                fwd_in_valid        <= '1';
+                fwd_in_data_coh_msg <= reg.coh_msg;
+                fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                fwd_in_data_req_id  <= reg.req_id;
+                fwd_in_data_word_mask    <= reg.word_mask;
+
+                reg.state := rcv_header;
+
+              end if;
+          end case;
+        end if;
+
+      when rcv_data =>
+        if coherence_fwd_empty = '0' then
+          if reg.word_cnt = WORDS_PER_LINE - 1 then
+            if fwd_in_ready = '1' then
+              coherence_fwd_rdreq <= '1';
+
+              reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                      BITS_PER_WORD * reg.word_cnt)
+                := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+              reg.state := rcv_header;
+
+              fwd_in_valid        <= '1';
+              fwd_in_data_coh_msg <= reg.coh_msg;
+              fwd_in_data_addr    <= reg.addr;
+              fwd_in_data_line    <= reg.line;
+              fwd_in_data_req_id  <= reg.req_id;
+              fwd_in_data_word_mask    <= reg.word_mask;
+            end if;
+
+          else
+            coherence_fwd_rdreq <= '1';
+
+            reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                    (BITS_PER_WORD * reg.word_cnt))
+              := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+
+            reg.word_cnt := reg.word_cnt + 1;
+          end if;
         end if;
 
     end case;

@@ -103,6 +103,10 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
   signal cpu_req_data_amo       : amo_t;
+  signal cpu_req_data_dcs_en    : std_ulogic;
+  signal cpu_req_data_use_owner_pred : std_ulogic;
+  signal cpu_req_data_dcs       : dcs_t;
+  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -144,6 +148,7 @@ architecture rtl of l2_wrapper is
   signal fwd_in_data_addr       : line_addr_t;
   signal fwd_in_data_req_id     : cache_id_t;
   signal fwd_in_data_word_mask  : word_mask_t;
+  signal fwd_in_data_line       : line_t;
   signal rsp_in_valid           : std_ulogic;
   signal rsp_in_ready           : std_ulogic;
   signal rsp_in_data_coh_msg    : coh_msg_t;
@@ -160,6 +165,8 @@ architecture rtl of l2_wrapper is
   signal stats_ready            : std_ulogic;
   signal stats_valid            : std_ulogic;
   signal stats_data             : std_ulogic;
+  -- counter
+  signal counter_data           : std_logic_vector(63 downto 0);
 
 ----------------------------------------------------------------------------
 -- APB slave signals
@@ -182,7 +189,7 @@ architecture rtl of l2_wrapper is
   -- AHB slave FSM signals
   -------------------------------------------------------------------------------
   type ahbs_fsm is (idle, load_req, load_rsp, load_alloc, store_req, flush_req, mem_req,
-                    send_wr_ack);
+                    send_wr_ack, load_rsp_counter);
 
   type ahbs_reg_type is record
     state         : ahbs_fsm;
@@ -190,6 +197,10 @@ architecture rtl of l2_wrapper is
     hsize         : hsize_t;
     hprot         : hprot_t;
     haddr         : addr_t;
+    dcs_en        : std_ulogic;
+    use_owner_pred: std_ulogic;
+    dcs           : dcs_t;
+    pred_cid      : cache_id_t;
     req_memorized : std_ulogic;
     asserts       : asserts_ahbs_t;
   end record;
@@ -200,6 +211,10 @@ architecture rtl of l2_wrapper is
     hsize         => HSIZE_W,           -- 1 word
     hprot         => DEFAULT_HPROT,     -- bufferable, non cacheable
     haddr         => (others => '0'),
+    dcs_en        => '0',
+    use_owner_pred=> '0',
+    dcs           => (others => '0'),
+    pred_cid      => (others => '0'),
     req_memorized => '0',
     asserts       => (others => '0'));
 
@@ -358,13 +373,16 @@ architecture rtl of l2_wrapper is
   -- FSM: Forward from  NoC
   -------------------------------------------------------------------------------
 
-  type fwd_in_fsm is (rcv_header, rcv_addr);
+  type fwd_in_fsm is (rcv_header, rcv_addr, rcv_data);
 
   type fwd_in_reg_type is record
     state   : fwd_in_fsm;
     coh_msg : mix_msg_t;
     req_id  : cache_id_t;
     word_mask : word_mask_t;
+    addr    : line_addr_t;
+    line    : line_t;
+    word_cnt : natural range 0 to 3;
     asserts : asserts_fwd_t;
   end record fwd_in_reg_type;
 
@@ -373,6 +391,9 @@ architecture rtl of l2_wrapper is
     coh_msg => (others => '0'),
     req_id  => (others => '0'),
     word_mask => (others => '0'),
+    addr    => (others => '0'),
+    line    => (others => '0'),
+    word_cnt => 0,
     asserts => (others => '0'));
 
   signal fwd_in_reg      : fwd_in_reg_type := FWD_IN_REG_DEFAULT;
@@ -490,6 +511,11 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of cpu_req_data_addr      : signal is "true";
   attribute mark_debug of cpu_req_data_word      : signal is "true";
   attribute mark_debug of cpu_req_data_amo       : signal is "true";
+  attribute mark_debug of cpu_req_data_dcs_en    : signal is "true";
+  attribute mark_debug of cpu_req_data_use_owner_pred : signal is "true";
+  attribute mark_debug of cpu_req_data_dcs       : signal is "true";
+  attribute mark_debug of cpu_req_data_pred_cid  : signal is "true";
+  
   attribute mark_debug of flush_ready            : signal is "true";
   attribute mark_debug of flush_valid            : signal is "true";
   attribute mark_debug of flush_data             : signal is "true";
@@ -520,6 +546,7 @@ architecture rtl of l2_wrapper is
   attribute mark_debug of fwd_in_data_coh_msg    : signal is "true";
   attribute mark_debug of fwd_in_data_addr       : signal is "true";
   attribute mark_debug of fwd_in_data_req_id     : signal is "true";
+  attribute mark_debug of fwd_in_data_line       : signal is "true";
   attribute mark_debug of rsp_in_valid           : signal is "true";
   attribute mark_debug of rsp_in_ready           : signal is "true";
   attribute mark_debug of rsp_in_data_coh_msg    : signal is "true";
@@ -560,6 +587,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -601,6 +632,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -635,6 +667,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hsize     => cpu_req_data_hsize,
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
@@ -678,6 +714,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -712,6 +749,10 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hsize     => cpu_req_data_hsize,
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
       l2_flush_ready            => flush_ready,
@@ -755,6 +796,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
       l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
@@ -930,6 +972,7 @@ begin  -- architecture rtl of l2_wrapper
       rsp_in_reg     <= RSP_IN_REG_DEFAULT;
       fwd_out_reg    <= FWD_OUT_REG_DEFAULT;
       load_alloc_reg <= LOAD_ALLOC_REG_DEFAULT;
+      counter_data   <= (others => '0');
 
     elsif clk'event and clk = '1' then
 
@@ -942,6 +985,7 @@ begin  -- architecture rtl of l2_wrapper
       fwd_out_reg    <= fwd_out_reg_next;
       rsp_in_reg     <= rsp_in_reg_next;
       load_alloc_reg <= load_alloc_reg_next;
+      counter_data   <= counter_data + 1;
 
     end if;
   end process fsms_state_update;
@@ -1341,6 +1385,10 @@ begin  -- architecture rtl of l2_wrapper
         reg.asserts(AS_INV_STATE) := '1';
         reg.state := idle;
 
+      -- needed because of the counter state
+      when others =>
+        reg.state := idle;
+
     end case;
 
     ahbs_reg_next       <= reg;
@@ -1503,7 +1551,7 @@ begin  -- architecture rtl of l2_wrapper
 
           case mix_msg is
 
-            when REQ_WB | REQ_WTdata | REQ_WT | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1612,7 +1660,7 @@ begin  -- architecture rtl of l2_wrapper
 
           case mix_msg is
 
-            when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
               coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
               coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1811,6 +1859,7 @@ end process fsm_fwd_out;
     fwd_in_data_addr    <= (others => '0');
     fwd_in_data_req_id  <= (others => '0');
     fwd_in_data_word_mask    <= (others => '0');
+    fwd_in_data_line    <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_fwd_rdreq <= '0';
@@ -1840,18 +1889,63 @@ end process fsm_fwd_out;
 
       -- RECEIVE ADDRESS
       when rcv_addr =>
-        if coherence_fwd_empty = '0' and fwd_in_ready = '1' then
+        if coherence_fwd_empty = '0' then
 
-          coherence_fwd_rdreq <= '1';
+          case reg.coh_msg is
+            when FWD_WTfwd =>
 
-          fwd_in_valid        <= '1';
-          fwd_in_data_coh_msg <= reg.coh_msg;
-          fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-          fwd_in_data_req_id  <= reg.req_id;
-          fwd_in_data_word_mask    <= reg.word_mask;
+              coherence_fwd_rdreq <= '1';
 
-          reg.state := rcv_header;
+              reg.addr     := coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+              reg.word_cnt := 0;
+              reg.state    := rcv_data;
 
+            when others =>
+
+              if fwd_in_ready = '1' then
+
+                coherence_fwd_rdreq <= '1';
+
+                fwd_in_valid        <= '1';
+                fwd_in_data_coh_msg <= reg.coh_msg;
+                fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                fwd_in_data_req_id  <= reg.req_id;
+                fwd_in_data_word_mask    <= reg.word_mask;
+
+                reg.state := rcv_header;
+
+              end if;
+          end case;
+        end if;
+
+      when rcv_data =>
+        if coherence_fwd_empty = '0' then
+          if reg.word_cnt = WORDS_PER_LINE - 1 then
+            if fwd_in_ready = '1' then
+              coherence_fwd_rdreq <= '1';
+
+              reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                      BITS_PER_WORD * reg.word_cnt)
+                := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+              reg.state := rcv_header;
+
+              fwd_in_valid        <= '1';
+              fwd_in_data_coh_msg <= reg.coh_msg;
+              fwd_in_data_addr    <= reg.addr;
+              fwd_in_data_line    <= reg.line;
+              fwd_in_data_req_id  <= reg.req_id;
+              fwd_in_data_word_mask    <= reg.word_mask;
+            end if;
+
+          else
+            coherence_fwd_rdreq <= '1';
+
+            reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                    (BITS_PER_WORD * reg.word_cnt))
+              := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+
+            reg.word_cnt := reg.word_cnt + 1;
+          end if;
         end if;
 
     end case;
@@ -2007,7 +2101,10 @@ end process fsm_fwd_out;
     variable alloc_reg     : load_alloc_reg_type;
     variable selected      : std_ulogic;
     variable valid_axi_req : std_ulogic;
+    variable read_counter  : std_ulogic;
+    variable counter_data_line : line_t;
     constant err_marker    : std_logic_vector(31 downto 0) := x"dadecace";
+    constant counter_addr  : std_logic_vector(31 downto 0) := x"b0000000";
 
   begin
     -- copy current state into a variable
@@ -2015,6 +2112,9 @@ end process fsm_fwd_out;
     xreg        := axi_reg;
     reg.asserts := (others => '0');
     alloc_reg   := load_alloc_reg;
+    read_counter := '0';
+    counter_data_line := (others => '0');
+    counter_data_line(63 downto 0) := counter_data;
 
     -- Default bus slave response
     -- aw
@@ -2042,6 +2142,10 @@ end process fsm_fwd_out;
     cpu_req_data_hsize   <= (others => '0');
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
+    cpu_req_data_dcs_en  <= '0';
+    cpu_req_data_use_owner_pred <= '0';
+    cpu_req_data_dcs     <= (others => '0');
+    cpu_req_data_pred_cid<= (others => '0');
     cpu_req_data_word    <= (others => '0');
     cpu_req_data_amo     <= (others => '0');
 
@@ -2064,6 +2168,10 @@ end process fsm_fwd_out;
             reg.hsize   := mosi.ar.size;
             reg.hprot   := '0' & not mosi.ar.prot(2);
             reg.haddr   := mosi.ar.addr;
+            reg.dcs_en  := mosi.ar.user(7);
+            reg.use_owner_pred := mosi.ar.user(6);
+            reg.dcs     := mosi.ar.user(5 downto 4);
+            reg.pred_cid:= mosi.ar.user(3 downto 0);
             xreg.id     := mosi.ar.id;
             xreg.len    := mosi.ar.len;
             xreg.lock   := mosi.ar.lock;
@@ -2076,6 +2184,10 @@ end process fsm_fwd_out;
             reg.hsize   := mosi.aw.size;
             reg.hprot   := '0' & not mosi.aw.prot(2);
             reg.haddr   := mosi.aw.addr;
+            reg.dcs_en  := mosi.aw.user(7);
+            reg.use_owner_pred := mosi.aw.user(6);
+            reg.dcs     := mosi.aw.user(5 downto 4);
+            reg.pred_cid:= mosi.aw.user(3 downto 0);
             xreg.id     := mosi.aw.id;
             xreg.len    := mosi.aw.len;
             xreg.lock   := mosi.aw.lock;
@@ -2102,14 +2214,18 @@ end process fsm_fwd_out;
         elsif valid_axi_req = '1' then
 
           if mosi.aw.valid = '0' then
+            if reg.haddr /= counter_addr then
+              cpu_req_valid  <= '1';
+              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
 
-            cpu_req_valid  <= '1';
-            alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-            if cpu_req_ready = '1' then
-              reg.state := load_rsp;
+              if cpu_req_ready = '1' then
+                reg.state := load_rsp;
+              else
+                reg.state := load_req;
+              end if;
             else
-              reg.state := load_req;
+              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+              reg.state := load_rsp_counter;
             end if;
 
           else
@@ -2123,7 +2239,10 @@ end process fsm_fwd_out;
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
 
 
       -- LOAD REQUEST
@@ -2132,7 +2251,10 @@ end process fsm_fwd_out;
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
         cpu_req_valid <= '1';
 
         if cpu_req_ready = '1' then
@@ -2162,6 +2284,10 @@ end process fsm_fwd_out;
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -2174,6 +2300,10 @@ end process fsm_fwd_out;
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -2216,13 +2346,136 @@ end process fsm_fwd_out;
 
               else
 
-                cpu_req_valid  <= '1';
-                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-                if cpu_req_ready = '1' then
-                  reg.state := load_rsp;
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
                 else
-                  reg.state := load_req;
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
+                end if;
+              end if;
+
+            else
+
+              reg.state := store_req;
+
+            end if;
+
+          else
+
+            reg.state := idle;
+
+          end if;
+
+          if xreg.len /= axi_len_zero then
+            reg.haddr := reg.haddr + addr_incr(reg.hsize);
+            xreg.len := xreg.len - 1;
+          end if;
+
+        end if;
+      
+      -- LOAD RESPONSE FOR COUNTER
+      when load_rsp_counter =>
+        -- rd_rsp_ready <= mosi.r.ready;
+
+        alloc_reg.line := counter_data_line;
+
+        -- if rd_rsp_valid = '1' then
+          somi.r.data <= read_from_line(reg.haddr, counter_data_line);
+          somi.r.valid <= '1';
+        -- end if;
+
+        if mosi.r.ready = '1' then
+
+          if xreg.len = axi_len_zero then
+            somi.r.last <= '1';
+
+            if valid_axi_req = '1' then
+              if mosi.aw.valid = '0' then
+                reg.cpu_msg := '0' & mosi.ar.lock;
+                reg.hsize   := mosi.ar.size;
+                reg.hprot   := '0' & not mosi.ar.prot(2);
+                reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
+                xreg.id     := mosi.ar.id;
+                xreg.len    := mosi.ar.len;
+                xreg.lock   := mosi.ar.lock;
+                xreg.cache  := mosi.ar.cache;
+                xreg.atop   := (others => '0');
+
+                somi.ar.ready <= '1';
+              else
+                reg.cpu_msg := '1' & mosi.aw.lock;
+                reg.hsize   := mosi.aw.size;
+                reg.hprot   := '0' & not mosi.aw.prot(2);
+                reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
+                xreg.id     := mosi.aw.id;
+                xreg.len    := mosi.aw.len;
+                xreg.lock   := mosi.aw.lock;
+                xreg.cache  := mosi.aw.cache;
+                xreg.atop   := mosi.aw.atop;
+
+                somi.aw.ready <= '1';
+              end if;
+
+            end if;
+
+          else
+
+            valid_axi_req := '1';
+
+          end if;
+
+          if flush_due = '1' and xreg.lock = '0' and
+            not (reg.hprot(0) = '0' and valid_axi_req = '1') then
+
+            flush_valid <= '1';
+
+            if valid_axi_req = '1' then
+              if flush_ready = '0' then
+                reg.state := flush_req;
+              else
+                reg.state := mem_req;
+              end if;
+            else
+              reg.state := idle;
+            end if;
+
+          elsif valid_axi_req = '1' then
+
+            if mosi.aw.valid = '0' or xreg.len /= axi_len_zero then
+
+              if load_alloc_reg.addr = reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO) then
+
+                reg.state := load_alloc;
+
+              else
+
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
+                else
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
                 end if;
               end if;
 
@@ -2268,6 +2521,10 @@ end process fsm_fwd_out;
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -2280,6 +2537,10 @@ end process fsm_fwd_out;
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -2325,13 +2586,18 @@ end process fsm_fwd_out;
 
               else
 
-                cpu_req_valid  <= '1';
-                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-
-                if cpu_req_ready = '1' then
-                  reg.state := load_rsp;
+                if reg.haddr /= counter_addr then
+                  cpu_req_valid  <= '1';
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+    
+                  if cpu_req_ready = '1' then
+                    reg.state := load_rsp;
+                  else
+                    reg.state := load_req;
+                  end if;
                 else
-                  reg.state := load_req;
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state := load_rsp_counter;
                 end if;
               end if;
 
@@ -2370,6 +2636,10 @@ end process fsm_fwd_out;
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
           cpu_req_data_word    <= mosi.w.data;
           cpu_req_data_amo     <= xreg.atop;
           cpu_req_valid <= '1';
@@ -2383,6 +2653,10 @@ end process fsm_fwd_out;
                   reg.hsize   := mosi.ar.size;
                   reg.hprot   := '0' & not mosi.ar.prot(2);
                   reg.haddr   := mosi.ar.addr;
+                  reg.dcs_en  := mosi.ar.user(7);
+                  reg.use_owner_pred := mosi.ar.user(6);
+                  reg.dcs     := mosi.ar.user(5 downto 4);
+                  reg.pred_cid:= mosi.ar.user(3 downto 0);
                   xreg.id     := mosi.ar.id;
                   xreg.len    := mosi.ar.len;
                   xreg.lock   := mosi.ar.lock;
@@ -2395,6 +2669,10 @@ end process fsm_fwd_out;
                   reg.hsize   := mosi.aw.size;
                   reg.hprot   := '0' & not mosi.aw.prot(2);
                   reg.haddr   := mosi.aw.addr;
+                  reg.dcs_en  := mosi.aw.user(7);
+                  reg.use_owner_pred := mosi.aw.user(6);
+                  reg.dcs     := mosi.aw.user(5 downto 4);
+                  reg.pred_cid:= mosi.aw.user(3 downto 0);
                   xreg.id     := mosi.aw.id;
                   xreg.len    := mosi.aw.len;
                   xreg.lock   := mosi.aw.lock;
@@ -2470,6 +2748,10 @@ end process fsm_fwd_out;
               reg.hsize   := mosi.ar.size;
               reg.hprot   := '0' & not mosi.ar.prot(2);
               reg.haddr   := mosi.ar.addr;
+              reg.dcs_en  := mosi.ar.user(7);
+              reg.use_owner_pred := mosi.ar.user(6);
+              reg.dcs     := mosi.ar.user(5 downto 4);
+              reg.pred_cid:= mosi.ar.user(3 downto 0);
               xreg.id     := mosi.ar.id;
               xreg.len    := mosi.ar.len;
               xreg.lock   := mosi.ar.lock;
@@ -2482,6 +2764,10 @@ end process fsm_fwd_out;
               reg.hsize   := mosi.aw.size;
               reg.hprot   := '0' & not mosi.aw.prot(2);
               reg.haddr   := mosi.aw.addr;
+              reg.dcs_en  := mosi.aw.user(7);
+              reg.use_owner_pred := mosi.aw.user(6);
+              reg.dcs     := mosi.aw.user(5 downto 4);
+              reg.pred_cid:= mosi.aw.user(3 downto 0);
               xreg.id     := mosi.aw.id;
               xreg.len    := mosi.aw.len;
               xreg.lock   := mosi.aw.lock;
@@ -2509,13 +2795,18 @@ end process fsm_fwd_out;
 
             if mosi.aw.valid = '0' then
 
-              cpu_req_valid  <= '1';
-              alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+              if reg.haddr /= counter_addr then
+                cpu_req_valid  <= '1';
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
 
-              if cpu_req_ready = '1' then
-                reg.state := load_rsp;
+                if cpu_req_ready = '1' then
+                  reg.state := load_rsp;
+                else
+                  reg.state := load_req;
+                end if;
               else
-                reg.state := load_req;
+                alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                reg.state := load_rsp_counter;
               end if;
 
             else
@@ -2529,6 +2820,10 @@ end process fsm_fwd_out;
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
 
         else
 

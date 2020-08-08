@@ -199,8 +199,10 @@ public:
     inline void get_mem_rsp(line_t &line);
     inline void send_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id, cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset, word_mask_t word_mask);
     inline void send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id, word_mask_t word_mask);
+    inline void send_fwd_out_data(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id, word_mask_t word_mask, line_t data);
     // returns if any fwd was sent
     inline bool send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data);
+    inline bool send_fwd_with_owner_mask_data(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, word_mask_t word_mask, line_t data, line_t data_out);
     // returns number of incack to expect
     inline int send_inv_with_sharer_list(line_addr_t addr, sharers_t sharer_list);
 

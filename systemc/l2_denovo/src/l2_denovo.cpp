@@ -148,7 +148,7 @@ void l2_denovo::ctrl()
                 send_rd_rsp(line);
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
-                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_I, reqs_hit_i);
+                //put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_I, reqs_hit_i);
             }
         }
         break;
@@ -356,6 +356,30 @@ void l2_denovo::ctrl()
 
                 }
                 break;
+                case FWD_WTfwd:
+                {
+                    word_mask_t word_mask = 0;
+                    if(tag_hit){
+                        for (int i = 0; i < WORDS_PER_LINE; i++){
+                            HLS_UNROLL_LOOP(ON, "1");
+                            if (fwd_in.word_mask & (1 << i)) {
+                                if (state_buf[way_hit][i] == DNV_R) {
+                                    line_buf[way_hit].range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i) = fwd_in.line.range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i);
+                                } else {
+                                    word_mask |= 1 << i;
+                                }
+                            }
+                        }
+                        lines.port1[0][base + way_hit] = line_buf[way_hit];
+                        if (word_mask) {
+                            send_req_out(REQ_WT, 1, fwd_in.addr, fwd_in.line, word_mask);
+                        }
+                    }else{
+                        // not found in the cache, send req_wt back to llc
+                        send_req_out(REQ_WT, 1, fwd_in.addr, fwd_in.line, fwd_in.word_mask);
+                    }
+                }
+                break;
                 default:
                 break;
             }
@@ -483,11 +507,29 @@ void l2_denovo::ctrl()
                 hprots.port1[0][base + way_write] = cpu_req.hprot;
                 tags.port1[0][base + way_write] = addr_br.tag;
                 evict_ways.port1[0][addr_br.set] = way_write + 1;
-                if ((!word_hit) || (word_hit && (state_buf[way_write][addr_br.w_off] != DNV_R))) { // if no hit or not in registered
-                    HLS_DEFINE_PROTOCOL("spandex_dual_req");
-				    send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
-                    wait();
-                    state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+                if(cpu_req.dcs_en){
+                        switch (cpu_req.dcs){
+                            case DCS_ReqWTfwd:
+                            {
+                                if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
+                                    HLS_DEFINE_PROTOCOL("req_wtfwd out");
+                                    send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                    wait();
+                                    state_buf[way_write][addr_br.w_off] = DNV_V;
+                                    touched_buf[way_write][addr_br.w_off] = true;
+                                }
+                            }
+                            break;
+                            default:
+                            break;
+                        }
+                }else{
+                    if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
+                        HLS_DEFINE_PROTOCOL("spandex_dual_req");
+                        send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
+                        wait();
+                        state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+                    }
                 }
 
             }
