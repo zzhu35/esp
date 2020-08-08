@@ -49,6 +49,7 @@ package gencaches is
       l2_cpu_req_ready : out std_ulogic;
       l2_fwd_in_ready : out std_ulogic;
       l2_rsp_in_ready : out std_ulogic;
+      l2_fwd_out_ready : in std_ulogic;
       l2_flush_ready : out std_ulogic;
       l2_rd_rsp_valid : out std_ulogic;
       l2_rd_rsp_data_line : out line_t;
@@ -67,6 +68,13 @@ package gencaches is
       l2_rsp_out_data_addr : out line_addr_t;
       l2_rsp_out_data_line : out line_t;
       l2_rsp_out_data_word_mask : out word_mask_t;
+      l2_fwd_out_valid : out std_ulogic;
+      l2_fwd_out_data_coh_msg : out coh_msg_t;
+      l2_fwd_out_data_req_id : out cache_id_t;
+      l2_fwd_out_data_to_req : out std_logic_vector(1 downto 0);
+      l2_fwd_out_data_addr : out line_addr_t;
+      l2_fwd_out_data_line : out line_t;
+      l2_fwd_out_data_word_mask : out word_mask_t;
       l2_stats_valid : out std_ulogic;
       l2_stats_data : out std_ulogic;
       l2_sync_ready : out std_ulogic;
@@ -109,6 +117,7 @@ package gencaches is
       l2_inval_ready : in std_ulogic;
       l2_req_out_ready : in std_ulogic;
       l2_rsp_out_ready : in std_ulogic;
+      l2_fwd_out_ready : in std_ulogic;
       l2_stats_ready : in std_ulogic;
       flush_done : out std_ulogic;
       l2_cpu_req_ready : out std_ulogic;
@@ -132,6 +141,13 @@ package gencaches is
       l2_rsp_out_data_addr : out line_addr_t;
       l2_rsp_out_data_line : out line_t;
       l2_rsp_out_data_word_mask : out word_mask_t;
+      l2_fwd_out_valid : out std_ulogic;
+      l2_fwd_out_data_coh_msg : out coh_msg_t;
+      l2_fwd_out_data_req_id : out cache_id_t;
+      l2_fwd_out_data_to_req : out std_logic_vector(1 downto 0);
+      l2_fwd_out_data_addr : out line_addr_t;
+      l2_fwd_out_data_line : out line_t;
+      l2_fwd_out_data_word_mask : out word_mask_t;
       l2_stats_valid : out std_ulogic;
       l2_stats_data : out std_ulogic;
       l2_sync_ready : out std_ulogic;
@@ -174,6 +190,7 @@ package gencaches is
       l2_inval_ready : in std_ulogic;
       l2_req_out_ready : in std_ulogic;
       l2_rsp_out_ready : in std_ulogic;
+      l2_fwd_out_ready : in std_ulogic;
       l2_stats_ready : in std_ulogic;
       flush_done : out std_ulogic;
       l2_cpu_req_ready : out std_ulogic;
@@ -197,6 +214,13 @@ package gencaches is
       l2_rsp_out_data_addr : out line_addr_t;
       l2_rsp_out_data_line : out line_t;
       l2_rsp_out_data_word_mask : out word_mask_t;
+      l2_fwd_out_valid : out std_ulogic;
+      l2_fwd_out_data_coh_msg : out coh_msg_t;
+      l2_fwd_out_data_req_id : out cache_id_t;
+      l2_fwd_out_data_to_req : out std_logic_vector(1 downto 0);
+      l2_fwd_out_data_addr : out line_addr_t;
+      l2_fwd_out_data_line : out line_t;
+      l2_fwd_out_data_word_mask : out word_mask_t;
       l2_stats_valid : out std_ulogic;
       l2_stats_data : out std_ulogic;
       l2_sync_ready : out std_ulogic;

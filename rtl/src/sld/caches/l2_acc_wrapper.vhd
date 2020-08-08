@@ -80,6 +80,10 @@ entity l2_acc_wrapper is
     coherence_rsp_snd_wrreq    : out std_ulogic;
     coherence_rsp_snd_data_in  : out noc_flit_type;
     coherence_rsp_snd_full     : in  std_ulogic;
+    -- tile->Noc2
+    coherence_fwd_snd_wrreq    : out std_ulogic;
+    coherence_fwd_snd_data_in  : out noc_flit_type;
+    coherence_fwd_snd_full     : in  std_ulogic;
 
     mon_cache                  : out monitor_cache_type
     );
@@ -124,6 +128,14 @@ architecture rtl of l2_acc_wrapper is
   signal rsp_out_data_addr      : line_addr_t;
   signal rsp_out_data_line      : line_t;
   signal rsp_out_data_word_mask : word_mask_t;
+  signal fwd_out_ready          : std_ulogic;
+  signal fwd_out_valid          : std_ulogic;
+  signal fwd_out_data_coh_msg   : coh_msg_t;
+  signal fwd_out_data_req_id    : cache_id_t;
+  signal fwd_out_data_to_req    : std_logic_vector(1 downto 0);
+  signal fwd_out_data_addr      : line_addr_t;
+  signal fwd_out_data_line      : line_t;
+  signal fwd_out_data_word_mask : word_mask_t;
   -- NoC to cache
   signal fwd_in_ready           : std_ulogic;
   signal fwd_in_valid           : std_ulogic;
@@ -237,6 +249,32 @@ architecture rtl of l2_acc_wrapper is
 
   signal rsp_out_reg      : rsp_out_reg_type := RSP_OUT_REG_DEFAULT;
   signal rsp_out_reg_next : rsp_out_reg_type := RSP_OUT_REG_DEFAULT;
+
+  -------------------------------------------------------------------------------
+  -- FSM: Forward to NoC
+  -------------------------------------------------------------------------------
+  type fwd_out_fsm is (send_header, send_addr, send_data);
+
+  type fwd_out_reg_type is record
+    state    : fwd_out_fsm;
+    coh_msg  : coh_msg_t;
+    addr     : line_addr_t;
+    line     : line_t;
+    word_cnt : natural range 0 to 3;
+    asserts  : asserts_fwd_t;
+  end record fwd_out_reg_type;
+
+  constant FWD_OUT_REG_DEFAULT : fwd_out_reg_type := (
+    state    => send_header,
+    coh_msg  => (others => '0'),
+    addr     => (others => '0'),
+    line     => (others => '0'),
+    word_cnt => 0,
+    asserts  => (others => '0'));
+
+  signal fwd_out_reg      : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
+  signal fwd_out_reg_next : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
+
 
   -------------------------------------------------------------------------------
   -- FSM: Forward from  NoC
@@ -429,6 +467,14 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_out_data_addr      => rsp_out_data_addr,
       l2_rsp_out_data_line      => rsp_out_data_line,
       l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
       -- NoC to cache
       l2_fwd_in_ready           => fwd_in_ready,
       l2_fwd_in_valid           => fwd_in_valid,
@@ -498,6 +544,14 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_out_data_addr      => rsp_out_data_addr,
       l2_rsp_out_data_line      => rsp_out_data_line,
       l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
       -- NoC to cache
       l2_fwd_in_ready           => fwd_in_ready,
       l2_fwd_in_valid           => fwd_in_valid,
@@ -567,6 +621,14 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_rsp_out_data_addr      => rsp_out_data_addr,
       l2_rsp_out_data_line      => rsp_out_data_line,
       l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
       -- NoC to cache
       l2_fwd_in_ready           => fwd_in_ready,
       l2_fwd_in_valid           => fwd_in_valid,
@@ -622,6 +684,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       req_acc_reg    <= REQ_ACC_REG_DEFAULT;
       req_reg        <= REQ_REG_DEFAULT;
       rsp_out_reg    <= RSP_OUT_REG_DEFAULT;
+      fwd_out_reg    <= FWD_OUT_REG_DEFAULT;
       fwd_in_reg     <= FWD_IN_REG_DEFAULT;
       rsp_in_reg     <= RSP_IN_REG_DEFAULT;
 
@@ -631,6 +694,7 @@ begin  -- architecture rtl of l2_acc_wrapper
       req_acc_reg    <= req_acc_reg_next;
       req_reg        <= req_reg_next;
       rsp_out_reg    <= rsp_out_reg_next;
+      fwd_out_reg    <= fwd_out_reg_next;
       fwd_in_reg     <= fwd_in_reg_next;
       rsp_in_reg     <= rsp_in_reg_next;
 
@@ -1114,6 +1178,134 @@ begin  -- architecture rtl of l2_acc_wrapper
     rsp_out_reg_next <= reg;
 
   end process fsm_rsp_out;
+
+
+-------------------------------------------------------------------------------
+-- FSM: Forwards to NoC
+-------------------------------------------------------------------------------
+fsm_fwd_out : process (fwd_out_reg, coherence_fwd_snd_full,
+fwd_out_valid, fwd_out_data_coh_msg, fwd_out_data_req_id,
+fwd_out_data_to_req, fwd_out_data_addr, fwd_out_data_line, fwd_out_data_word_mask) is
+
+variable reg   : fwd_out_reg_type;
+variable hprot : hprot_t := (others => '0');
+variable mix_msg : mix_msg_t;
+
+begin  -- process fsm_cache2noc
+
+  -- initialize variables
+  reg         := fwd_out_reg;
+  reg.asserts := (others => '0');
+
+  -- initialize signals toward cache (receive from cache)
+  fwd_out_ready <= '0';
+
+  -- initialize signals toward noc
+  coherence_fwd_snd_wrreq   <= '0';
+  coherence_fwd_snd_data_in <= (others => '0');
+
+
+  case reg.state is
+
+    -- SEND HEADER
+    when send_header =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        fwd_out_ready <= '1';
+
+        if fwd_out_valid = '1' then
+
+          reg.coh_msg := fwd_out_data_coh_msg;
+          reg.addr    := fwd_out_data_addr;
+          reg.line    := fwd_out_data_line;
+
+          coherence_fwd_snd_wrreq <= '1';
+
+          coherence_fwd_snd_data_in <= make_header(fwd_out_data_coh_msg, mem_info,
+                                      mem_num, hprot, fwd_out_data_addr, local_x,
+                                      local_y, fwd_out_data_to_req(0),
+                                      fwd_out_data_req_id,
+                                      cache_x, cache_y, fwd_out_data_word_mask);
+          reg.state := send_addr;
+
+        end if;
+      end if;
+
+    -- SEND ADDRESS
+    when send_addr =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        coherence_fwd_snd_wrreq <= '1';
+        -- mix_msg := '0' & reg.coh_msg;
+
+        -- case mix_msg is
+
+        --   when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+
+        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        --     reg.state                 := send_data;
+        --     reg.word_cnt              := 0;
+
+        --   when others =>
+
+        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        --     reg.state                 := send_header;
+
+        -- end case;
+
+
+        -- always send data
+
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_data;
+        -- reg.word_cnt              := 0;
+
+
+        -- always not send data
+        coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+        coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        reg.state                 := send_header;
+        
+
+      end if;
+
+    -- SEND DATA
+    when send_data =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        coherence_fwd_snd_wrreq <= '1';
+
+      if reg.word_cnt = WORDS_PER_LINE - 1 then
+
+        coherence_fwd_snd_data_in <=
+        PREAMBLE_TAIL & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1
+                      downto (BITS_PER_WORD * reg.word_cnt));
+
+        reg.state := send_header;
+
+      else
+
+        coherence_fwd_snd_data_in <=
+        PREAMBLE_BODY & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1
+                      downto (BITS_PER_WORD * reg.word_cnt));
+
+        reg.word_cnt := reg.word_cnt + 1;
+
+      end if;
+
+      end if;
+
+  end case;
+
+  fwd_out_reg_next <= reg;
+
+end process fsm_fwd_out;
 
 -----------------------------------------------------------------------------
 -- FSM: Forwards from NoC

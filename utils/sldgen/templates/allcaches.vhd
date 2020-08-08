@@ -91,6 +91,7 @@ package allcaches is
       l2_inval_ready            : in  std_ulogic;
       l2_req_out_ready          : in  std_ulogic;
       l2_rsp_out_ready          : in  std_ulogic;
+      l2_fwd_out_ready          : in  std_ulogic;
       l2_stats_ready            : in  std_ulogic;
       flush_done                : out std_ulogic;
       l2_cpu_req_ready          : out std_ulogic;
@@ -114,6 +115,13 @@ package allcaches is
       l2_rsp_out_data_to_req    : out std_logic_vector(1 downto 0);
       l2_rsp_out_data_addr      : out std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
       l2_rsp_out_data_line      : out std_logic_vector(BITS_PER_LINE - 1 downto 0);
+      l2_fwd_out_valid          : out std_ulogic;
+      l2_fwd_out_data_coh_msg   : out std_logic_vector(COH_MSG_TYPE_WIDTH - 1 downto 0);
+      l2_fwd_out_data_req_id    : out std_logic_vector(NL2_MAX_LOG2 - 1 downto 0);
+      l2_fwd_out_data_word_mask : out std_logic_vector(WORDS_PER_LINE - 1 downto 0);
+      l2_fwd_out_data_to_req    : out std_logic_vector(1 downto 0);
+      l2_fwd_out_data_addr      : out std_logic_vector(ADDR_BITS - OFFSET_BITS - 1 downto 0);
+      l2_fwd_out_data_line      : out std_logic_vector(BITS_PER_LINE - 1 downto 0);
       l2_stats_valid            : out std_ulogic;
       l2_stats_data             : out std_ulogic;
       l2_sync_ready             : out std_ulogic;

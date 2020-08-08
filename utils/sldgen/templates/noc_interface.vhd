@@ -73,6 +73,9 @@ use std.textio.all;
     coherence_rsp_snd_wrreq    : out std_ulogic;
     coherence_rsp_snd_data_in  : out noc_flit_type;
     coherence_rsp_snd_full     : in  std_ulogic;
+    coherence_fwd_snd_wrreq    : out std_ulogic;
+    coherence_fwd_snd_data_in  : out noc_flit_type;
+    coherence_fwd_snd_full     : in  std_ulogic;
     -- NoC plane MEM2DEV
     dma_rcv_rdreq     : out std_ulogic;
     dma_rcv_data_out  : in  noc_flit_type;
@@ -315,6 +318,9 @@ begin
         coherence_rsp_snd_wrreq    => coherence_rsp_snd_wrreq,
         coherence_rsp_snd_data_in  => coherence_rsp_snd_data_in,
         coherence_rsp_snd_full     => coherence_rsp_snd_full,
+        coherence_fwd_snd_wrreq    => coherence_fwd_snd_wrreq,
+        coherence_fwd_snd_data_in  => coherence_fwd_snd_data_in,
+        coherence_fwd_snd_full     => coherence_fwd_snd_full,
         mon_cache                  => mon_cache);
   end generate l2_gen;
 

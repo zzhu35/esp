@@ -214,6 +214,10 @@ package cachepackage is
       coherence_rsp_snd_wrreq    : out std_ulogic;
       coherence_rsp_snd_data_in  : out noc_flit_type;
       coherence_rsp_snd_full     : in  std_ulogic;
+      -- tile->Noc3
+      coherence_fwd_snd_wrreq    : out std_ulogic;
+      coherence_fwd_snd_data_in  : out noc_flit_type;
+      coherence_fwd_snd_full     : in  std_ulogic;
 
       mon_cache                  : out monitor_cache_type
       );
@@ -271,6 +275,10 @@ package cachepackage is
       coherence_rsp_snd_wrreq    : out std_ulogic;
       coherence_rsp_snd_data_in  : out noc_flit_type;
       coherence_rsp_snd_full     : in  std_ulogic;
+      -- tile->Noc3
+      coherence_fwd_snd_wrreq    : out std_ulogic;
+      coherence_fwd_snd_data_in  : out noc_flit_type;
+      coherence_fwd_snd_full     : in  std_ulogic;
 
       mon_cache                  : out monitor_cache_type
       );
