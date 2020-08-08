@@ -1088,7 +1088,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 
           case mix_msg is
 
-            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd =>
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
@@ -1333,16 +1333,16 @@ begin  -- process fsm_cache2noc
 
         -- always send data
 
-        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        -- reg.state                 := send_data;
-        -- reg.word_cnt              := 0;
+        coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        reg.state                 := send_data;
+        reg.word_cnt              := 0;
 
 
         -- always not send data
-        coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-        coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        reg.state                 := send_header;
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_header;
         
 
       end if;
@@ -1509,6 +1509,7 @@ end process fsm_fwd_out;
     variable msg_type     : noc_msg_type;
     variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
+    variable mix_msg      : mix_msg_t;
 
   begin  -- process fsm_rsp_in
 
@@ -1553,28 +1554,31 @@ end process fsm_fwd_out;
       -- RECEIVE ADDRESS
       when rcv_addr =>
         if coherence_rsp_rcv_empty = '0' then
+          
+          mix_msg := '0' & reg.coh_msg;
 
-          if ('0' & reg.coh_msg = RSP_INV_ACK_SPDX) then
+          case mix_msg is
 
-            if rsp_in_ready = '1' then
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
               coherence_rsp_rcv_rdreq <= '1';
-              rsp_in_valid            <= '1';
-              rsp_in_data_coh_msg     <= reg.coh_msg;
-              rsp_in_data_addr        <= coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-              reg.state               := rcv_header;
+              reg.addr                := coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+              reg.word_cnt            := 0;
+              reg.state               := rcv_data;
 
-            end if;
+            when others =>
 
-          else
-            -- RSP_DATA, RSP_EDATA
+              if rsp_in_ready = '1' then
 
-            coherence_rsp_rcv_rdreq <= '1';
-            reg.addr                := coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-            reg.word_cnt            := 0;
-            reg.state               := rcv_data;
+                coherence_rsp_rcv_rdreq <= '1';
+                rsp_in_valid            <= '1';
+                rsp_in_data_coh_msg     <= reg.coh_msg;
+                rsp_in_data_addr        <= coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                reg.state               := rcv_header;
 
-          end if;
+              end if;
+
+          end case;
 
         end if;
 

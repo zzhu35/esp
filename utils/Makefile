@@ -632,13 +632,13 @@ systest.exe-cpp: systest-cpp.o syscalls.o crt.o uart.o
 	-T $(RISCV_TESTS)/benchmarks/common/test.ld -g -o $@ \
 	-I$(DESIGN_PATH)
 
-# systest.exe: systest.c uart.o
-# 	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
-# 	$(SOFT)/common/syscalls.c \
-# 	$(RISCV_TESTS)/benchmarks/common/crt.S  \
-# 	-T $(RISCV_TESTS)/benchmarks/common/test.ld -o $@ \
-# 	-I$(DESIGN_PATH) \
-# 	uart.o $<
+systest.exe: systest.c uart.o
+	$(QUIET_CC) riscv64-unknown-elf-gcc $(RISCV_CFLAGS) \
+	$(SOFT)/common/syscalls.c \
+	$(RISCV_TESTS)/benchmarks/common/crt.S  \
+	-T $(RISCV_TESTS)/benchmarks/common/test.ld -o $@ \
+	-I$(DESIGN_PATH) \
+	uart.o $<
 
 systest.bin: $(TEST_PROGRAM)
 	$(QUIET_OBJCP) riscv64-unknown-elf-objcopy -O binary $< $@
