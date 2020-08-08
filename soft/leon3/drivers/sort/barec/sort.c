@@ -161,6 +161,7 @@ int main(int argc, char * argv[])
 			printf("  nchunk = %lu\n", NCHUNK);
 		}
 
+		print_counter();
 		// Initialize input: write floating point hex values (simpler to debug)
 		init_buf((float *) mem, SORT_LEN, SORT_BATCH);
 
@@ -214,6 +215,7 @@ int main(int argc, char * argv[])
 			/* 	printf("  Error: %s.%d mismatch on batch %d\n", DEV_NAME, n, j); */
 			errors += err;
 		}
+		print_counter();
 		if (errors)
 			printf("  ... FAIL\n");
 		else
