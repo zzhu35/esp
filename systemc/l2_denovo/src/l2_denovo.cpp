@@ -878,6 +878,24 @@ void l2_denovo::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, 
     l2_rsp_out.nb_put(rsp_out);
 }
 
+void l2_denovo::send_fwd_out(coh_msg_t coh_msg, cache_id_t dst_id, bool to_dst, line_addr_t line_addr, line_t line, word_mask_t word_mask)
+{
+    // SEND_FWD_OUT;
+
+    l2_fwd_out_t fwd_out;
+
+    fwd_out.coh_msg = coh_msg;
+    fwd_out.req_id  = dst_id;
+    fwd_out.to_req  = to_dst;
+    fwd_out.addr    = line_addr;
+    fwd_out.line    = line;
+	fwd_out.word_mask = word_mask;
+
+    while (!l2_fwd_out.nb_can_put()) wait();
+
+    l2_fwd_out.nb_put(fwd_out);
+}
+
 #ifdef STATS_ENABLE
 void l2_denovo::send_stats(bool stats)
 {
