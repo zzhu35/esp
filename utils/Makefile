@@ -221,6 +221,7 @@ esp-config: socmap.vhd
 esp-xconfig: grlib_config.vhd
 	@echo ""
 	@echo "Running interactive ESP configuration..."
+	@touch $(ESP_ROOT)/third-party/spandex/spandex-config.json
 	@python3 $(ESP_ROOT)/utils/socmap/esp_creator.py $(NOC_WIDTH) $(TECHLIB) $(LINUX_MAC)
 
 esp-config-clean:
