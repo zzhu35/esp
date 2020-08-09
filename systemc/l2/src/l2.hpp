@@ -75,6 +75,7 @@ public:
     put_initiator<l2_rd_rsp_t>	l2_rd_rsp;
     put_initiator<l2_inval_t>	l2_inval;
     nb_put_initiator<l2_req_out_t> l2_req_out;
+    nb_put_initiator<l2_fwd_out_t> l2_fwd_out;
     nb_put_initiator<l2_rsp_out_t> l2_rsp_out;
 
 #ifdef STATS_ENABLE
@@ -121,6 +122,7 @@ public:
 	, l2_rd_rsp("l2_rd_rsp")
 	, l2_inval("l2_inval")
 	, l2_req_out("l2_req_out")
+	, l2_fwd_out("l2_fwd_out")
 	, l2_rsp_out("l2_rsp_out")
 #ifdef STATS_ENABLE
 	, l2_stats("l2_stats")  
@@ -134,6 +136,7 @@ public:
 	    // Assign clock and reset to put_get ports
 	    l2_cpu_req.clk_rst (clk, rst);
 	    l2_fwd_in.clk_rst (clk, rst);
+	    l2_fwd_out.clk_rst (clk, rst);
 	    l2_rsp_in.clk_rst (clk, rst);
 	    l2_flush.clk_rst (clk, rst);
         l2_sync.clk_rst (clk, rst);
