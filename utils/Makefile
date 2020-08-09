@@ -290,6 +290,7 @@ BOARD_FILES = $(wildcard $(ESP_ROOT)/constraints/$(BOARD)/*)
 
 ### Default test program ###
 TEST_PROGRAM ?= systest.exe
+BIT_STREAM ?= top.bit
 
 
 ifeq ("$(CPU_ARCH)", "leon3")
@@ -1776,6 +1777,14 @@ vivado-prog-fpga: vivado/program.tcl
 	fi; \
 	cd ../;
 
+vivado-prog-fpga-spandex: vivado/program.tcl
+	@echo "Burning Spandex Config onto the FPGA..."; \
+	if test -r $(BIT_STREAM); then \
+		vivado $(VIVADO_BATCH_OPT) -source ./vivado/program.tcl -tclargs $(FPGA_HOST) $(XIL_HW_SERVER_PORT) $(PART) $(BIT_STREAM); \
+	else \
+		echo $(SPACES)"ERROR: bistream not found; please run target vivado-syn first"; \
+	fi;
+
 vivado-clean:
 	$(QUIET_CLEAN)$(RM) \
 		vivado_*.log
@@ -1883,6 +1892,9 @@ fpga-program: vivado-prog-fpga
 	@sleep 5
 endif
 
+spandex-bench: vivado-prog-fpga-spandex
+	$(QUIET_INFO) echo "Waiting for DDR calibration..."
+	@sleep 5
 
 fpga-run: esplink soft
 	@./esplink --reset
