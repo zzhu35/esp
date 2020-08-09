@@ -31,8 +31,11 @@
 #define SORT_LEN_MAX_REG	0x4c
 #define SORT_BATCH_MAX_REG	0x50
 
+#define PTR_COUNTER 0xb0000000
+
 static void sync()
 {
+	return; // if MESI, uncomment this
 	volatile int tmp;
 	volatile int* d = (volatile int*)&tmp;
 
@@ -45,9 +48,12 @@ static void sync()
 
 }
 
-static void print_counter(){
-	volatile long long int* ptr = 0xb0000000;
-	long long int data = *ptr;
+static inline long long unsigned int get_counter(){
+	return *(volatile long long unsigned int*)PTR_COUNTER;
+}
+
+static inline void print_counter(){
+	long long int data = get_counter();
 	printf("count: %x", (int) (data >> 32 & 0xffffffff));
 	printf("%x\n", (int) (data & 0xffffffff));
 }
@@ -63,10 +69,9 @@ static int validate_sorted(float *array, int len)
 	return rtn;
 }
 
-static void init_buf (float *buf, unsigned sort_size, unsigned sort_batch)
+static inline void init_buf (float *buf, unsigned sort_size, unsigned sort_batch)
 {
 	int i, j;
-	printf("  Generate random input...\n");
 
 	/* srand(time(NULL)); */
 	for (j = 0; j < sort_batch; j++)
@@ -92,8 +97,8 @@ int main(int argc, char * argv[])
 	int ndev;
 	struct esp_device *espdevs = NULL;
 	unsigned coherence;
+	long long unsigned int timestamps[6]; // get three intervals
 
-	print_counter();
 
 	ndev = probe(&espdevs, SLD_SORT, DEV_NAME);
 	if (!ndev) {
@@ -101,7 +106,6 @@ int main(int argc, char * argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	print_counter();
 
 	printf("Test parameters: [LEN, BATCH] = [%d, %d]\n\n", SORT_LEN, SORT_BATCH);
 	for (n = 0; n < ndev; n++) {
@@ -161,9 +165,10 @@ int main(int argc, char * argv[])
 			printf("  nchunk = %lu\n", NCHUNK);
 		}
 
-		print_counter();
 		// Initialize input: write floating point hex values (simpler to debug)
+		timestamps[0] = get_counter();
 		init_buf((float *) mem, SORT_LEN, SORT_BATCH);
+		timestamps[1] = get_counter();
 
 		// Configure device
 		iowrite32(dev, SELECT_REG, ioread32(dev, DEVID_REG));
@@ -187,16 +192,18 @@ int main(int argc, char * argv[])
 
 		// Start accelerator
 		printf("  Start..\n");
-		print_counter();
 		iowrite32(dev, CMD_REG, CMD_MASK_START);
+
+		timestamps[2] = get_counter();
 
 		done = 0;
 		while (!done) {
 			done = ioread32(dev, STATUS_REG);
 			done &= STATUS_MASK_DONE;
 		}
+		timestamps[3] = get_counter();
+
 		iowrite32(dev, CMD_REG, 0x0);
-		print_counter();
 		printf("  Done\n");
 
 		/* /\* Print output *\/ */
@@ -209,23 +216,29 @@ int main(int argc, char * argv[])
 		printf("  validating...\n");
 		sync();
 
+		timestamps[4] = get_counter();
+
 		for (j = 0; j < SORT_BATCH; j++) {
 			int err = validate_sorted((float *) &mem[j * SORT_LEN], SORT_LEN);
 			/* if (err != 0) */
 			/* 	printf("  Error: %s.%d mismatch on batch %d\n", DEV_NAME, n, j); */
 			errors += err;
 		}
-		print_counter();
+		timestamps[5] = get_counter();
 		if (errors)
 			printf("  ... FAIL\n");
 		else
 			printf("  ... PASS\n");
 		printf("**************************************************\n\n");
-
 		if (scatter_gather)
 			aligned_free(ptable);
 		aligned_free(mem);
 
 	}
+	long long unsigned int a, b, c;
+	a = timestamps[1] - timestamps[0];
+	b = timestamps[3] - timestamps[2];
+	c = timestamps[5] - timestamps[4];
+	printf("Spandex perf:\nBufgen\t%lu\nSort\t%lu\nValid\t%lu\nTot\t%lu\n", a, b, c, a+b+c);
 	return 0;
 }
