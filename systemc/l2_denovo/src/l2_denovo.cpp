@@ -177,15 +177,21 @@ void l2_denovo::ctrl()
 	    }
 	    break;
 		
-	    case RSP_NACK :
-	    {
-            reqs[reqs_hit_i].retry++;
-            {
-                HLS_DEFINE_PROTOCOL("send retry");
-				send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY && (!reqs[reqs_hit_i].state == DNV_IV_DCS)) ? REQ_V : REQ_Odata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+        case RSP_NACK :
+        {
+            if(reqs[reqs_hit_i].state == DNV_IV_DCS){
+                HLS_DEFINE_PROTOCOL("send reqV miss pred");
+                send_req_out(REQ_V, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                reqs[reqs_hit_i].state = DNV_IV;
+            }else{
+                reqs[reqs_hit_i].retry++;
+                {
+                    HLS_DEFINE_PROTOCOL("send retry");
+                    send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY) ? REQ_V : REQ_Odata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                }
             }
-	    }
-	    break;
+        }
+        break;
 
 	    default:
 		    RSP_DEFAULT;
