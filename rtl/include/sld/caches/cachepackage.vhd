@@ -155,6 +155,15 @@ package cachepackage is
                         word_mask    : word_mask_t)
     return noc_flit_type;
 
+  function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
+    mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
+    local_x     : local_yx; local_y : local_yx;
+    to_req      : std_ulogic; req_id : cache_id_t;
+    cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+    cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+    word_mask    : word_mask_t)
+    return noc_flit_type;
+
   function get_owner_bits (ncpu_bits : integer)
     return integer;
 
@@ -452,6 +461,57 @@ package body cachepackage is
     return header;
 
   end function make_header;
+
+  function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
+                        mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
+                        local_x     : local_yx; local_y : local_yx;
+                        to_req      : std_ulogic; req_id : cache_id_t;
+                        cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
+    return noc_flit_type is
+
+    variable header         : noc_flit_type;
+    variable dest_x, dest_y : local_yx;
+    variable dest_init      : integer;
+    variable reserved       : std_logic_vector(RESERVED_WIDTH-1 downto 0);
+
+  begin
+
+    if to_req = '0' then
+
+      dest_x := mem_info(0).x;
+      dest_y := mem_info(0).y;
+      if mem_num /= 1 then
+        for i in 0 to mem_num - 1 loop
+          if ((addr(LINE_ADDR_BITS - 1 downto LINE_ADDR_BITS - 12)
+               xor conv_std_logic_vector(mem_info(i).haddr, 12))
+              and conv_std_logic_vector(mem_info(i).hmask, 12)) = x"000" then
+            dest_x := mem_info(i).x;
+            dest_y := mem_info(i).y;
+          end if;
+        end loop;
+      end if;
+
+    else
+
+      if req_id >= "0" then
+        dest_init := to_integer(unsigned(req_id));
+        if dest_init >= 0 then
+          dest_x := cache_x(dest_init);
+          dest_y := cache_y(dest_init);
+        end if;
+      end if;
+
+    end if;
+
+    -- compose header
+    reserved := word_mask & std_logic_vector(resize(unsigned(req_id), RESERVED_WIDTH - WORDS_PER_LINE));
+    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg, reserved);
+
+    return header;
+
+  end function make_dcs_header;
 
   function get_owner_bits (ncpu_bits : integer)
     return integer is

@@ -1711,7 +1711,7 @@ begin  -- architecture rtl of l2_wrapper
 
 
 -------------------------------------------------------------------------------
--- FSM: Forwards to NoC
+-- FSM: Forwards to NoC -- DCS hprot == DATA Only
 -------------------------------------------------------------------------------
 fsm_fwd_out : process (fwd_out_reg, coherence_fwd_snd_full,
 fwd_out_valid, fwd_out_data_coh_msg, fwd_out_data_req_id,
@@ -1752,7 +1752,7 @@ begin  -- process fsm_cache2noc
 
           coherence_fwd_snd_wrreq <= '1';
 
-          coherence_fwd_snd_data_in <= make_header(fwd_out_data_coh_msg, mem_info,
+          coherence_fwd_snd_data_in <= make_dcs_header(fwd_out_data_coh_msg, mem_info,
                                       mem_num, hprot, fwd_out_data_addr, local_x,
                                       local_y, fwd_out_data_to_req(0),
                                       fwd_out_data_req_id,
