@@ -857,6 +857,11 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= dma_address;
+            ---------------------------------------- SPANDEX_SWITCH
+            cpu_req_data_dcs_en  <= '1';
+            cpu_req_data_use_owner_pred <= '1';
+            cpu_req_data_dcs     <= "00";
+            cpu_req_data_pred_cid <= "0000";
 
             -- cpu_req_data_dcs_en  <= dma_dcs_en;
             -- cpu_req_data_use_owner_pred <= dma_use_owner_pred;
@@ -911,7 +916,11 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= reg.addr;
-
+            ---------------------------------------- SPANDEX_SWITCH
+            cpu_req_data_dcs_en  <= '1';
+            cpu_req_data_use_owner_pred <= '1';
+            cpu_req_data_dcs     <= "00";
+            cpu_req_data_pred_cid <= "0000";
             -- cpu_req_data_dcs_en  <= reg.dcs_en;
             -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
             -- cpu_req_data_dcs     <= reg.dcs;
@@ -1002,9 +1011,9 @@ begin  -- architecture rtl of l2_acc_wrapper
             -- cpu_req_data_dcs     <= reg.dcs;
             -- cpu_req_data_pred_cid <= reg.pred_cid;
 
-            -------------------------------------------------------------------------------------------------------------------
+            --------------------------------SPANDEX_SWITCH-----------------------------------------------------------------------------------
             cpu_req_data_dcs_en  <= '1';
-            cpu_req_data_use_owner_pred <= '0';
+            cpu_req_data_use_owner_pred <= '1';
             cpu_req_data_dcs     <= "00";
             cpu_req_data_pred_cid <= "0000";
 
@@ -1311,32 +1320,32 @@ begin  -- process fsm_cache2noc
       if coherence_fwd_snd_full = '0' then
 
         coherence_fwd_snd_wrreq <= '1';
-        -- mix_msg := '0' & reg.coh_msg;
+        mix_msg := '0' & reg.coh_msg;
 
-        -- case mix_msg is
+        case mix_msg is
 
-        --   when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+          when FWD_WTfwd =>
 
-        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        --     reg.state                 := send_data;
-        --     reg.word_cnt              := 0;
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_data;
+            reg.word_cnt              := 0;
 
-        --   when others =>
+          when others =>
 
-        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        --     reg.state                 := send_header;
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_header;
 
-        -- end case;
+        end case;
 
 
         -- always send data
 
-        coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-        coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        reg.state                 := send_data;
-        reg.word_cnt              := 0;
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_data;
+        -- reg.word_cnt              := 0;
 
 
         -- always not send data

@@ -182,7 +182,7 @@ void l2_denovo::ctrl()
             reqs[reqs_hit_i].retry++;
             {
                 HLS_DEFINE_PROTOCOL("send retry");
-				send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY) ? REQ_V : REQ_WTdata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+				send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY && (!reqs[reqs_hit_i].state == DNV_IV_DCS)) ? REQ_V : REQ_Odata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
             }
 	    }
 	    break;
@@ -367,6 +367,7 @@ void l2_denovo::ctrl()
                                     line_buf[way_hit].range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i) = fwd_in.line.range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i);
                                 } else {
                                     word_mask |= 1 << i;
+                                    touched_buf[way_hit][i] = false;
                                 }
                             }
                         }
@@ -513,10 +514,14 @@ void l2_denovo::ctrl()
                             {
                                 if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
                                     HLS_DEFINE_PROTOCOL("req_wtfwd out");
-                                    send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                    if(cpu_req.use_owner_pred){
+                                        send_fwd_out(FWD_WTfwd, cpu_req.pred_cid, 1, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                    }else{
+                                        send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                    }
                                     wait();
                                     state_buf[way_write][addr_br.w_off] = DNV_V;
-                                    touched_buf[way_write][addr_br.w_off] = true;
+                                    touched_buf[way_write][addr_br.w_off] = false;
                                 }
                             }
                             break;
@@ -548,8 +553,13 @@ void l2_denovo::ctrl()
                 
                 if (word_mask) // some words are present but not whole line. send reqv
                 {
-                    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
-				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
+                    if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                        send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, word_mask);
+				        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
+                    }else{
+                        send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
+				        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
+                    }
                 }
                 else {
                     touched_buf[way_hit][addr_br.w_off] = true;
@@ -560,9 +570,13 @@ void l2_denovo::ctrl()
 			}
             else if (empty_way_found) {
 
-				send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-				fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
-
+                if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                    send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
+                }else{
+				    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
+                }
 			} else {
 
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
