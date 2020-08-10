@@ -26,7 +26,7 @@ use work.nocpackage.all;
 use work.allcaches.all;
 use work.cachepackage.all;              -- contains l2 cache component
 use work.sldcommon.all;
-
+use work.socmap.all;
 
 entity l2_acc_wrapper is
   generic (
@@ -1298,7 +1298,7 @@ begin  -- process fsm_cache2noc
           coherence_fwd_snd_data_in <= make_dcs_header(fwd_out_data_coh_msg, mem_info,
                                       mem_num, hprot, fwd_out_data_addr, local_x,
                                       local_y, fwd_out_data_to_req(0),
-                                      fwd_out_data_req_id,
+                                      fwd_out_data_req_id, std_logic_vector(to_unsigned(tile_cache_id(tile_id), NL2_MAX_LOG2)),
                                       cache_x, cache_y, fwd_out_data_word_mask);
           reg.state := send_addr;
 

@@ -158,7 +158,7 @@ package cachepackage is
   function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
     mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
     local_x     : local_yx; local_y : local_yx;
-    to_req      : std_ulogic; req_id : cache_id_t;
+    to_req      : std_ulogic; req_id : cache_id_t; src_id : cache_id_t;
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     word_mask    : word_mask_t)
@@ -465,7 +465,7 @@ package body cachepackage is
   function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
                         mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
                         local_x     : local_yx; local_y : local_yx;
-                        to_req      : std_ulogic; req_id : cache_id_t;
+                        to_req      : std_ulogic; req_id : cache_id_t; src_id : cache_id_t;
                         cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
                         cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
                         word_mask    : word_mask_t)
@@ -506,7 +506,7 @@ package body cachepackage is
     end if;
 
     -- compose header
-    reserved := word_mask & std_logic_vector(resize(unsigned(req_id), RESERVED_WIDTH - WORDS_PER_LINE));
+    reserved := word_mask & std_logic_vector(resize(unsigned(src_id), RESERVED_WIDTH - WORDS_PER_LINE));
     header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg, reserved);
 
     return header;
