@@ -12,9 +12,6 @@
 	path = soft/ariane/linux
 	url = https://github.com/sld-columbia/linux.git
 	branch = ariane
-[submodule "third-party/ariane"]
-	path = third-party/ariane
-	url = https://github.com/pulp-platform/ariane.git
 [submodule "soft/ariane/riscv-pk"]
 	path = soft/ariane/riscv-pk
 	url = https://github.com/sld-columbia/riscv-pk.git
@@ -31,3 +28,6 @@
 [submodule "rtl/src/sld/caches/esp-caches"]
  	path = rtl/src/sld/caches/esp-caches
  	url = https://github.com/sld-columbia/esp-caches.git
+[submodule "third-party/ariane"]
+	path = third-party/ariane
+	url = git@gitlab.engr.illinois.edu:cs_adve/riscv-ariane.git
