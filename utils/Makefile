@@ -2002,3 +2002,8 @@ ssh:
 endif
 
 .PHONY: uart xuart ssh
+
+# UIUC RSIM CentOS remote worker
+
+%-remote:
+	@python3 $(ESP_ROOT)/third-party/spandex/remote_launcher.py $@
