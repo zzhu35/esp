@@ -25,6 +25,7 @@ use work.nocpackage.all;
 use work.allcaches.all;
 use work.cachepackage.all;              -- contains l2 cache component
 use work.sldcommon.all;
+use work.socmap.all;
 
 
 entity l2_wrapper is
@@ -1711,7 +1712,7 @@ begin  -- architecture rtl of l2_wrapper
 
 
 -------------------------------------------------------------------------------
--- FSM: Forwards to NoC
+-- FSM: Forwards to NoC -- DCS hprot == DATA Only
 -------------------------------------------------------------------------------
 fsm_fwd_out : process (fwd_out_reg, coherence_fwd_snd_full,
 fwd_out_valid, fwd_out_data_coh_msg, fwd_out_data_req_id,
@@ -1752,10 +1753,10 @@ begin  -- process fsm_cache2noc
 
           coherence_fwd_snd_wrreq <= '1';
 
-          coherence_fwd_snd_data_in <= make_header(fwd_out_data_coh_msg, mem_info,
+          coherence_fwd_snd_data_in <= make_dcs_header(fwd_out_data_coh_msg, mem_info,
                                       mem_num, hprot, fwd_out_data_addr, local_x,
                                       local_y, fwd_out_data_to_req(0),
-                                      fwd_out_data_req_id,
+                                      fwd_out_data_req_id, std_logic_vector(to_unsigned(tile_cache_id(tile_id), NL2_MAX_LOG2)),
                                       cache_x, cache_y, fwd_out_data_word_mask);
           reg.state := send_addr;
 
@@ -1768,32 +1769,32 @@ begin  -- process fsm_cache2noc
       if coherence_fwd_snd_full = '0' then
 
         coherence_fwd_snd_wrreq <= '1';
-        -- mix_msg := '0' & reg.coh_msg;
+        mix_msg := '0' & reg.coh_msg;
 
-        -- case mix_msg is
+        case mix_msg is
 
-        --   when RSP_O | RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
+          when FWD_WTfwd =>
 
-        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        --     reg.state                 := send_data;
-        --     reg.word_cnt              := 0;
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_data;
+            reg.word_cnt              := 0;
 
-        --   when others =>
+          when others =>
 
-        --     coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-        --     coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        --     reg.state                 := send_header;
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_header;
 
-        -- end case;
+        end case;
 
 
         -- always send data
 
-        coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-        coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-        reg.state                 := send_data;
-        reg.word_cnt              := 0;
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_data;
+        -- reg.word_cnt              := 0;
 
         -- always not send data
         -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
