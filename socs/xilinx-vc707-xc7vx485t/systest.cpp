@@ -53,7 +53,15 @@ int main(int argc, char **argv)
 
 	// riscv_sp_test();
 
-	lock_test(1);
+	//lock_test(1);
+	volatile long long int* ptr = 0xb0000000;
+	long long int data = *ptr;
+	cprintint(data);
+	cprintf("\n");
+	cprintint(data >> 32);
+	cprintf("\n");
+	cprintf("2\n");
+	cprintf("3\n");
 
 	return 0;
 }
