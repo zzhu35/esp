@@ -385,6 +385,7 @@ void l2_denovo::ctrl()
                         // not found in the cache, send req_wt back to llc
                         send_req_out(REQ_WT, 1, fwd_in.addr, fwd_in.line, fwd_in.word_mask);
                     }
+                    send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
                 }
                 break;
                 default:
@@ -398,10 +399,11 @@ void l2_denovo::ctrl()
 
 	    addr_breakdown_t addr_br;
 	    sc_uint<REQS_BITS> reqs_empty_i;
+        sc_uint<REQS_BITS> reqs_empty_i2;
 
 	    addr_br.breakdown(cpu_req.addr);
 
-	    reqs_peek_req(addr_br.set, reqs_empty_i);
+	    reqs_peek_req(addr_br.set, reqs_empty_i, reqs_empty_i2);
         base = addr_br.set << L2_WAY_BITS;
 
 
@@ -597,7 +599,40 @@ void l2_denovo::ctrl()
                     }
                 }
 
+                for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
+                    HLS_UNROLL_LOOP(ON, "4");
+                    state_buf[evict_way][i] = DNV_I;
+                    touched_buf[evict_way][i] = false;
+                    // Update it now b/c set_conflict could be true
+                    states[base + evict_way][i] = DNV_I;
+                    touched[base + evict_way][i] = false;
+                }
+
+                send_inval(line_addr_evict);
+
+                if(reqs_cnt >= 2 || word_mask == 0){
+
+                    if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                        HLS_DEFINE_PROTOCOL("read miss send fwd req v");
+                        send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
+                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                    }else{
+                        HLS_DEFINE_PROTOCOL("read miss send req v");
+                        send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                        wait();
+                    }
+
+                    if (word_mask)
+                    {
+                        HLS_DEFINE_PROTOCOL("send wb after reqv");
+                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i2);
+                        reqs[reqs_empty_i2].tag = tag_buf[evict_way];
+                        //wait();
+                    }
+                }else{
                     HLS_DEFINE_PROTOCOL("spandex_dual_req");
                     if (word_mask)
                     {
@@ -606,25 +641,12 @@ void l2_denovo::ctrl()
                         reqs[reqs_empty_i].tag = tag_buf[evict_way];
                         //wait();
                     }
-                }   
 
-
-                for (int i = 0; i < WORDS_PER_LINE; i ++)
-                {
-                    HLS_UNROLL_LOOP(ON, "4");
-                    // Update it now b/c set_conflict will be true
-                    // state_buf[evict_way][i] = DNV_I;
-                    // touched_buf[evict_way][i] = false;
-                    states[base + evict_way][i] = DNV_I;
-                    touched[base + evict_way][i] = false;
-                }
-
-                send_inval(line_addr_evict);
-                
-                // make it set_conflict so that next ctrl loop there is an empty way
-                set_conflict = 1;
-                cpu_req_conflict = cpu_req;
-			}
+                    // make it set_conflict so that next ctrl loop there is an empty way
+                    set_conflict = 1;
+                    cpu_req_conflict = cpu_req;
+			    }
+            }      
 	    }
 	}
     if ((do_cpu_req && !set_conflict) || (do_fwd && !fwd_stall) || do_rsp){
@@ -1182,21 +1204,28 @@ void l2_denovo::reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_br, sc_uin
     // REQS_LOOKUP_ASSERT;
 }
 
-void l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i)
+void l2_denovo::reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i, sc_uint<REQS_BITS> &reqs_i2)
 {
     REQS_PEEK_REQ;
 
     set_conflict = reqs_cnt == 0; // if no empty reqs left, cannot process CPU request
 
+    bool find_one_empty = false;
+
     for (unsigned int i = 0; i < N_REQS; ++i) {
-	REQS_PEEK_REQ_LOOP;
+        REQS_PEEK_REQ_LOOP;
 
-	if (reqs[i].state == DNV_I)
-	    reqs_i = i;
+        if (reqs[i].state == DNV_I)
+            reqs_i = i;
 
-	if (reqs[i].set == set && reqs[i].state != DNV_I){
-        set_conflict = true;
-    }
+        if (reqs[i].state == DNV_I && find_one_empty == false){
+            reqs_i2 = i;
+            find_one_empty = true;
+        }
+
+        if (reqs[i].set == set && reqs[i].state != DNV_I){
+            set_conflict = true;
+        }
     }
 
 #ifdef L2_DEBUG

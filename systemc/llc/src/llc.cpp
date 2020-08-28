@@ -1362,6 +1362,9 @@ void llc::ctrl()
                         word_owner_mask = owners_buf[way] & req_in.word_mask;
                         if (word_owner_mask) {
                                 send_fwd_with_owner_mask(FWD_REQ_O, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
+                        }else{
+                                HLS_DEFINE_PROTOCOL("send_rsp_1100");
+                                send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
                         }
                         // update owner
                         for (int i = 0; i < WORDS_PER_LINE; i++) {
@@ -1371,10 +1374,6 @@ void llc::ctrl()
                                 }
                         }
                         owners_buf[way] |= req_in.word_mask;
-                        {
-                                HLS_DEFINE_PROTOCOL("send_rsp_1100");
-                                send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                        }
 
 		    }
 		    break;

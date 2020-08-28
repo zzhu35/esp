@@ -13,12 +13,12 @@
 #define DEV_NAME "sld,sort"
 
 #define SORT_LEN 64
-#define SORT_BATCH 2
+#define SORT_BATCH 4
 
 #define SORT_BUF_SIZE (SORT_LEN * SORT_BATCH * sizeof(unsigned))
 
 /* Size of the contiguous chunks for scatter/gather */
-#define CHUNK_SHIFT 7
+#define CHUNK_SHIFT 8
 #define CHUNK_SIZE BIT(CHUNK_SHIFT)
 #define NCHUNK ((SORT_BUF_SIZE % CHUNK_SIZE == 0) ?			\
 			(SORT_BUF_SIZE / CHUNK_SIZE) :			\
@@ -35,7 +35,7 @@
 
 static void sync()
 {
-	return; // if MESI, uncomment this
+	// return; // if MESI, uncomment this
 	volatile int tmp;
 	volatile int* d = (volatile int*)&tmp;
 
@@ -106,9 +106,13 @@ int main(int argc, char * argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	long long unsigned int a, b, c;
+	a = 0; b = 0; c = 0;
+
 
 	printf("Test parameters: [LEN, BATCH] = [%d, %d]\n\n", SORT_LEN, SORT_BATCH);
-	for (n = 0; n < ndev; n++) {
+	n = 0;
+	for (int iii = 0; iii < 1; iii++) {
 		/* TODO: Restore full test once ESP caches are integrated */
 		coherence = ACC_COH_FULL;
 		struct esp_device *dev = &espdevs[n];
@@ -126,27 +130,27 @@ int main(int argc, char * argv[])
 		sort_len_min = ioread32(dev, SORT_LEN_MIN_REG);
 		sort_len_max = ioread32(dev, SORT_LEN_MAX_REG);
 
-		printf("******************** %s.%d ********************\n", DEV_NAME, n);
+		//printf("******************** %s.%d ********************\n", DEV_NAME, n);
 		// Check access ok
 		if (SORT_LEN < sort_len_min ||
 			SORT_LEN > sort_len_max ||
 			SORT_BATCH < 1 ||
 			SORT_BATCH > sort_batch_max) {
-			printf("  Error: unsopported configuration parameters for %s.%d\n", DEV_NAME, n);
-			printf("         device can sort up to %d fp-vectors of size [%d, %d]\n",
-				sort_batch_max, sort_len_min, sort_len_max);
+			//printf("  Error: unsopported configuration parameters for %s.%d\n", DEV_NAME, n);
+			//printf("         device can sort up to %d fp-vectors of size [%d, %d]\n",
+			//	sort_batch_max, sort_len_min, sort_len_max);
 			break;
 		}
 
 		// Check if scatter-gather DMA is disabled
 		if (ioread32(dev, PT_NCHUNK_MAX_REG) == 0) {
-			printf("  -> scatter-gather DMA is disabled. Abort.\n");
+			//printf("  -> scatter-gather DMA is disabled. Abort.\n");
 			scatter_gather = 0;
 		}
 
 		if (scatter_gather)
 			if (ioread32(dev, PT_NCHUNK_MAX_REG) < NCHUNK) {
-				printf("  -> Not enough TLB entries available. Abort.\n");
+				//printf("  -> Not enough TLB entries available. Abort.\n");
 				break;
 			}
 
@@ -161,8 +165,8 @@ int main(int argc, char * argv[])
 			for (i = 0; i < NCHUNK; i++)
 				ptable[i] = (unsigned *) &mem[i * (CHUNK_SIZE / sizeof(unsigned))];
 
-			printf("  ptable = %p\n", ptable);
-			printf("  nchunk = %lu\n", NCHUNK);
+			//printf("  ptable = %p\n", ptable);
+			//printf("  nchunk = %lu\n", NCHUNK);
 		}
 
 		// Initialize input: write floating point hex values (simpler to debug)
@@ -188,10 +192,10 @@ int main(int argc, char * argv[])
 		iowrite32(dev, SORT_BATCH_REG, SORT_BATCH);
 
 		// Flush for non-coherent DMA
-		esp_flush(coherence);
+		//////////////////esp_flush(coherence);
 
 		// Start accelerator
-		printf("  Start..\n");
+		//printf("  Start..\n");
 		iowrite32(dev, CMD_REG, CMD_MASK_START);
 
 		timestamps[2] = get_counter();
@@ -204,7 +208,7 @@ int main(int argc, char * argv[])
 		timestamps[3] = get_counter();
 
 		iowrite32(dev, CMD_REG, 0x0);
-		printf("  Done\n");
+		//printf("  Done\n");
 
 		/* /\* Print output *\/ */
 		/* printf("  output:\n"); */
@@ -213,7 +217,7 @@ int main(int argc, char * argv[])
 		/* 		printf("    mem[%d][%d] = %08x\n", j, i, mem[j*SORT_LEN + i]); */
 
 		/* Validation */
-		printf("  validating...\n");
+		//printf("  validating...\n");
 		sync();
 
 		timestamps[4] = get_counter();
@@ -229,16 +233,21 @@ int main(int argc, char * argv[])
 			printf("  ... FAIL\n");
 		else
 			printf("  ... PASS\n");
-		printf("**************************************************\n\n");
+		//printf("**************************************************\n\n");
 		if (scatter_gather)
 			aligned_free(ptable);
 		aligned_free(mem);
 
+		a += timestamps[1] - timestamps[0];
+		b += timestamps[3] - timestamps[2];
+		c += timestamps[5] - timestamps[4];
+
 	}
-	long long unsigned int a, b, c;
-	a = timestamps[1] - timestamps[0];
-	b = timestamps[3] - timestamps[2];
-	c = timestamps[5] - timestamps[4];
+	//long long unsigned int a, b, c;
+	// a = timestamps[1] - timestamps[0];
+	// b = timestamps[3] - timestamps[2];
+	// c = timestamps[5] - timestamps[4];
 	printf("Spandex perf:\nBufgen\t%lu\nSort\t%lu\nValid\t%lu\nTot\t%lu\n", a, b, c, a+b+c);
+	printf("%lu\n",get_counter());
 	return 0;
 }
