@@ -1,23 +1,17 @@
-#ifdef __riscv
-
-#include "uart.h"
-
-int main(int argc, char **argv)
-{
-	print_uart("Hello from C!\n");
-	print_uart("Hello from Spandex!\n");
-	print_uart("Hello from Ariane!\n");
-	print_uart("Hello from LLC AMO!\n");
-
-	return 0;
-}
-
-#else
 #include <stdio.h>
+#include <stdatomic.h>
+
+volatile long long int lock = 1;
+volatile long long int busy = 0;
+volatile long long int tmp = 1;
 
 int main(int argc, char **argv)
 {
-	printf("Hello from Leon3!\n");
-}
+	printf("Hello from Ariane!\n");
 
-#endif
+	printf("Lock: %ld\n", lock);
+	atomic_fetch_add(&lock, 1);
+	printf("Lock: %ld\n", lock);
+	printf("End.\n");
+
+}
