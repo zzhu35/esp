@@ -6,6 +6,7 @@
 
 #define L2_DENOVO_FLATTEN_REGS				\
     HLS_FLATTEN_ARRAY(reqs);			\
+    HLS_FLATTEN_ARRAY(wbs);			\
     HLS_FLATTEN_ARRAY(states);			\
     HLS_FLATTEN_ARRAY(touched);			\
     HLS_FLATTEN_ARRAY(tag_buf);			\
@@ -340,6 +341,7 @@
 #define PRESERVE_SIGNALS				\
     HLS_PRESERVE_SIGNAL(asserts, true);	                \
     HLS_PRESERVE_SIGNAL(bookmark, true);		\
+    HLS_PRESERVE_SIGNAL(watch_dog, true);		\
     HLS_PRESERVE_SIGNAL(reqs_cnt_dbg, true);		\
     HLS_PRESERVE_SIGNAL(set_conflict_dbg, true);	\
     HLS_PRESERVE_SIGNAL(cpu_req_conflict_dbg, true);	\

@@ -831,6 +831,20 @@ typedef l2_rd_rsp_t llc_mem_rsp_t;
  * Ongoing transaction buffer tuypes
  */
 
+// write buffer entry
+class wb_t
+{
+public:
+bool valid;
+l2_tag_t tag;
+l2_set_t set;
+l2_way_t way;
+hprot_t hprot;
+word_mask_t word_mask;
+line_t line;
+};
+
+
 // ongoing request buffer
 class reqs_buf_t
 {
