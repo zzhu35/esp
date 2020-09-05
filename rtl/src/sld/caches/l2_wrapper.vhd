@@ -2030,6 +2030,7 @@ end process fsm_fwd_out;
                 rsp_in_valid            <= '1';
                 rsp_in_data_coh_msg     <= reg.coh_msg;
                 rsp_in_data_addr        <= coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                rsp_in_data_word_mask   <= reg.word_mask;
                 reg.state               := rcv_header;
 
               end if;

@@ -526,6 +526,7 @@ void l2_denovo::ctrl()
                 break;
                 case FWD_WTfwd:
                 {
+                    // @TODO check WB
                     word_mask_t word_mask = 0;
                     if(tag_hit){
                         for (int i = 0; i < WORDS_PER_LINE; i++){
@@ -1124,6 +1125,7 @@ inline void l2_denovo::reset_io()
 #endif
 
     reqs_cnt = N_REQS;
+    wbs_cnt = N_WB;
     set_conflict = false;
     // cpu_req_conflict =
     evict_stall = false;
