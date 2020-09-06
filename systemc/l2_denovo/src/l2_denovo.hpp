@@ -62,6 +62,7 @@ public:
     sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
     sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
+    sc_signal< sc_uint<3> > watch_dog;
 #endif
 
     // Other signals
@@ -230,7 +231,7 @@ private:
     sc_uint<WB_BITS> wb_evict;
     bool drain_in_progress;
     bool set_conflict;
-    sc_uint<3> watch_dog;
+    
     l2_cpu_req_t cpu_req_conflict;
     bool evict_stall;
     bool fwd_stall;

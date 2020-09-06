@@ -10,11 +10,12 @@ void l2_denovo::drain_wb()
     // when wb wmpty and reqs_buf has no pending ReqO, reset drain_in_progress
     for (int i = 0; i < N_WB; i++)
     {
-        HLS_UNROLL_LOOP();
         bool success = false;
-        if (wbs[i].valid) {
+        if (wbs[i].valid && reqs_cnt > 0) {
             dispatch_wb(success, i);
         }
+        wait();
+
     }
 
     bool mshr_no_reqo = true;
@@ -37,12 +38,24 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     // dispatch to reqs if full line
     // reset success if wb full && reqs full
 
+    sc_uint<WB_BITS> full_wb = wb_evict++;
+    for (int i = 0; i < N_WB; i++)
+    {
+        HLS_UNROLL_LOOP();
+        if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
+        {
+            full_wb = i;
+        }
+    }
+
     if (wbs_cnt == 0) {
         // try dispatching
-        dispatch_wb(success, wb_evict++);
+        dispatch_wb(success, full_wb);
         // if mshr refuse dispatching, return unsuccess
         if (!success) return;
     }
+
+    success = true;
 
     bool hit = false;
     sc_uint<WB_BITS> i = 0;
@@ -65,18 +78,20 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     wbs[i].word_mask |= 1 << addr_br.w_off;
     wbs[i].line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = word;
 
-    
-
-    for (int i = 0; i < N_WB; i++)
-    {
-        HLS_UNROLL_LOOP();
-        bool success = false;
-        if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
-        {
-            // if all valid, dispatch
-            dispatch_wb(success, i);
-        }
+    if (wbs[i].word_mask == WORD_MASK_ALL) {
+        dispatch_wb(hit, i); // just try dispatching, it's ok if fail
     }
+
+    // for (int i = 0; i < N_WB; i++)
+    // {
+    //     bool success = false;
+    //     if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL && reqs_cnt > 0)
+    //     {
+    //         // if all valid, dispatch
+    //         dispatch_wb(success, i);
+    //     }
+    //     wait();
+    // }
 
 }
 
@@ -122,7 +137,7 @@ void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
         if (reqs[i].set == wbs[wb_i].set && reqs[i].state != DNV_I){
             // found conflict, cannot dispatch WB
             success = false;
-            break;
+            return;
         }
     }
 
@@ -277,11 +292,13 @@ void l2_denovo::ctrl()
         case RSP_O:
         {
             // if done, don't affect current state
-            // however, if anything bad happens, wake up our lovely watchdog
+            // // however, if anything bad happens, wake up our lovely watchdog
+            bool bad = false;
             for (int i = 0; i < WORDS_PER_LINE; i++) {
                 HLS_UNROLL_LOOP();
-                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) watch_dog = WDOG_1;
+                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
             }
+            if (bad) watch_dog.write(WDOG_1);
 
             reqs[reqs_hit_i].word_mask &= ~(rsp_in.word_mask);
 
@@ -645,7 +662,6 @@ void l2_denovo::ctrl()
 
             else if (cpu_req.cpu_msg == WRITE)
             {
-                HLS_DEFINE_PROTOCOL("send wt");
                 l2_way_t way_write;
                 if (tag_hit || empty_way_found) way_write = (tag_hit) ? way_hit : empty_way;
                 else {
@@ -680,8 +696,9 @@ void l2_denovo::ctrl()
                                 // give up and raise set_conflicct
                                 set_conflict = true;
                                 cpu_req_conflict = cpu_req;
-                                // just break out of control loop
-                                break;
+                                // continue control loop
+                                wait();
+                                continue;
                             }
                             // now we can safely send req wb to evict 
                         }
@@ -742,11 +759,12 @@ void l2_denovo::ctrl()
                         add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot);
                         if (!success)
                         {
-                            // if wb refused sttempted insertion, raise set_conflict
+                            // if wb refused attempted insertion, raise set_conflict
                             set_conflict = true;
                             cpu_req_conflict = cpu_req;
-                            // just break out of control loop
-                            break;
+                            // continue control loop
+                            wait();
+                            continue;
                         }
 
 #else
@@ -880,8 +898,9 @@ void l2_denovo::ctrl()
                             // give up and raise set_conflicct
                             set_conflict = true;
                             cpu_req_conflict = cpu_req;
-                            // just break out of control loop
-                            break;
+                            // continue control loop
+                            wait();
+                            continue;
                         }
                         // now we can safely send req wb to evict 
                     }
@@ -910,8 +929,9 @@ void l2_denovo::ctrl()
                             // give up and raise set_conflicct
                             set_conflict = true;
                             cpu_req_conflict = cpu_req;
-                            // just break out of control loop
-                            break;
+                            // continue control loop
+                            wait();
+                            continue;
                         }
                         // now we can safely send req wb to evict 
                     }
@@ -1101,6 +1121,7 @@ inline void l2_denovo::reset_io()
     peek_reqs_i_dbg.write(0);
     peek_reqs_i_flush_dbg.write(0);
     peek_reqs_hit_fwd_dbg.write(0);
+    watch_dog.write(0);
 
     // for (int i = 0; i < N_REQS; i++) {
     // 	REQS_DBGPUT;
@@ -1139,7 +1160,6 @@ inline void l2_denovo::reset_io()
     ongoing_flush = false;
     drain_in_progress = false;
     wb_evict = 0;
-    watch_dog = false;
     flush_set = 0;
     flush_way = 0;
 
