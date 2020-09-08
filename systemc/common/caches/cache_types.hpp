@@ -835,13 +835,44 @@ typedef l2_rd_rsp_t llc_mem_rsp_t;
 class wb_t
 {
 public:
-bool valid;
-l2_tag_t tag;
-l2_set_t set;
-l2_way_t way;
-hprot_t hprot;
-word_mask_t word_mask;
-line_t line;
+	bool valid;
+	l2_tag_t tag;
+	l2_set_t set;
+	l2_way_t way;
+	hprot_t hprot;
+	word_mask_t word_mask;
+	line_t line;
+
+    wb_t() :
+	valid(0),
+	tag(0),
+	set(0),
+	way(0),
+	hprot(0),
+	line(0),
+	word_mask(0)
+    {}
+
+    inline wb_t& operator = (const wb_t& x) {
+	valid			= x.valid;
+	tag			= x.tag;
+	set			= x.set;
+	way			= x.way;
+	hprot			= x.hprot;
+	word_mask			= x.word_mask;
+	line			= x.line;
+	return *this;
+    }
+    inline bool operator     == (const wb_t& x) const {
+		return false;
+    }
+    inline friend void sc_trace(sc_trace_file *tf, const wb_t& x, const std::string & name) {
+
+    }
+    inline friend ostream & operator<<(ostream& os, const wb_t& x) {
+	return os;
+    }
+
 };
 
 
@@ -898,6 +929,8 @@ public:
 	invack_cnt		= x.invack_cnt;
 	word			= x.word;
 	line			= x.line;
+	word_mask = x.word_mask;
+
 	return *this;
     }
     inline bool operator     == (const reqs_buf_t& x) const {
@@ -913,6 +946,7 @@ public:
 		x.hprot	     == hprot		&&
 		x.invack_cnt == invack_cnt	&&
 		x.word	     == word		&&
+		x.word_mask == word_mask &&
 		x.line	     == line);
     }
     inline friend void sc_trace(sc_trace_file *tf, const reqs_buf_t& x, const std::string & name) {

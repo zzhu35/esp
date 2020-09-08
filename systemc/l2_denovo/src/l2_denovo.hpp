@@ -32,6 +32,7 @@ public:
     sc_signal< sc_bv<BOOKMARK_WIDTH> > bookmark;
 
     sc_signal< sc_uint<REQS_BITS_P1> > reqs_cnt_dbg;
+    sc_signal< sc_uint<WB_BITS_P1> > wbs_cnt_dbg;
     sc_signal< bool > set_conflict_dbg;
     sc_signal< l2_cpu_req_t > cpu_req_conflict_dbg;
     sc_signal< bool > evict_stall_dbg;
@@ -58,6 +59,7 @@ public:
     sc_signal<bool> peek_reqs_hit_fwd_dbg;
 
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
+    sc_signal<wb_t> wbs_dbg[N_WB];
     sc_signal<l2_tag_t> tag_buf_dbg[L2_WAYS];
     sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
     sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];

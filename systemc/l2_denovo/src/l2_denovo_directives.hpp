@@ -343,6 +343,7 @@
     HLS_PRESERVE_SIGNAL(bookmark, true);		\
     HLS_PRESERVE_SIGNAL(watch_dog, true);		\
     HLS_PRESERVE_SIGNAL(reqs_cnt_dbg, true);		\
+    HLS_PRESERVE_SIGNAL(wbs_cnt_dbg, true);		\
     HLS_PRESERVE_SIGNAL(set_conflict_dbg, true);	\
     HLS_PRESERVE_SIGNAL(cpu_req_conflict_dbg, true);	\
     HLS_PRESERVE_SIGNAL(evict_stall_dbg, true);		\
@@ -367,6 +368,7 @@
     HLS_PRESERVE_SIGNAL(peek_reqs_i_flush_dbg, true);	\
     HLS_PRESERVE_SIGNAL(peek_reqs_hit_fwd_dbg, true);	\
     HLS_PRESERVE_SIGNAL(reqs_dbg, true);		\
+    HLS_PRESERVE_SIGNAL(wbs_dbg, true);		\
     HLS_PRESERVE_SIGNAL(tag_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(state_buf_dbg, true);		\
     HLS_PRESERVE_SIGNAL(evict_way_dbg, true); \

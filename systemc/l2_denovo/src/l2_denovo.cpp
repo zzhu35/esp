@@ -691,16 +691,12 @@ void l2_denovo::ctrl()
                             // we don't have ownership for the eviction yet
                             // attempt to dispatch
                             dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
-                            if (!hit_evict) {
-                                // mshr refused our attempt to dispatch...
-                                // give up and raise set_conflicct
-                                set_conflict = true;
-                                cpu_req_conflict = cpu_req;
-                                // continue control loop
-                                wait();
-                                continue;
-                            }
-                            // now we can safely send req wb to evict 
+                            set_conflict = true;
+                            cpu_req_conflict = cpu_req;
+                            // continue control loop
+                            set_conflict_dbg.write(set_conflict);
+                            wait();
+                            continue;
                         }
 
 #endif
@@ -808,27 +804,7 @@ void l2_denovo::ctrl()
                 }
                 else {
                     touched_buf[way_hit][addr_br.w_off] = true;
-#if (USE_WB)
-                    // if there are words in wb, need to overwrite
-                    line_t wb_interleved_line = line_buf[way_hit];
-                    if (wb_hit)
-                    {
-                        for (int i = 0; i < WORDS_PER_LINE; i++)
-                        {
-                            HLS_UNROLL_LOOP();
-                            if (wbs[wb_i].word_mask & (1 << i))
-                                wb_interleved_line.range(((i + 1) * BITS_PER_WORD) - 1, i * BITS_PER_WORD) = wbs[wb_i].line.range(((i + 1) * BITS_PER_WORD) - 1, i * BITS_PER_WORD);
-
-                            {
-                                HLS_DEFINE_PROTOCOL();
-                                send_rd_rsp(wb_interleved_line);
-                            }
-                        }
-                    }
-
-#else
                     send_rd_rsp(line_buf[way_hit]);
-#endif
                 }
                 
 
@@ -893,16 +869,13 @@ void l2_denovo::ctrl()
                         // we don't have ownership for the eviction yet
                         // attempt to dispatch
                         dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
-                        if (!hit_evict) {
-                            // mshr refused our attempt to dispatch...
-                            // give up and raise set_conflicct
-                            set_conflict = true;
-                            cpu_req_conflict = cpu_req;
-                            // continue control loop
-                            wait();
-                            continue;
-                        }
-                        // now we can safely send req wb to evict 
+                        // give up and raise set_conflicct
+                        set_conflict = true;
+                        cpu_req_conflict = cpu_req;
+                        // continue control loop
+                        set_conflict_dbg.write(set_conflict);
+                        wait();
+                        continue;
                     }
 #endif
                     if (word_mask)
@@ -924,16 +897,13 @@ void l2_denovo::ctrl()
                         // we don't have ownership for the eviction yet
                         // attempt to dispatch
                         dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
-                        if (!hit_evict) {
-                            // mshr refused our attempt to dispatch...
-                            // give up and raise set_conflicct
-                            set_conflict = true;
-                            cpu_req_conflict = cpu_req;
-                            // continue control loop
-                            wait();
-                            continue;
-                        }
-                        // now we can safely send req wb to evict 
+                        // give up and raise set_conflicct
+                        set_conflict = true;
+                        cpu_req_conflict = cpu_req;
+                        // continue control loop
+                        set_conflict_dbg.write(set_conflict);
+                        wait();
+                        continue;
                     }
 #endif
                     HLS_DEFINE_PROTOCOL("spandex_dual_req");
@@ -968,6 +938,7 @@ void l2_denovo::ctrl()
 	bookmark.write(bookmark_tmp);
 
 	reqs_cnt_dbg.write(reqs_cnt);
+    wbs_cnt_dbg.write(wbs_cnt);
 	set_conflict_dbg.write(set_conflict);
 	cpu_req_conflict_dbg.write(cpu_req_conflict);
 	evict_stall_dbg.write(evict_stall);
@@ -984,6 +955,11 @@ void l2_denovo::ctrl()
 	    REQS_DBG;
 	    reqs_dbg[i] = reqs[i];
 	}
+
+    for (int i = 0; i < N_WB; i++) {
+        HLS_UNROLL_LOOP();
+        wbs_dbg[i] = wbs[i];
+    }
 
 	for (int i = 0; i < L2_WAYS; i++) {
 	    BUFS_DBG;
@@ -1098,6 +1074,7 @@ inline void l2_denovo::reset_io()
 
     /* Reset signals exported to output ports */
     reqs_cnt_dbg.write(0);
+    wbs_cnt_dbg.write(0);
     set_conflict_dbg.write(0);
     // cpu_req_conflict_dbg.write(0);
     evict_stall_dbg.write(0);
