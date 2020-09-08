@@ -816,99 +816,85 @@ void l2_denovo::ctrl()
                 // eviction
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
 
-                word_mask_t word_mask = 0;
-                for (int i = 0; i < WORDS_PER_LINE; i ++)
-                {
-                    HLS_UNROLL_LOOP(ON, "3");
-                    if (state_buf[evict_way][i] == DNV_R)
-                    {
-                        word_mask |= 1 << i;
-                    }
-                }
-
-                for (int i = 0; i < WORDS_PER_LINE; i ++)
-                {
-                    HLS_UNROLL_LOOP(ON, "4");
-                    state_buf[evict_way][i] = DNV_I;
-                    touched_buf[evict_way][i] = false;
-                    // Update it now b/c set_conflict could be true
-                    states[base + evict_way][i] = DNV_I;
-                    touched[base + evict_way][i] = false;
-                }
-
-                send_inval(line_addr_evict);
-
+#if (USE_WB)
+                // check in wb for eviction conflict
+                // if in WB, move into MSHR, set_conflict
                 addr_breakdown_t evict_addr_br = addr_br;
                 evict_addr_br.tag = tag_buf[evict_way];
+                bool hit_evict = false;
+                sc_uint<WB_BITS> wb_i_evict = 0;
+                peek_wb(hit_evict, wb_i_evict, evict_addr_br);
+                if (hit_evict){
+                    // we don't have ownership for the eviction yet
+                    // attempt to dispatch
+                    dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
+                    // give up and raise set_conflicct
+                    set_conflict = true;
+                    cpu_req_conflict = cpu_req;
+                } else {
+#endif
 
-                if(reqs_cnt >= 2 || word_mask == 0){
-
-                    if(cpu_req.dcs_en && cpu_req.use_owner_pred){
-                        HLS_DEFINE_PROTOCOL("read miss send fwd req v");
-                        send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
-                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
-                    }else{
-                        HLS_DEFINE_PROTOCOL("read miss send req v");
-                        send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
-                        wait();
+                    word_mask_t word_mask = 0;
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "3");
+                        if (state_buf[evict_way][i] == DNV_R)
+                        {
+                            word_mask |= 1 << i;
+                        }
                     }
 
-                    if (word_mask)
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
                     {
-#if (USE_WB)
-                        // check in wb for eviction conflict
-                        // if in WB, move into MSHR, set_conflict
-                        bool hit_evict = false;
-                        sc_uint<WB_BITS> wb_i_evict = 0;
-                        peek_wb(hit_evict, wb_i_evict, evict_addr_br);
-                        if (hit_evict){
-                            // we don't have ownership for the eviction yet
-                            // attempt to dispatch
-                            dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
-                            // give up and raise set_conflicct
-                            set_conflict = true;
-                            cpu_req_conflict = cpu_req;
+                        HLS_UNROLL_LOOP(ON, "4");
+                        state_buf[evict_way][i] = DNV_I;
+                        touched_buf[evict_way][i] = false;
+                        // Update it now b/c set_conflict could be true
+                        states[base + evict_way][i] = DNV_I;
+                        touched[base + evict_way][i] = false;
+                    }
+                    send_inval(line_addr_evict);
+
+
+
+                    if(reqs_cnt >= 2 || word_mask == 0){
+
+                        if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                            HLS_DEFINE_PROTOCOL("read miss send fwd req v");
+                            send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
+                            fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                        }else{
+                            HLS_DEFINE_PROTOCOL("read miss send req v");
+                            send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                            fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                            wait();
                         }
-#else
+
+                        if (word_mask)
                         {
                             HLS_DEFINE_PROTOCOL("send wb after reqv");
                             send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                             fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i2);
-                            //wait();
                         }
-#endif
-                    }
 
-                }else{
+                    }else{
 
-                    if (word_mask)
-                    {
-#if (USE_WB)
-                        // check in wb for eviction conflict
-                        // if in WB, move into MSHR, set_conflict
-                        bool hit_evict = false;
-                        sc_uint<WB_BITS> wb_i_evict = 0;
-                        peek_wb(hit_evict, wb_i_evict, evict_addr_br);
-                        if (hit_evict){
-                            // we don't have ownership for the eviction yet
-                            // attempt to dispatch
-                            dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
-                        }
-#else
+                        if (word_mask)
                         {
                             HLS_DEFINE_PROTOCOL("spandex_dual_req");
                             send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                             fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
                             //wait();
                         }
-#endif
+
+                        // make it set_conflict so that next ctrl loop there is an empty way
+                        set_conflict = true;
+                        cpu_req_conflict = cpu_req;
                     }
 
-                    // make it set_conflict so that next ctrl loop there is an empty way
-                    set_conflict = true;
-                    cpu_req_conflict = cpu_req;
-			    }
+#if (USE_WB)
+                }
+#endif
             }      
 	    }
 	}
