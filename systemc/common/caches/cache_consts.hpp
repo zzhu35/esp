@@ -97,6 +97,11 @@
 #define L2_SET_RANGE_HI	(L2_TAG_RANGE_LO - 1)
 #define L2_TAG_OFFSET	(1 << L2_TAG_RANGE_LO)
 
+
+// write buffer
+#define N_WB 8
+#define WB_BITS 3
+#define WB_BITS_P1 4
 // Ongoing transaction buffers
 #define N_REQS		4	// affects REQS_BITS
 #define REQS_BITS	2	// depends on N_REQS
@@ -213,6 +218,9 @@
 #define LLC_WB      11
 
 
+// RTL watch dogs
+#define WDOG_1      1
+
 // DeNovo states
 #define DNV_I       0
 #define DNV_V       1
@@ -224,6 +232,7 @@
 #define DNV_RI      3
 #define DNV_AMO     4
 #define DNV_IV_DCS  5
+#define DNV_XR      6
 
 // GPU states
 #define GPU_I       0

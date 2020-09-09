@@ -4,6 +4,9 @@
 #ifndef __L2_DENOVO_HPP__
 #define __L2_DENOVO_HPP__
 
+#define USE_WB 1
+
+
 #include "cache_utils.hpp"
 #include "l2_denovo_directives.hpp"
 
@@ -29,6 +32,7 @@ public:
     sc_signal< sc_bv<BOOKMARK_WIDTH> > bookmark;
 
     sc_signal< sc_uint<REQS_BITS_P1> > reqs_cnt_dbg;
+    sc_signal< sc_uint<WB_BITS_P1> > wbs_cnt_dbg;
     sc_signal< bool > set_conflict_dbg;
     sc_signal< l2_cpu_req_t > cpu_req_conflict_dbg;
     sc_signal< bool > evict_stall_dbg;
@@ -55,10 +59,12 @@ public:
     sc_signal<bool> peek_reqs_hit_fwd_dbg;
 
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
+    sc_signal<wb_t> wbs_dbg[N_WB];
     sc_signal<l2_tag_t> tag_buf_dbg[L2_WAYS];
     sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
     sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
+    sc_signal< sc_uint<3> > watch_dog;
 #endif
 
     // Other signals
@@ -92,6 +98,8 @@ public:
 
     // Local registers
     reqs_buf_t	 reqs[N_REQS];
+    wb_t wbs[N_WB];
+
     word_mask_t reqs_word_mask_in[N_REQS];
 
 
@@ -194,6 +202,16 @@ public:
     void reqs_peek_fwd(addr_breakdown_t addr_br);
 
     void self_invalidate();
+
+
+    // write buffer
+
+    void drain_wb();
+    void add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_way_t way, hprot_t hprot);
+    void peek_wb(bool& hit, sc_uint<WB_BITS>& wb_i, addr_breakdown_t addr_br);
+    void dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i);
+
+
 #ifdef STATS_ENABLE
     void send_stats(bool stats);
 #endif
@@ -211,7 +229,11 @@ private:
     /* Variables for stalls, conflicts and atomic operations */
     bool is_to_req[2];
     sc_uint<REQS_BITS_P1> reqs_cnt;
+    sc_uint<WB_BITS_P1> wbs_cnt;
+    sc_uint<WB_BITS> wb_evict;
+    bool drain_in_progress;
     bool set_conflict;
+    
     l2_cpu_req_t cpu_req_conflict;
     bool evict_stall;
     bool fwd_stall;

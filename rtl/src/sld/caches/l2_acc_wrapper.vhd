@@ -858,8 +858,8 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= dma_address;
             ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= '1';
-            cpu_req_data_use_owner_pred <= '1';
+            cpu_req_data_dcs_en  <= '0';
+            cpu_req_data_use_owner_pred <= '0';
             cpu_req_data_dcs     <= "00";
             cpu_req_data_pred_cid <= "0000";
 
@@ -917,8 +917,8 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= reg.addr;
             ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= '1';
-            cpu_req_data_use_owner_pred <= '1';
+            cpu_req_data_dcs_en  <= '0';
+            cpu_req_data_use_owner_pred <= '0';
             cpu_req_data_dcs     <= "00";
             cpu_req_data_pred_cid <= "0000";
             -- cpu_req_data_dcs_en  <= reg.dcs_en;
@@ -1012,8 +1012,8 @@ begin  -- architecture rtl of l2_acc_wrapper
             -- cpu_req_data_pred_cid <= reg.pred_cid;
 
             --------------------------------SPANDEX_SWITCH-----------------------------------------------------------------------------------
-            cpu_req_data_dcs_en  <= '1';
-            cpu_req_data_use_owner_pred <= '1';
+            cpu_req_data_dcs_en  <= '0';
+            cpu_req_data_use_owner_pred <= '0';
             cpu_req_data_dcs     <= "00";
             cpu_req_data_pred_cid <= "0000";
 

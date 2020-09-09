@@ -3,6 +3,166 @@
 
 #include "l2_denovo.hpp"
 
+
+void l2_denovo::drain_wb()
+{
+    // dispatch to reqs, set drain_in_progress
+    // when wb wmpty and reqs_buf has no pending ReqO, reset drain_in_progress
+    for (int i = 0; i < N_WB; i++)
+    {
+        bool success = false;
+        if (wbs[i].valid && reqs_cnt > 0) {
+            dispatch_wb(success, i);
+        }
+        wait();
+
+    }
+
+    bool mshr_no_reqo = true;
+    for (int i = 0; i < N_REQS; i++)
+    {
+        HLS_UNROLL_LOOP();
+        if (reqs[i].state == DNV_XR)
+        {
+            mshr_no_reqo = false;
+            break;
+        }
+    }
+    drain_in_progress = !((wbs_cnt == N_WB) && mshr_no_reqo);
+
+}
+
+void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_way_t way, hprot_t hprot)
+{
+    // try to add an entry
+    // dispatch to reqs if full line
+    // reset success if wb full && reqs full
+
+    sc_uint<WB_BITS> full_wb = wb_evict++;
+    for (int i = 0; i < N_WB; i++)
+    {
+        HLS_UNROLL_LOOP();
+        if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
+        {
+            full_wb = i;
+        }
+    }
+
+    if (wbs_cnt == 0) {
+        // try dispatching
+        dispatch_wb(success, full_wb);
+        // if mshr refuse dispatching, return unsuccess
+        if (!success) return;
+    }
+
+    success = true;
+
+    bool hit = false;
+    sc_uint<WB_BITS> i = 0;
+    peek_wb(hit, i, addr_br);
+    if (hit)
+    {
+        // hit in WB
+
+    } else {
+        // empty in WB
+        wbs[i].valid = true;
+        wbs[i].tag = addr_br.tag;
+        wbs[i].set = addr_br.set;
+        wbs[i].way = way;
+        wbs[i].word_mask = 0;
+        wbs[i].line = 0;
+        wbs[i].hprot = hprot;
+        wbs_cnt--;
+    }
+    wbs[i].word_mask |= 1 << addr_br.w_off;
+    wbs[i].line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = word;
+
+    if (wbs[i].word_mask == WORD_MASK_ALL) {
+        dispatch_wb(hit, i); // just try dispatching, it's ok if fail
+    }
+
+    // for (int i = 0; i < N_WB; i++)
+    // {
+    //     bool success = false;
+    //     if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL && reqs_cnt > 0)
+    //     {
+    //         // if all valid, dispatch
+    //         dispatch_wb(success, i);
+    //     }
+    //     wait();
+    // }
+
+}
+
+void l2_denovo::peek_wb(bool& hit, sc_uint<WB_BITS>& wb_i, addr_breakdown_t addr_br)
+{
+    // check wb hit
+    for (int i = 0; i < N_WB; i++)
+    {
+        HLS_UNROLL_LOOP();
+        if (wbs[i].valid == false) {
+            hit = false;
+            wb_i = i;
+        }
+
+        if (wbs[i].valid && (wbs[i].tag == addr_br.tag) && (wbs[i].set == addr_br.set))
+        {
+            hit = true;
+            wb_i = i;
+            break;
+        }
+
+    }
+
+}
+
+void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
+{
+    // dispatch one entry to reqs, sets success
+    if (wbs[wb_i].valid == false || reqs_cnt == 0) {
+        success = false;
+        return;
+    }
+    // peek reqs buf
+    sc_uint<REQS_BITS> reqs_i;
+
+    for (unsigned int i = 0; i < N_REQS; ++i) {
+        HLS_UNROLL_LOOP();
+
+        if (reqs[i].state == DNV_I){
+            reqs_i = i;
+            success = true;
+        }
+
+        wait();
+        if (reqs[i].tag == wbs[wb_i].tag && reqs[i].set == wbs[wb_i].set && reqs[i].state != DNV_I){
+            // found conflict, cannot dispatch WB
+            success = false;
+            return;
+        }
+    }
+
+    // found empty entry in reqs
+    addr_breakdown_t addr_br;
+    line_addr_t line_addr;
+    addr_br.set = wbs[wb_i].set;
+    addr_br.tag = wbs[wb_i].tag;
+    line_addr = (addr_br.tag << L2_SET_BITS) | (addr_br.set);
+    fill_reqs(0, addr_br, 0, wbs[wb_i].way, 0, DNV_XR, wbs[wb_i].hprot, 0, wbs[wb_i].line, wbs[wb_i].word_mask, reqs_i);
+
+    {
+        HLS_DEFINE_PROTOCOL();
+        // send reqo
+        send_req_out(REQ_O, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+        // free WB
+        wbs[wb_i].valid = false;
+        wbs_cnt++;
+        wait();
+    }
+}
+
+
 /*
  * Processes
  */
@@ -52,8 +212,10 @@ void l2_denovo::ctrl()
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
 
+            if (drain_in_progress) drain_wb();
+
             can_get_rsp_in = l2_rsp_in.nb_can_get();
-            can_get_req_in = l2_cpu_req.nb_can_get();
+            can_get_req_in = l2_cpu_req.nb_can_get() && (!drain_in_progress); // if drain in progress, block all cpu requests
 
             wait();
 
@@ -129,8 +291,27 @@ void l2_denovo::ctrl()
 	    reqs_lookup(line_br, reqs_hit_i);
 
 	    switch (rsp_in.coh_msg) {
+        case RSP_O:
+        {
+            // if done, don't affect current state
+            // // however, if anything bad happens, wake up our lovely watchdog
+            bool bad = false;
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                HLS_UNROLL_LOOP();
+                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
+            }
+            if (bad) watch_dog.write(WDOG_1);
 
-            // respond AMO one word
+            reqs[reqs_hit_i].word_mask &= ~(rsp_in.word_mask);
+
+            if (reqs[reqs_hit_i].word_mask == 0) {
+                reqs[reqs_hit_i].state = DNV_I;
+                reqs_cnt++;
+            }
+
+        }
+        break;
+        // respond AMO one word
         case RSP_WTdata:
         {
             line_t line = 0;
@@ -364,6 +545,7 @@ void l2_denovo::ctrl()
                 break;
                 case FWD_WTfwd:
                 {
+                    // @TODO check WB
                     word_mask_t word_mask = 0;
                     if(tag_hit){
                         for (int i = 0; i < WORDS_PER_LINE; i++){
@@ -421,6 +603,11 @@ void l2_denovo::ctrl()
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
 
+            bool wb_hit = false;
+            sc_uint<WB_BITS> wb_i = 0;
+            peek_wb(wb_hit, wb_i, addr_br);
+            bool wb_word_hit = wb_hit && (wbs[wb_i].word_mask & (1 << addr_br.w_off));
+
             if (cpu_req.amo) {
                 coh_msg_t msg;
                 switch (cpu_req.amo)
@@ -477,7 +664,6 @@ void l2_denovo::ctrl()
 
             else if (cpu_req.cpu_msg == WRITE)
             {
-                HLS_DEFINE_PROTOCOL("send wt");
                 l2_way_t way_write;
                 if (tag_hit || empty_way_found) way_write = (tag_hit) ? way_hit : empty_way;
                 else {
@@ -495,11 +681,31 @@ void l2_denovo::ctrl()
                     }
 
                     if (word_mask) {
+                        addr_breakdown_t evict_addr_br = addr_br;
+                        evict_addr_br.tag = tag_buf[evict_way];
+#if (USE_WB)
+                        // check in wb for eviction conflict
+                        // if in WB, move into MSHR, set_conflict
+                        bool hit_evict = false;
+                        sc_uint<WB_BITS> wb_i_evict = 0;
+                        peek_wb(hit_evict, wb_i_evict, evict_addr_br);
+                        if (hit_evict){
+                            // we don't have ownership for the eviction yet
+                            // attempt to dispatch
+                            dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
+                            set_conflict = true;
+                            cpu_req_conflict = cpu_req;
+                            // continue control loop
+                            set_conflict_dbg.write(set_conflict);
+                            wait();
+                            continue;
+                        }
+
+#endif
                         HLS_DEFINE_PROTOCOL("spandex_dual_req");
                         send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
                         wait();
-                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
-                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
+                        fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
                     }
 
                     for (int i = 0; i < WORDS_PER_LINE; i ++)
@@ -520,6 +726,13 @@ void l2_denovo::ctrl()
                         switch (cpu_req.dcs){
                             case DCS_ReqWTfwd:
                             {
+#if (USE_WB)
+                                if (wb_hit)
+                                {
+                                    // if this line already exists in the wb, remove this word as we are sending wtfwd
+                                    wbs[wb_i].word_mask &= ~(1 << addr_br.w_off);
+                                }
+#endif
                                 if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
                                     HLS_DEFINE_PROTOCOL("req_wtfwd out");
                                     if(cpu_req.use_owner_pred){
@@ -539,9 +752,23 @@ void l2_denovo::ctrl()
                 }else{
                     if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
                         HLS_DEFINE_PROTOCOL("spandex_dual_req");
+#if (USE_WB)
+                        bool success = false;
+                        add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot);
+                        if (!success)
+                        {
+                            // if wb refused attempted insertion, raise set_conflict
+                            set_conflict = true;
+                            cpu_req_conflict = cpu_req;
+                        } else {
+                            state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+                        }
+
+#else
                         send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
                         wait();
                         state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+#endif
                     }
                 }
 
@@ -586,66 +813,88 @@ void l2_denovo::ctrl()
 				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
                 }
 			} else {
-
+                // eviction
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
 
-                word_mask_t word_mask = 0;
-                for (int i = 0; i < WORDS_PER_LINE; i ++)
-                {
-                    HLS_UNROLL_LOOP(ON, "3");
-                    if (state_buf[evict_way][i] == DNV_R)
-                    {
-                        word_mask |= 1 << i;
-                    }
-                }
-
-                for (int i = 0; i < WORDS_PER_LINE; i ++)
-                {
-                    HLS_UNROLL_LOOP(ON, "4");
-                    state_buf[evict_way][i] = DNV_I;
-                    touched_buf[evict_way][i] = false;
-                    // Update it now b/c set_conflict could be true
-                    states[base + evict_way][i] = DNV_I;
-                    touched[base + evict_way][i] = false;
-                }
-
-                send_inval(line_addr_evict);
-
-                if(reqs_cnt >= 2 || word_mask == 0){
-
-                    if(cpu_req.dcs_en && cpu_req.use_owner_pred){
-                        HLS_DEFINE_PROTOCOL("read miss send fwd req v");
-                        send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
-                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
-                    }else{
-                        HLS_DEFINE_PROTOCOL("read miss send req v");
-                        send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
-                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
-                        wait();
-                    }
-
-                    if (word_mask)
-                    {
-                        HLS_DEFINE_PROTOCOL("send wb after reqv");
-                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
-                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i2);
-                        reqs[reqs_empty_i2].tag = tag_buf[evict_way];
-                        //wait();
-                    }
-                }else{
-                    HLS_DEFINE_PROTOCOL("spandex_dual_req");
-                    if (word_mask)
-                    {
-                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
-                        fill_reqs(0, addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
-                        reqs[reqs_empty_i].tag = tag_buf[evict_way];
-                        //wait();
-                    }
-
-                    // make it set_conflict so that next ctrl loop there is an empty way
-                    set_conflict = 1;
+#if (USE_WB)
+                // check in wb for eviction conflict
+                // if in WB, move into MSHR, set_conflict
+                addr_breakdown_t evict_addr_br = addr_br;
+                evict_addr_br.tag = tag_buf[evict_way];
+                bool hit_evict = false;
+                sc_uint<WB_BITS> wb_i_evict = 0;
+                peek_wb(hit_evict, wb_i_evict, evict_addr_br);
+                if (hit_evict){
+                    // we don't have ownership for the eviction yet
+                    // attempt to dispatch
+                    dispatch_wb(hit_evict, wb_i_evict); // reusing hit for success here...
+                    // give up and raise set_conflicct
+                    set_conflict = true;
                     cpu_req_conflict = cpu_req;
-			    }
+                } else {
+#endif
+
+                    word_mask_t word_mask = 0;
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "3");
+                        if (state_buf[evict_way][i] == DNV_R)
+                        {
+                            word_mask |= 1 << i;
+                        }
+                    }
+
+                    for (int i = 0; i < WORDS_PER_LINE; i ++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "4");
+                        state_buf[evict_way][i] = DNV_I;
+                        touched_buf[evict_way][i] = false;
+                        // Update it now b/c set_conflict could be true
+                        states[base + evict_way][i] = DNV_I;
+                        touched[base + evict_way][i] = false;
+                    }
+                    send_inval(line_addr_evict);
+
+
+
+                    if(reqs_cnt >= 2 || word_mask == 0){
+
+                        if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                            HLS_DEFINE_PROTOCOL("read miss send fwd req v");
+                            send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
+                            fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                        }else{
+                            HLS_DEFINE_PROTOCOL("read miss send req v");
+                            send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                            fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, evict_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[evict_way], 0, reqs_empty_i);
+                            wait();
+                        }
+
+                        if (word_mask)
+                        {
+                            HLS_DEFINE_PROTOCOL("send wb after reqv");
+                            send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                            fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i2);
+                        }
+
+                    }else{
+
+                        if (word_mask)
+                        {
+                            HLS_DEFINE_PROTOCOL("spandex_dual_req");
+                            send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                            fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                            //wait();
+                        }
+
+                        // make it set_conflict so that next ctrl loop there is an empty way
+                        set_conflict = true;
+                        cpu_req_conflict = cpu_req;
+                    }
+
+#if (USE_WB)
+                }
+#endif
             }      
 	    }
 	}
@@ -666,6 +915,7 @@ void l2_denovo::ctrl()
 	bookmark.write(bookmark_tmp);
 
 	reqs_cnt_dbg.write(reqs_cnt);
+    wbs_cnt_dbg.write(wbs_cnt);
 	set_conflict_dbg.write(set_conflict);
 	cpu_req_conflict_dbg.write(cpu_req_conflict);
 	evict_stall_dbg.write(evict_stall);
@@ -682,6 +932,11 @@ void l2_denovo::ctrl()
 	    REQS_DBG;
 	    reqs_dbg[i] = reqs[i];
 	}
+
+    for (int i = 0; i < N_WB; i++) {
+        HLS_UNROLL_LOOP();
+        wbs_dbg[i] = wbs[i];
+    }
 
 	for (int i = 0; i < L2_WAYS; i++) {
 	    BUFS_DBG;
@@ -796,6 +1051,7 @@ inline void l2_denovo::reset_io()
 
     /* Reset signals exported to output ports */
     reqs_cnt_dbg.write(0);
+    wbs_cnt_dbg.write(0);
     set_conflict_dbg.write(0);
     // cpu_req_conflict_dbg.write(0);
     evict_stall_dbg.write(0);
@@ -819,6 +1075,7 @@ inline void l2_denovo::reset_io()
     peek_reqs_i_dbg.write(0);
     peek_reqs_i_flush_dbg.write(0);
     peek_reqs_hit_fwd_dbg.write(0);
+    watch_dog.write(0);
 
     // for (int i = 0; i < N_REQS; i++) {
     // 	REQS_DBGPUT;
@@ -843,6 +1100,7 @@ inline void l2_denovo::reset_io()
 #endif
 
     reqs_cnt = N_REQS;
+    wbs_cnt = N_WB;
     set_conflict = false;
     // cpu_req_conflict =
     evict_stall = false;
@@ -854,6 +1112,8 @@ inline void l2_denovo::reset_io()
     atomic_line_addr = 0;
     reqs_atomic_i = 0;
     ongoing_flush = false;
+    drain_in_progress = false;
+    wb_evict = 0;
     flush_set = 0;
     flush_way = 0;
 
@@ -1139,6 +1399,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
     empty_way_found = false;
 
     read_set(addr_br.set);
+    // wait();
     evict_way = evict_ways.port2[0][addr_br.set];
 
     for (int i = L2_WAYS-1; i >=0; --i) {
