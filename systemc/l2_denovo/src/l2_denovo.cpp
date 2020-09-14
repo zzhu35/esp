@@ -32,25 +32,25 @@ void l2_denovo::drain_wb()
 
 }
 
-void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_way_t way, hprot_t hprot)
+void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_way_t way, hprot_t hprot, bool dcs_en, bool use_owner_pred, cache_id_t pred_cid)
 {
     // try to add an entry
     // dispatch to reqs if full line
     // reset success if wb full && reqs full
 
-    sc_uint<WB_BITS> full_wb = wb_evict++;
+    sc_uint<WB_BITS> evict_wb = wb_evict++;
     for (int i = 0; i < N_WB; i++)
     {
         HLS_UNROLL_LOOP();
         if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
         {
-            full_wb = i;
+            evict_wb = i;
         }
     }
 
     if (wbs_cnt == 0) {
         // try dispatching
-        dispatch_wb(success, full_wb);
+        dispatch_wb(success, evict_wb);
         // if mshr refuse dispatching, return unsuccess
         if (!success) return;
     }
@@ -63,8 +63,32 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     if (hit)
     {
         // hit in WB
+        bool back_off = false;
+        if (wbs[i].dcs_en != dcs_en) {
+            back_off = true;
+        } else {
+            if (dcs_en) {
+                if (wbs[i].use_owner_pred != use_owner_pred) {
+                    back_off = true;
+                } else {
+                    if (use_owner_pred) {
+                        if (wbs[i].pred_cid != pred_cid) {
+                            back_off = true;
+                        }
+                    }
+                }
+            }
+        }
 
-    } else {
+        if (back_off) {
+            dispatch_wb(success, i);
+            if (!success) return;
+            else hit = false;
+        }
+
+    }
+    
+    if (!hit) {
         // empty in WB
         wbs[i].valid = true;
         wbs[i].tag = addr_br.tag;
@@ -73,6 +97,9 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
         wbs[i].word_mask = 0;
         wbs[i].line = 0;
         wbs[i].hprot = hprot;
+        wbs[i].dcs_en = dcs_en;
+        wbs[i].use_owner_pred = use_owner_pred;
+        wbs[i].pred_cid = pred_cid;
         wbs_cnt--;
     }
     wbs[i].word_mask |= 1 << addr_br.w_off;
@@ -154,7 +181,10 @@ void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
     {
         HLS_DEFINE_PROTOCOL();
         // send reqo
-        send_req_out(REQ_O, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+        if (!wbs[wb_i].dcs_en) send_req_out(REQ_O, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+        else if (!wbs[wb_i].use_owner_pred) send_req_out(REQ_WTfwd, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+        else send_fwd_out(FWD_WTfwd, wbs[wb_i].pred_cid, 1, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+
         // free WB
         wbs[wb_i].valid = false;
         wbs_cnt++;
@@ -722,17 +752,15 @@ void l2_denovo::ctrl()
                 hprots.port1[0][base + way_write] = cpu_req.hprot;
                 tags.port1[0][base + way_write] = addr_br.tag;
                 evict_ways.port1[0][addr_br.set] = way_write + 1;
+#if (USE_WB)
+                // when we are using write buffer, use add_wb function instead
+                if(false){
+#else
                 if(cpu_req.dcs_en){
+#endif
                         switch (cpu_req.dcs){
                             case DCS_ReqWTfwd:
                             {
-#if (USE_WB)
-                                if (wb_hit)
-                                {
-                                    // if this line already exists in the wb, remove this word as we are sending wtfwd
-                                    wbs[wb_i].word_mask &= ~(1 << addr_br.w_off);
-                                }
-#endif
                                 if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
                                     HLS_DEFINE_PROTOCOL("req_wtfwd out");
                                     if(cpu_req.use_owner_pred){
@@ -754,7 +782,7 @@ void l2_denovo::ctrl()
                         HLS_DEFINE_PROTOCOL("spandex_dual_req");
 #if (USE_WB)
                         bool success = false;
-                        add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot);
+                        add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot, cpu_req.dcs_en, cpu_req.use_owner_pred, cpu_req.pred_cid);
                         if (!success)
                         {
                             // if wb refused attempted insertion, raise set_conflict

@@ -842,6 +842,10 @@ public:
 	hprot_t hprot;
 	word_mask_t word_mask;
 	line_t line;
+	bool    dcs_en;
+	bool    use_owner_pred;
+	cache_id_t pred_cid;
+
 
     wb_t() :
 	valid(0),
@@ -850,7 +854,10 @@ public:
 	way(0),
 	hprot(0),
 	line(0),
-	word_mask(0)
+	word_mask(0),
+	dcs_en(0),
+	use_owner_pred(0),
+	pred_cid(0)
     {}
 
     inline wb_t& operator = (const wb_t& x) {
@@ -861,6 +868,10 @@ public:
 	hprot			= x.hprot;
 	word_mask			= x.word_mask;
 	line			= x.line;
+	dcs_en = x.dcs_en;
+	use_owner_pred = x.use_owner_pred;
+	pred_cid = x.pred_cid;
+	
 	return *this;
     }
     inline bool operator     == (const wb_t& x) const {
