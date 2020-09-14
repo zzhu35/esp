@@ -80,6 +80,8 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
             }
         }
 
+        wait();
+
         if (back_off) {
             dispatch_wb(success, i);
             if (!success) return;
@@ -87,6 +89,7 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
         }
 
     }
+    wait();
     
     if (!hit) {
         // empty in WB
