@@ -18,6 +18,10 @@ package cachepackage is
   -- Constants
   -----------------------------------------------------------------------------
 
+  -- DCS
+  constant USE_DCS               : std_logic := "1";
+  constant USE_OWNER_PRED        : std_logic := "1";
+
   -- Asserts
   constant AS_AHBS_HSIZE         : integer := 0;
   constant AS_AHBS_CACHEABLE     : integer := 1;
