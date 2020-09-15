@@ -19,8 +19,8 @@ package cachepackage is
   -----------------------------------------------------------------------------
 
   -- DCS
-  constant USE_DCS               : std_logic := "1";
-  constant USE_OWNER_PRED        : std_logic := "1";
+  constant USE_DCS               : std_logic := '0';
+  constant USE_OWNER_PRED        : std_logic := '0';
 
   -- Asserts
   constant AS_AHBS_HSIZE         : integer := 0;
