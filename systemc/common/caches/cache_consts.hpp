@@ -233,6 +233,7 @@
 #define DNV_AMO     4
 #define DNV_IV_DCS  5
 #define DNV_XR      6
+#define DNV_XRV     7
 
 // GPU states
 #define GPU_I       0

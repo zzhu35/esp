@@ -22,7 +22,7 @@ void l2_denovo::drain_wb()
     for (int i = 0; i < N_REQS; i++)
     {
         HLS_UNROLL_LOOP();
-        if (reqs[i].state == DNV_XR)
+        if (reqs[i].state == DNV_XR || reqs[i].state == DNV_XRV)
         {
             mshr_no_reqo = false;
             break;
@@ -179,14 +179,22 @@ void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
     addr_br.set = wbs[wb_i].set;
     addr_br.tag = wbs[wb_i].tag;
     line_addr = (addr_br.tag << L2_SET_BITS) | (addr_br.set);
-    fill_reqs(0, addr_br, 0, wbs[wb_i].way, 0, DNV_XR, wbs[wb_i].hprot, 0, wbs[wb_i].line, wbs[wb_i].word_mask, reqs_i);
 
     {
         HLS_DEFINE_PROTOCOL();
         // send reqo
-        if (!wbs[wb_i].dcs_en) send_req_out(REQ_O, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
-        else if (!wbs[wb_i].use_owner_pred) send_req_out(REQ_WTfwd, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
-        else send_fwd_out(FWD_WTfwd, wbs[wb_i].pred_cid, 1, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+        if (!wbs[wb_i].dcs_en) {
+            send_req_out(REQ_O, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+            fill_reqs(0, addr_br, 0, wbs[wb_i].way, 0, DNV_XR, wbs[wb_i].hprot, 0, wbs[wb_i].line, wbs[wb_i].word_mask, reqs_i);
+        }
+        else if (!wbs[wb_i].use_owner_pred) {
+            send_req_out(REQ_WTfwd, wbs[wb_i].hprot, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+            fill_reqs(0, addr_br, 0, wbs[wb_i].way, 0, DNV_XRV, wbs[wb_i].hprot, 0, wbs[wb_i].line, wbs[wb_i].word_mask, reqs_i);
+        }
+        else {
+            send_fwd_out(FWD_WTfwd, wbs[wb_i].pred_cid, 1, line_addr, wbs[wb_i].line, wbs[wb_i].word_mask);
+            fill_reqs(0, addr_br, 0, wbs[wb_i].way, 0, DNV_XRV, wbs[wb_i].hprot, 0, wbs[wb_i].line, wbs[wb_i].word_mask, reqs_i);
+        }
 
         // free WB
         wbs[wb_i].valid = false;
@@ -755,16 +763,24 @@ void l2_denovo::ctrl()
                 hprots.port1[0][base + way_write] = cpu_req.hprot;
                 tags.port1[0][base + way_write] = addr_br.tag;
                 evict_ways.port1[0][addr_br.set] = way_write + 1;
-#if (USE_WB)
-                // when we are using write buffer, use add_wb function instead
-                if(false){
-#else
                 if(cpu_req.dcs_en){
-#endif
                         switch (cpu_req.dcs){
                             case DCS_ReqWTfwd:
                             {
                                 if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
+#if (USE_WB)
+                                    bool success = false;
+                                    add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot, cpu_req.dcs_en, cpu_req.use_owner_pred, cpu_req.pred_cid);
+                                    if (!success)
+                                    {
+                                        // if wb refused attempted insertion, raise set_conflict
+                                        set_conflict = true;
+                                        cpu_req_conflict = cpu_req;
+                                    } else {
+                                        state_buf[way_write][addr_br.w_off] = DNV_V;
+                                        touched_buf[way_write][addr_br.w_off] = false;
+                                    }
+#else
                                     HLS_DEFINE_PROTOCOL("req_wtfwd out");
                                     if(cpu_req.use_owner_pred){
                                         send_fwd_out(FWD_WTfwd, cpu_req.pred_cid, 1, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
@@ -774,6 +790,8 @@ void l2_denovo::ctrl()
                                     wait();
                                     state_buf[way_write][addr_br.w_off] = DNV_V;
                                     touched_buf[way_write][addr_br.w_off] = false;
+#endif
+
                                 }
                             }
                             break;
