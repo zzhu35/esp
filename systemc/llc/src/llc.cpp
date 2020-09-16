@@ -1575,8 +1575,7 @@ void llc::ctrl()
                                                         lines_buf[way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = req_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD);
                                                 }
                                         }
-                                        // Not send RSP_O for now
-                                        //send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                        send_rsp_out(RSP_O, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
 
                                 }
                                 dirty_bits_buf[way] = 1;

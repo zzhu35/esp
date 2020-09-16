@@ -195,7 +195,7 @@ int main(int argc, char * argv[])
 		//////////////////esp_flush(coherence);
 
 		// Start accelerator
-		//printf("  Start..\n");
+		printf("  Start..\n");
 		iowrite32(dev, CMD_REG, CMD_MASK_START);
 
 		timestamps[2] = get_counter();
@@ -208,7 +208,7 @@ int main(int argc, char * argv[])
 		timestamps[3] = get_counter();
 
 		iowrite32(dev, CMD_REG, 0x0);
-		//printf("  Done\n");
+		printf("  Done\n");
 
 		/* /\* Print output *\/ */
 		/* printf("  output:\n"); */
@@ -217,7 +217,7 @@ int main(int argc, char * argv[])
 		/* 		printf("    mem[%d][%d] = %08x\n", j, i, mem[j*SORT_LEN + i]); */
 
 		/* Validation */
-		//printf("  validating...\n");
+		printf("  validating...\n");
 		sync();
 
 		timestamps[4] = get_counter();
