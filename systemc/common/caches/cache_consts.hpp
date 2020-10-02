@@ -280,8 +280,10 @@ original ESP messages
 #define REQ_PUTM		3
 #define REQ_DMA_READ		4
 #define REQ_DMA_WRITE		5
-#define REQ_DMA_READ_BURST	6
-#define REQ_DMA_WRITE_BURST	7
+#define REQ_DMA_READ_BURST	0x1E
+#define REQ_DMA_WRITE_BURST	0x1F
+
+#define DMA_BURST_LENGTH_BITS 32
 
 // forwards (L3 to L2)
 #define FWD_GETS	0

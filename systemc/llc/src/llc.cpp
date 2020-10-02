@@ -222,6 +222,17 @@ inline void llc::reset_state()
         evict_stall = false;
         evict_inprogress = false;
 
+        dma_read_pending = false;
+        dma_write_pending = false;
+        dma_addr = 0;
+        dma_read_length = 0;
+        dma_length = 0;
+        dma_done = false;
+        dma_start = false;
+        recall_pending = false;
+        recall_valid = false;
+        recall_addr = 0;
+
         for (int i = 0; i < WORDS_PER_LINE; i++)
         {
                 fwd_coal_word_mask[i] = 0;
@@ -245,6 +256,10 @@ inline void llc::reset_state()
     dbg_llc_addr.write(0);
     dbg_evict.write(0);
 
+    dbg_length.write(0);
+    dbg_dma_length.write(0);
+    dbg_dma_done.write(0);
+    dbg_dma_addr.write(0);
 
 //     dbg_length.write(0);
 #endif
@@ -563,6 +578,23 @@ inline void llc::send_fwd_out(mix_msg_t coh_msg, line_addr_t addr, cache_id_t re
     llc_fwd_out.nb_put(fwd_out);
 }
 
+inline void llc::send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id,
+                           cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset)
+{
+    SEND_DMA_RSP_OUT;
+    llc_rsp_out_t rsp_out;
+    rsp_out.coh_msg = coh_msg;
+    rsp_out.addr = addr;
+    rsp_out.line = line;
+    rsp_out.req_id = req_id;
+    rsp_out.dest_id = dest_id;
+    rsp_out.invack_cnt = invack_cnt;
+    rsp_out.word_offset = word_offset;
+    while (!llc_dma_rsp_out.nb_can_put())
+        wait();
+    llc_dma_rsp_out.nb_put(rsp_out);
+}
+
 inline void llc::send_fwd_out_data(mix_msg_t coh_msg, line_addr_t addr, cache_id_t req_id, cache_id_t dest_id, word_mask_t word_mask, line_t data)
 {
     SEND_FWD_OUT;
@@ -775,12 +807,16 @@ void llc::ctrl()
 
 	bool is_rsp_to_get = false;
 	bool is_req_to_get = false;
+        bool is_dma_read_to_resume = false;
+        bool is_dma_write_to_resume = false;
+        bool is_dma_req_to_get = false;
 
         llc_rsp_in_t rsp_in;
         llc_req_in_t req_in;
 
         bool can_get_rsp_in = false;
         bool can_get_req_in = false;
+        bool can_get_dma_in = false;
 
         bool update_evict_ways = false;
 
@@ -804,12 +840,26 @@ void llc::ctrl()
                 HLS_DEFINE_PROTOCOL("proto-llc-io-check");
 
                 bool do_get_req = false;
+                bool do_get_dma_req = false;
 
                 can_get_rsp_in = llc_rsp_in.nb_can_get();
                 can_get_req_in = llc_req_in.nb_can_get();
+                can_get_dma_in = llc_dma_req_in.nb_can_get();
 
                 wait();
-                if (can_get_rsp_in) {
+                if (recall_pending) {
+                        if (!recall_valid) {
+                                // Response (could be related to the recall or not)
+                                if (can_get_rsp_in) {
+                                        is_rsp_to_get = true;
+                                }
+
+                        } else {
+                                if (dma_read_pending) is_dma_read_to_resume = true;
+                                else if (dma_write_pending) is_dma_write_to_resume = true;
+                        }
+
+                } else if (can_get_rsp_in) {
                         // Response
                         is_rsp_to_get = true;
 
@@ -822,6 +872,24 @@ void llc::ctrl()
                                 do_get_req = true;
                         }
                         is_req_to_get = true;
+
+                } else if (dma_read_pending) {
+                        // Pending DMA read
+
+                        is_dma_read_to_resume = true;
+
+                } else if (dma_write_pending) {
+                        // Pending DMA write
+
+                        if (can_get_dma_in) {
+                                is_dma_write_to_resume = true;
+                                do_get_dma_req = true;
+                        }
+
+                } else if (can_get_dma_in) {
+                        // New DMA request
+                        is_dma_req_to_get = true;
+                        do_get_dma_req = true;
                 }
                 wait();
 
@@ -835,6 +903,10 @@ void llc::ctrl()
                         llc_req_in.nb_get(req_in);
                 }
 
+                if (do_get_dma_req) {
+                        HLS_DEFINE_PROTOCOL();
+                        llc_dma_req_in.nb_get(dma_req_in);
+                }
 
         }
 
@@ -851,13 +923,20 @@ void llc::ctrl()
         dbg_evict_stall = evict_stall;
         dbg_evict_inprogress = evict_inprogress;
         dbg_set_conflict = set_conflict;
+        dbg_is_dma_read_to_resume.write(is_dma_read_to_resume);
+        dbg_is_dma_write_to_resume.write(is_dma_write_to_resume);
+        dbg_is_dma_req_to_get.write(is_dma_req_to_get);
+        dbg_dma_done.write(dma_done);
+        dbg_recall_addr.write(recall_addr);
+        dbg_recall_pending.write(recall_pending);
+        dbg_recall_valid.write(recall_valid);
 
 #endif
 
         // -----------------------------
         // Lookup cache
         // -----------------------------
-        look = is_rsp_to_get || is_req_to_get;
+        look = is_rsp_to_get || is_req_to_get || is_dma_req_to_get || (is_dma_read_to_resume && !recall_pending) || (is_dma_write_to_resume && !recall_pending);
 
         // Pick right set
         if (is_rsp_to_get) {
@@ -867,6 +946,11 @@ void llc::ctrl()
         } else if (is_req_to_get) {
                 line_br.llc_line_breakdown(req_in.addr);
                 set = line_br.set;
+        } else if (is_dma_req_to_get || is_dma_read_to_resume || is_dma_write_to_resume) {
+            if (is_dma_req_to_get) dma_addr = dma_req_in.addr;
+
+            line_br.llc_line_breakdown(dma_addr);
+            set = line_br.set;
         }
 
         // Compute llc_address based on set
@@ -989,14 +1073,14 @@ void llc::ctrl()
                                 for (int i = 0; i < WORDS_PER_LINE; i++) {
                                         HLS_UNROLL_LOOP(ON, "rvk-wb");
                                         if (owners_buf[reqs[reqs_hit_i].way] & (1 << i) & rsp_in.word_mask) {
-                                                // found a matching bit in mask
-                                                if (rsp_in.req_id.to_int() == lines_buf[reqs[reqs_hit_i].way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int()) // if owner id == req id
-                                                {
+                                                // // found a matching bit in mask
+                                                // if (rsp_in.req_id.to_int() == lines_buf[reqs[reqs_hit_i].way].range(CACHE_ID_WIDTH - 1 + i * BITS_PER_WORD, i * BITS_PER_WORD).to_int()) // if owner id == req id
+                                                // {
                                                         lines_buf[reqs[reqs_hit_i].way].range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
                                                         owners_buf[reqs[reqs_hit_i].way] = owners_buf[reqs[reqs_hit_i].way] & (~ (1 << i)); // clear owner bit
                                                         dirty_bits_buf[reqs[reqs_hit_i].way] = 1;
                                                         sharers_buf[reqs[reqs_hit_i].way] |= 1 << rsp_in.req_id;
-                                                }
+                                                // }
                                         }
                                 }
                                 switch (reqs[reqs_hit_i].state) {
@@ -1027,11 +1111,13 @@ void llc::ctrl()
                                                         } else {
                                                                 // nothing
                                                         }
-                                                        lines_buf[reqs[reqs_hit_i].way] = reqs[reqs_hit_i].line;
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_V;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
+                                                        if (recall_pending && rsp_in.addr == recall_addr) recall_valid = true;
+                                                        dbg_recall_valid.write(recall_valid);
                                                 }
+                                                
                                         }
                                         break;
                                         case LLC_OWB:
@@ -1810,13 +1896,237 @@ void llc::ctrl()
             }
 	}
 
+        else if (is_dma_req_to_get || is_dma_read_to_resume || is_dma_write_to_resume) {
+
+            bool evict_dirty = false;
+
+            if (is_dma_req_to_get) {
+                DMA_BURST;
+
+                if (dma_req_in.coh_msg == REQ_DMA_READ_BURST) {
+                    dma_read_pending = true;
+                    is_dma_read_to_resume = true;
+                } else {
+                    dma_write_pending = true;
+                    is_dma_write_to_resume = true;
+                }
+
+                dma_read_length = dma_req_in.line.range(BITS_PER_LINE - 1, BITS_PER_LINE - ADDR_BITS).to_uint();
+                dma_length = 0;
+                dma_done = false;
+                dma_start = true;
+
+            }
+
+            addr_breakdown_llc_t evict_addr_br;
+    	    evict_addr_br.breakdown(addr_evict_real);
+            sc_uint<LLC_REQS_BITS> reqs_empty_i;
+
+#ifdef LLC_DEBUG
+            dbg_is_dma_read_to_resume.write(is_dma_read_to_resume);
+            dbg_is_dma_write_to_resume.write(is_dma_write_to_resume);
+            dbg_is_dma_req_to_get.write(is_dma_req_to_get);
+            dbg_dma_done.write(dma_done);
+            dbg_recall_addr.write(recall_addr);
+            dbg_recall_pending.write(recall_pending);
+            dbg_recall_valid.write(recall_valid);
+#endif
+
+            if (reqs_cnt == 0 || reqs_peek_req(evict_addr_br, reqs_empty_i))
+            {
+                    // nothing
+            }
+            else
+            {
+                wait();
+                if (!recall_valid && !recall_pending) {
+#ifdef LLC_DEBUG
+                        dbg_evict_addr.write(addr_evict);
+#endif
+                        wait();
+                        // Recall (may or may not evict depending on miss/hit)
+                        bool need_recall = send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
+                        wait();
+                        if (need_recall)
+                        {
+                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
+                                recall_addr = addr_evict;
+                                recall_pending = true;
+                                dbg_recall_pending.write(recall_pending);
+                        }
+                        else if (states_buf[way] == LLC_S) {
+                                send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
+                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_SV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
+                        }
+
+                }
+                wait();
+
+                if (!recall_pending || recall_valid) {
+
+                        if (dirty_bits_buf[way]) evict_dirty = true;
+
+                        // if (evict || recall_valid) {
+                        //         owners_buf[way] = 0;
+                        //         sharers_buf[way] = 0;
+                        // }
+
+                        if (evict) {
+                                // Eviction
+
+                                LLC_EVICT;
+
+                                if (way == evict_ways_buf) {
+                                        update_evict_ways = true;
+                                        evict_ways_buf++;
+                                }
+
+                                if (evict_dirty) {
+                                        HLS_DEFINE_PROTOCOL("send_mem_req-6");
+                                        send_mem_req(WRITE, addr_evict, hprots_buf[way], lines_buf[way]);
+                                }
+
+                                states_buf[way] = LLC_I;
+
+                        } else if (recall_valid) {
+                                // states_buf[way] = LLC_V;
+                        }
+
+                        // Recall complete
+                        recall_pending = false;
+                        recall_valid = false;
+
+                        if (is_dma_read_to_resume) {
+                                LLC_DMA_READ_BURST;
+
+                                dma_length_t valid_words;
+                                word_offset_t dma_read_woffset;
+                                invack_cnt_t dma_info;
+
+                                if (dma_start)
+                                        dma_read_woffset = dma_req_in.word_offset;
+                                else
+                                        dma_read_woffset = 0;
+
+                                dma_length += WORDS_PER_LINE - dma_read_woffset;
+
+                                if (dma_length >= dma_read_length)
+                                        dma_done = true;
+
+                                if (dma_start & dma_done)
+                                        valid_words = dma_read_length;
+                                else if (dma_start)
+                                        valid_words = dma_length;
+                                else if (dma_length > dma_read_length)
+                                        valid_words = WORDS_PER_LINE - (dma_length - dma_read_length);
+                                else
+                                        valid_words = WORDS_PER_LINE;
+
+                                if (states_buf[way] == LLC_I) {
+
+                                        DMA_READ_I;
+                                        HLS_DEFINE_PROTOCOL("send_mem_req-7");
+                                        send_mem_req(READ, dma_addr, dma_req_in.hprot, 0);
+                                        get_mem_rsp(lines_buf[way]);
+                                }
+
+                                dma_info[0] = dma_done;
+                                dma_info.range(WORD_BITS, 1) = (valid_words - 1);
+
+                                {
+                                        HLS_DEFINE_PROTOCOL("send_dma_rsp_out");
+                                        send_dma_rsp_out(RSP_DATA_DMA, dma_addr, lines_buf[way],
+                                                        dma_req_in.req_id, 0, dma_info, dma_read_woffset);
+                                }
+
+                                if (states_buf[way] == LLC_I) {
+                                        hprots_buf[way]     = DATA;
+                                        tags_buf[way]       = line_br.tag;
+                                        states_buf[way]     = LLC_V;
+                                        dirty_bits_buf[way] = 0;
+                                }
+
+                        } else { // is_dma_write_to_resume
+                                LLC_DMA_WRITE_BURST;
+
+                                word_offset_t dma_write_woffset = dma_req_in.word_offset;
+                                dma_length_t valid_words = dma_req_in.valid_words + 1;
+                                bool misaligned;
+
+                                misaligned = (dma_write_woffset != 0 || valid_words != WORDS_PER_LINE);
+
+                                if (states_buf[way] == LLC_I) {
+
+                                        DMA_WRITE_I;
+
+                                        if (misaligned) {
+                                                HLS_DEFINE_PROTOCOL("send_mem_req-8");
+                                                send_mem_req(READ, dma_addr, dma_req_in.hprot, 0);
+                                                get_mem_rsp(lines_buf[way]);
+                                        }
+
+                                }
+
+                                if (misaligned) {
+                                        int word_cnt = 0;
+
+                                        for (int i = 0; i < WORDS_PER_LINE; i++) {
+
+                                        HLS_UNROLL_LOOP(ON, "misaligned-dma-start-unroll");
+
+                                        if (word_cnt < valid_words && i >= dma_write_woffset) {
+                                                write_word(lines_buf[way], read_word(dma_req_in.line, i), i, 0, WORD);
+                                                word_cnt++;
+                                        }
+
+                                        }
+
+                                } else {
+
+                                        lines_buf[way] = dma_req_in.line;
+
+                                }
+
+                                lines_buf[way] = lines_buf[way];
+                                dirty_bits_buf[way] = 1;
+
+                                if (states_buf[way] == LLC_I) {
+                                        states_buf[way] = LLC_V;
+                                        hprots_buf[way] = DATA;
+                                        tags_buf[way] = line_br.tag;
+                                }
+
+                                if (dma_req_in.hprot) {
+
+                                        dma_done = true;
+
+                                }
+                        }
+
+        #ifdef LLC_DEBUG
+                        dbg_length.write(dma_read_length);
+                        dbg_dma_length.write(dma_length);
+                        dbg_dma_done.write(dma_done);
+                        dbg_dma_addr.write(dma_addr);
+        #endif
+                        dma_addr++;
+                        dma_start   = false;
+
+                        if (dma_done) {
+                                dma_read_pending = false;
+                                dma_write_pending = false;
+                        }
+                }
+            }
+        }
+
 
         // -----------------------------
         // Update cache
         // -----------------------------
 
         // update memory
-        if (is_rsp_to_get || is_req_to_get) {
+        if (is_rsp_to_get || is_req_to_get || is_dma_req_to_get || is_dma_read_to_resume || is_dma_write_to_resume) {
 
             tags.port1[0][llc_addr]       = tags_buf[way];
             states.port1[0][llc_addr]     = states_buf[way];
