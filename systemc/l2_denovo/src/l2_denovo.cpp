@@ -21,7 +21,7 @@ void l2_denovo::drain_wb()
     bool mshr_no_reqo = true;
     for (int i = 0; i < N_REQS; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "wb drain");
         if (reqs[i].state == DNV_XR || reqs[i].state == DNV_XRV)
         {
             mshr_no_reqo = false;
@@ -41,7 +41,7 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     sc_uint<WB_BITS> evict_wb = wb_evict++;
     for (int i = 0; i < N_WB; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "add wb");
         if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
         {
             evict_wb = i;
@@ -127,10 +127,11 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
 
 void l2_denovo::peek_wb(bool& hit, sc_uint<WB_BITS>& wb_i, addr_breakdown_t addr_br)
 {
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-peek wb");
     // check wb hit
     for (int i = 0; i < N_WB; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "peek wb");
         if (wbs[i].valid == false) {
             hit = false;
             wb_i = i;
@@ -158,7 +159,7 @@ void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
     sc_uint<REQS_BITS> reqs_i;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "dispatch wb");
 
         if (reqs[i].state == DNV_I){
             reqs_i = i;
@@ -258,7 +259,7 @@ void l2_denovo::ctrl()
             can_get_rsp_in = l2_rsp_in.nb_can_get();
             can_get_req_in = l2_cpu_req.nb_can_get() && (!drain_in_progress); // if drain in progress, block all cpu requests
 
-            wait();
+            // wait();
 
 			if (l2_sync.nb_can_get()) {
 				l2_sync.nb_get(is_sync);
@@ -338,7 +339,7 @@ void l2_denovo::ctrl()
             // // however, if anything bad happens, wake up our lovely watchdog
             bool bad = false;
             for (int i = 0; i < WORDS_PER_LINE; i++) {
-                HLS_UNROLL_LOOP();
+                HLS_UNROLL_LOOP(ON, "watch dog");
                 if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
             }
             if (bad) watch_dog.write(WDOG_1);
@@ -825,6 +826,7 @@ void l2_denovo::ctrl()
             // else if read
             // assuming line granularity read MESI style
 			else if (tag_hit) {
+                HIT_READ;
                 word_mask_t word_mask = 0;
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
@@ -983,7 +985,7 @@ void l2_denovo::ctrl()
 	}
 
     for (int i = 0; i < N_WB; i++) {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "wb dbg");
         wbs_dbg[i] = wbs[i];
     }
 
