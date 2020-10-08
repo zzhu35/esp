@@ -244,6 +244,8 @@ void l2_denovo::ctrl()
 
         bool can_get_rsp_in = false;
         bool can_get_req_in = false;
+        bool can_get_sync_in = false;
+        bool can_get_fwd_in = false;
 
         sc_uint<L2_SET_BITS+L2_WAY_BITS>  base = 0;
 
@@ -251,56 +253,34 @@ void l2_denovo::ctrl()
         l2_fwd_in_t fwd_in;
         l2_cpu_req_t cpu_req;
 
-        {
-            HLS_DEFINE_PROTOCOL("llc-io-check");
+        if (drain_in_progress) drain_wb();
 
-            if (drain_in_progress) drain_wb();
+        {
+            // HLS_DEFINE_PROTOCOL("llc-io-check");
+            HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
 
             can_get_rsp_in = l2_rsp_in.nb_can_get();
-            can_get_req_in = l2_cpu_req.nb_can_get() && (!drain_in_progress); // if drain in progress, block all cpu requests
+            can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0 || ongoing_atomic); // if drain in progress, block all cpu requests
+            can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
+            can_get_sync_in = l2_sync.nb_can_get();
 
             // wait();
 
-			if (l2_sync.nb_can_get()) {
+			if (can_get_sync_in) {
 				l2_sync.nb_get(is_sync);
 				do_sync = true;
-            } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
-                is_flush_all = get_flush();
-                //ongoing_flush = true;
-                //do_flush = true;
-			} else if (can_get_rsp_in) {
+            } else if (can_get_rsp_in) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if ((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) {
+            } else if (can_get_fwd_in) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
                     fwd_in = fwd_in_stalled;
                 }
                 do_fwd = true;
-            } else if (ongoing_flush) {
-                if (flush_set < L2_SETS) {
-                    if (!l2_fwd_in.nb_can_get() && reqs_cnt != 0)
-                        do_ongoing_flush = true;
-
-                    if (flush_way == L2_WAYS) {
-                        flush_set++;
-                        flush_way = 0;
-                    }
-                } else {
-		    		flush_set = 0;
-                    flush_way = 0;
-                    ongoing_flush = false;
-
-					flush_done.write(true);
-					wait();
-					flush_done.write(false);
-                }
-            } else if ((can_get_req_in || set_conflict) &&
-                       !evict_stall && (reqs_cnt != 0 || ongoing_atomic)) { // assuming
-                                                                            // HPROT
-                                                                            // cacheable
-                wait();
+            } else if (can_get_req_in) { // assuming
+                // wait();
 				if (!set_conflict) {
                     get_cpu_req(cpu_req);
                 } else {
