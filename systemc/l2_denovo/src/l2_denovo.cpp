@@ -21,7 +21,7 @@ void l2_denovo::drain_wb()
     bool mshr_no_reqo = true;
     for (int i = 0; i < N_REQS; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "wb drain");
         if (reqs[i].state == DNV_XR || reqs[i].state == DNV_XRV)
         {
             mshr_no_reqo = false;
@@ -41,7 +41,7 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     sc_uint<WB_BITS> evict_wb = wb_evict++;
     for (int i = 0; i < N_WB; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "add wb");
         if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
         {
             evict_wb = i;
@@ -127,10 +127,11 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
 
 void l2_denovo::peek_wb(bool& hit, sc_uint<WB_BITS>& wb_i, addr_breakdown_t addr_br)
 {
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-peek wb");
     // check wb hit
     for (int i = 0; i < N_WB; i++)
     {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "peek wb");
         if (wbs[i].valid == false) {
             hit = false;
             wb_i = i;
@@ -158,7 +159,7 @@ void l2_denovo::dispatch_wb(bool& success, sc_uint<WB_BITS> wb_i)
     sc_uint<REQS_BITS> reqs_i;
 
     for (unsigned int i = 0; i < N_REQS; ++i) {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "dispatch wb");
 
         if (reqs[i].state == DNV_I){
             reqs_i = i;
@@ -243,6 +244,8 @@ void l2_denovo::ctrl()
 
         bool can_get_rsp_in = false;
         bool can_get_req_in = false;
+        bool can_get_sync_in = false;
+        bool can_get_fwd_in = false;
 
         sc_uint<L2_SET_BITS+L2_WAY_BITS>  base = 0;
 
@@ -250,56 +253,34 @@ void l2_denovo::ctrl()
         l2_fwd_in_t fwd_in;
         l2_cpu_req_t cpu_req;
 
-        {
-            HLS_DEFINE_PROTOCOL("llc-io-check");
+        if (drain_in_progress) drain_wb();
 
-            if (drain_in_progress) drain_wb();
+        {
+            // HLS_DEFINE_PROTOCOL("llc-io-check");
+            HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
 
             can_get_rsp_in = l2_rsp_in.nb_can_get();
-            can_get_req_in = l2_cpu_req.nb_can_get() && (!drain_in_progress); // if drain in progress, block all cpu requests
+            can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0 || ongoing_atomic); // if drain in progress, block all cpu requests
+            can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
+            can_get_sync_in = l2_sync.nb_can_get();
 
-            wait();
+            // wait();
 
-			if (l2_sync.nb_can_get()) {
+			if (can_get_sync_in) {
 				l2_sync.nb_get(is_sync);
 				do_sync = true;
-            } else if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
-                is_flush_all = get_flush();
-                //ongoing_flush = true;
-                //do_flush = true;
-			} else if (can_get_rsp_in) {
+            } else if (can_get_rsp_in) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if ((l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended) {
+            } else if (can_get_fwd_in) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
                     fwd_in = fwd_in_stalled;
                 }
                 do_fwd = true;
-            } else if (ongoing_flush) {
-                if (flush_set < L2_SETS) {
-                    if (!l2_fwd_in.nb_can_get() && reqs_cnt != 0)
-                        do_ongoing_flush = true;
-
-                    if (flush_way == L2_WAYS) {
-                        flush_set++;
-                        flush_way = 0;
-                    }
-                } else {
-		    		flush_set = 0;
-                    flush_way = 0;
-                    ongoing_flush = false;
-
-					flush_done.write(true);
-					wait();
-					flush_done.write(false);
-                }
-            } else if ((can_get_req_in || set_conflict) &&
-                       !evict_stall && (reqs_cnt != 0 || ongoing_atomic)) { // assuming
-                                                                            // HPROT
-                                                                            // cacheable
-                wait();
+            } else if (can_get_req_in) { // assuming
+                // wait();
 				if (!set_conflict) {
                     get_cpu_req(cpu_req);
                 } else {
@@ -338,7 +319,7 @@ void l2_denovo::ctrl()
             // // however, if anything bad happens, wake up our lovely watchdog
             bool bad = false;
             for (int i = 0; i < WORDS_PER_LINE; i++) {
-                HLS_UNROLL_LOOP();
+                HLS_UNROLL_LOOP(ON, "watch dog");
                 if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
             }
             if (bad) watch_dog.write(WDOG_1);
@@ -825,6 +806,7 @@ void l2_denovo::ctrl()
             // else if read
             // assuming line granularity read MESI style
 			else if (tag_hit) {
+                HIT_READ;
                 word_mask_t word_mask = 0;
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
@@ -983,7 +965,7 @@ void l2_denovo::ctrl()
 	}
 
     for (int i = 0; i < N_WB; i++) {
-        HLS_UNROLL_LOOP();
+        HLS_UNROLL_LOOP(ON, "wb dbg");
         wbs_dbg[i] = wbs[i];
     }
 
