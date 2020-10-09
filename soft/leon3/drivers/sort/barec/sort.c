@@ -95,12 +95,22 @@ int main(int argc, char * argv[])
 {
 	int n;
 	int ndev;
-	struct esp_device *espdevs = NULL;
+	// struct esp_device *espdevs = NULL;
+	struct esp_device espdevs;
 	unsigned coherence;
 	long long unsigned int timestamps[6]; // get three intervals
 
 
-	ndev = probe(&espdevs, SLD_SORT, DEV_NAME);
+	// ndev = probe(&espdevs, SLD_SORT, DEV_NAME);
+	// printf("vendor:%u\nid:%u\nnumber:%u\nirq:%u\naddr:%lu\ncompat:%u\n",espdevs->vendor, espdevs->id,espdevs->number,espdevs->irq,espdevs->addr,espdevs->compat);
+	ndev = 1;
+	espdevs.vendor = 235;
+	espdevs.id = 11;
+	espdevs.number = 0;
+	espdevs.irq = 6;
+	espdevs.addr = 0x60011400;
+	espdevs.compat = 1;
+	printf("fast probe done\n");
 	if (!ndev) {
 		printf("Error: %s device not found!\n", DEV_NAME);
 		exit(EXIT_FAILURE);
@@ -115,7 +125,8 @@ int main(int argc, char * argv[])
 	for (int iii = 0; iii < 1; iii++) {
 		/* TODO: Restore full test once ESP caches are integrated */
 		coherence = ACC_COH_FULL;
-		struct esp_device *dev = &espdevs[n];
+		// struct esp_device *dev = &espdevs[n];
+		struct esp_device *dev = &espdevs;
 		unsigned sort_batch_max;
 		unsigned sort_len_max;
 		unsigned sort_len_min;
