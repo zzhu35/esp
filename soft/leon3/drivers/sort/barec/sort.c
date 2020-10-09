@@ -124,7 +124,7 @@ int main(int argc, char * argv[])
 	n = 0;
 	for (int iii = 0; iii < 1; iii++) {
 		/* TODO: Restore full test once ESP caches are integrated */
-		coherence = ACC_COH_FULL;
+		coherence = ACC_COH_LLC;
 		// struct esp_device *dev = &espdevs[n];
 		struct esp_device *dev = &espdevs;
 		unsigned sort_batch_max;

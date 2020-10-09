@@ -642,7 +642,6 @@ inline bool llc::send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, c
         }
         for (int i = 0; i < fwd_coal_send_count; i++)
         {
-                HLS_DEFINE_PROTOCOL("inv_owners");
                 send_fwd_out(coh_msg, addr, req_id, fwd_coal_temp_dest[i], fwd_coal_word_mask[i]);
                 fwd_coal_word_mask[i] = 0;
                 wait();
@@ -681,7 +680,6 @@ inline bool llc::send_fwd_with_owner_mask_data(mix_msg_t coh_msg, line_addr_t ad
         }
         for (int i = 0; i < fwd_coal_send_count; i++)
         {
-                HLS_DEFINE_PROTOCOL("inv_owners");
                 send_fwd_out_data(coh_msg, addr, req_id, fwd_coal_temp_dest[i], fwd_coal_word_mask[i], data_out);
                 fwd_coal_word_mask[i] = 0;
                 wait();
@@ -1098,7 +1096,7 @@ void llc::ctrl()
                                         break;
                                         case LLC_OV:
                                         {
-                                                if (owners_buf[reqs[reqs_hit_i].way] & reqs[reqs_hit_i].word_mask == 0)
+                                                if (owners_buf[reqs[reqs_hit_i].way] == 0)
                                                 {
                                                         if (reqs[reqs_hit_i].msg == REQ_WT) {
                                                                 HLS_DEFINE_PROTOCOL("send-rsp-813");
