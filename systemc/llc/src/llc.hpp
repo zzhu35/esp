@@ -49,9 +49,12 @@ public:
     sc_signal<bool>		dbg_evict_valid;
     sc_signal<bool>		dbg_evict_way_not_sd;
     sc_signal<line_addr_t>	dbg_evict_addr;
+    sc_signal<line_addr_t>	dbg_recall_addr;
     sc_signal<llc_set_t>	dbg_flush_set;
     sc_signal<llc_way_t>	dbg_flush_way;
 
+    sc_signal<dma_length_t>	dbg_length;
+    sc_signal<dma_length_t>	dbg_dma_length;
     sc_signal<bool>		dbg_dma_done;
     sc_signal<addr_t>		dbg_dma_addr;
 
@@ -67,7 +70,8 @@ public:
     sc_signal<bool>		dbg_evict_stall;
     sc_signal<bool>		dbg_evict_inprogress;
     sc_signal<bool>		dbg_set_conflict;
-
+    sc_signal<bool> dbg_recall_pending;
+    sc_signal<bool> dbg_recall_valid;
 
 #endif
 
@@ -206,6 +210,8 @@ public:
     // returns number of incack to expect
     inline int send_inv_with_sharer_list(line_addr_t addr, sharers_t sharer_list);
 
+    inline void send_dma_rsp_out(coh_msg_t coh_msg, line_addr_t addr, line_t line, cache_id_t req_id, cache_id_t dest_id, invack_cnt_t invack_cnt, word_offset_t word_offset);
+
     inline bool is_amo(coh_msg_t coh_msg);
 
     /* Functions to move around buffered lines */
@@ -226,6 +232,18 @@ private:
     bool evict_stall, evict_inprogress;
     llc_req_in_t llc_req_conflict;
     llc_req_in_t llc_req_stall;
+    llc_req_in_t dma_req_in;
+    bool dma_read_pending;
+    bool dma_write_pending;
+    addr_t dma_addr;
+    line_addr_t recall_addr;
+    dma_length_t dma_read_length;
+    dma_length_t dma_length;
+    bool dma_done;
+    bool dma_start;
+    bool recall_pending;
+    bool recall_valid;
+
     sc_uint<LLC_REQS_BITS_P1> reqs_cnt;
 };
 

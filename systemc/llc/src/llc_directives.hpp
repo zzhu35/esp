@@ -425,6 +425,16 @@
     HLS_PRESERVE_SIGNAL(reqs_dbg, true); \
     HLS_PRESERVE_SIGNAL(dbg_evict_stall, true); \
     HLS_PRESERVE_SIGNAL(dbg_evict_inprogress, true); \
+    HLS_PRESERVE_SIGNAL(dbg_length, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_length, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_done, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_addr, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_addr, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_pending, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_valid, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_read_to_resume, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true); \
     HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
 
 #endif

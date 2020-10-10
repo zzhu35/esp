@@ -52,6 +52,7 @@ typedef sc_uint<LLC_UNSTABLE_STATE_BITS>    llc_unstable_state_t;
 typedef sc_uint<CACHE_ID_WIDTH>             cache_id_t;
 typedef sc_uint<MAX_N_L2_BITS>		    owner_t;
 typedef sc_uint<MAX_N_L2>		    sharers_t;
+typedef sc_uint<DMA_BURST_LENGTH_BITS>  dma_length_t;
 
 /*
  * L2 cache coherence channels types
