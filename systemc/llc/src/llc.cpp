@@ -889,7 +889,6 @@ void llc::ctrl()
                         is_dma_req_to_get = true;
                         do_get_dma_req = true;
                 }
-                wait();
 
                 if (is_rsp_to_get) {
                         LLC_GET_RSP_IN;
