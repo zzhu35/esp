@@ -835,8 +835,8 @@ void llc::ctrl()
         // -----------------------------
 
         {
-                HLS_DEFINE_PROTOCOL("proto-llc-io-check");
-
+                // HLS_DEFINE_PROTOCOL("proto-llc-io-check");
+                HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-io");
                 bool do_get_req = false;
                 bool do_get_dma_req = false;
 
@@ -844,7 +844,7 @@ void llc::ctrl()
                 can_get_req_in = llc_req_in.nb_can_get();
                 can_get_dma_in = llc_dma_req_in.nb_can_get();
 
-                wait();
+                // wait();
                 if (recall_pending) {
                         if (!recall_valid) {
                                 // Response (could be related to the recall or not)
@@ -891,17 +891,14 @@ void llc::ctrl()
                 }
 
                 if (is_rsp_to_get) {
-                        LLC_GET_RSP_IN;
                         llc_rsp_in.nb_get(rsp_in);
                 }
 
                 if (do_get_req) {
-                        GET_REQ_IN;
                         llc_req_in.nb_get(req_in);
                 }
 
                 if (do_get_dma_req) {
-                        HLS_DEFINE_PROTOCOL();
                         llc_dma_req_in.nb_get(dma_req_in);
                 }
 
@@ -1935,15 +1932,12 @@ void llc::ctrl()
             }
             else
             {
-                wait();
                 if (!recall_valid && !recall_pending) {
 #ifdef LLC_DEBUG
                         dbg_evict_addr.write(addr_evict);
 #endif
-                        wait();
                         // Recall (may or may not evict depending on miss/hit)
                         bool need_recall = send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
-                        wait();
                         if (need_recall)
                         {
                                 fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
@@ -1957,7 +1951,6 @@ void llc::ctrl()
                         }
 
                 }
-                wait();
 
                 if (!recall_pending || recall_valid) {
 
