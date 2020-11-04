@@ -253,7 +253,9 @@ void l2_denovo::ctrl()
         l2_fwd_in_t fwd_in;
         l2_cpu_req_t cpu_req;
 
+#if (USE_WB)
         if (drain_in_progress) drain_wb();
+#endif
 
         {
             // HLS_DEFINE_PROTOCOL("llc-io-check");
@@ -846,11 +848,11 @@ void l2_denovo::ctrl()
 			} else {
                 // eviction
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
+                addr_breakdown_t evict_addr_br = addr_br;
 
 #if (USE_WB)
                 // check in wb for eviction conflict
                 // if in WB, move into MSHR, set_conflict
-                addr_breakdown_t evict_addr_br = addr_br;
                 evict_addr_br.tag = tag_buf[evict_way];
                 bool hit_evict = false;
                 sc_uint<WB_BITS> wb_i_evict = 0;
