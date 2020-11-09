@@ -62,36 +62,13 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     peek_wb(hit, i, addr_br);
     if (hit)
     {
-        // hit in WB
-        bool back_off = false;
-        if (wbs[i].dcs_en != dcs_en) {
-            back_off = true;
-        } else {
-            if (dcs_en) {
-                if (wbs[i].use_owner_pred != use_owner_pred) {
-                    back_off = true;
-                } else {
-                    if (use_owner_pred) {
-                        if (wbs[i].pred_cid != pred_cid) {
-                            back_off = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        wait();
-
-        if (back_off) {
-            dispatch_wb(success, i);
-            if (!success) return;
-            else hit = false;
-        }
+        // hit in WB, DCS override
+        wbs[i].dcs_en = dcs_en;
+        wbs[i].use_owner_pred = use_owner_pred;
+        wbs[i].pred_cid = pred_cid;
 
     }
-    wait();
-    
-    if (!hit) {
+    else {
         // empty in WB
         wbs[i].valid = true;
         wbs[i].tag = addr_br.tag;
@@ -108,9 +85,9 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     wbs[i].word_mask |= 1 << addr_br.w_off;
     wbs[i].line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = word;
 
-    if (wbs[i].word_mask == WORD_MASK_ALL) {
-        dispatch_wb(hit, i); // just try dispatching, it's ok if fail
-    }
+    // if (wbs[i].word_mask == WORD_MASK_ALL) {
+    //     dispatch_wb(hit, i); // just try dispatching, it's ok if fail
+    // }
 
     // for (int i = 0; i < N_WB; i++)
     // {
@@ -253,7 +230,9 @@ void l2_denovo::ctrl()
         l2_fwd_in_t fwd_in;
         l2_cpu_req_t cpu_req;
 
+#if (USE_WB)
         if (drain_in_progress) drain_wb();
+#endif
 
         {
             // HLS_DEFINE_PROTOCOL("llc-io-check");
@@ -846,11 +825,11 @@ void l2_denovo::ctrl()
 			} else {
                 // eviction
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
+                addr_breakdown_t evict_addr_br = addr_br;
 
 #if (USE_WB)
                 // check in wb for eviction conflict
                 // if in WB, move into MSHR, set_conflict
-                addr_breakdown_t evict_addr_br = addr_br;
                 evict_addr_br.tag = tag_buf[evict_way];
                 bool hit_evict = false;
                 sc_uint<WB_BITS> wb_i_evict = 0;
