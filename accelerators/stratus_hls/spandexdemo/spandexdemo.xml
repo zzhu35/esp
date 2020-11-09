@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sld>
+  <accelerator name="spandexdemo" desc="Accelerator SPANDEXDEMO" data_size="8" device_id="058" hls_tool="stratus_hls">
+    <param name="element_size" desc="element_size" />
+    <param name="req_type" desc="req_type" />
+    <param name="array_length" desc="array_length" />
+    <param name="coh_msg" desc="coh_msg" />
+    <param name="stride_size" desc="stride_size" />
+    <param name="owner_pred" desc="owner_pred" />
+    <param name="owner" desc="owner" />
+    <param name="base_addr" desc="base_addr" />
+  </accelerator>
+</sld>

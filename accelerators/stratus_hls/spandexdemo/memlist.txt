@@ -1,0 +1,4 @@
+spandexdemo_plm_block_in_dma32 1048576 32 1w:0r 0w:1r
+spandexdemo_plm_block_out_dma32 1048576 32 1w:0r 0w:1r
+spandexdemo_plm_block_in_dma64 1048576 32 2w:0r 0w:1r
+spandexdemo_plm_block_out_dma64 1048576 32 1w:0r 0w:2r
