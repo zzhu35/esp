@@ -19,8 +19,8 @@ package cachepackage is
   -----------------------------------------------------------------------------
 
   -- DCS
-  constant USE_DCS               : std_logic := '0';
-  constant USE_OWNER_PRED        : std_logic := '0';
+  constant USE_DCS               : std_logic := '1';
+  constant USE_OWNER_PRED        : std_logic := '1';
 
   -- Asserts
   constant AS_AHBS_HSIZE         : integer := 0;
@@ -294,6 +294,11 @@ package cachepackage is
       coherence_fwd_snd_data_in  : out noc_flit_type;
       coherence_fwd_snd_full     : in  std_ulogic;
 
+      cpu_req_data_dcs_en         : in std_ulogic;
+      cpu_req_data_use_owner_pred : in std_ulogic;
+      cpu_req_data_dcs            : in dcs_t;
+      cpu_req_data_pred_cid       : in cache_id_t;
+      
       mon_cache                  : out monitor_cache_type
       );
   end component;

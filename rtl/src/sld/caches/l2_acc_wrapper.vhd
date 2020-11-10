@@ -89,6 +89,11 @@ entity l2_acc_wrapper is
     coherence_fwd_snd_data_in  : out noc_flit_type;
     coherence_fwd_snd_full     : in  std_ulogic;
 
+    cpu_req_data_dcs_en         : in std_ulogic;
+    cpu_req_data_use_owner_pred : in std_ulogic;
+    cpu_req_data_dcs            : in dcs_t;
+    cpu_req_data_pred_cid       : in cache_id_t;
+
     mon_cache                  : out monitor_cache_type
     );
 
@@ -106,10 +111,6 @@ architecture rtl of l2_acc_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
-  signal cpu_req_data_dcs_en    : std_ulogic;
-  signal cpu_req_data_use_owner_pred : std_ulogic;
-  signal cpu_req_data_dcs       : dcs_t;
-  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -835,10 +836,6 @@ begin  -- architecture rtl of l2_acc_wrapper
     cpu_req_valid        <= '0';
     cpu_req_data_cpu_msg <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
-    cpu_req_data_dcs_en  <= '0';
-    cpu_req_data_use_owner_pred <= '0';
-    cpu_req_data_dcs     <= (others => '0');
-    cpu_req_data_pred_cid <= (others => '0');
     cpu_req_data_word    <= (others => '0');
 
     rd_rsp_ready <= '0';
@@ -857,21 +854,6 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= dma_address;
-            ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
-
-            -- cpu_req_data_dcs_en  <= dma_dcs_en;
-            -- cpu_req_data_use_owner_pred <= dma_use_owner_pred;
-            -- cpu_req_data_dcs     <= dma_dcs;
-            -- cpu_req_data_pred_cid <= dma_pred_cid;
-
-            -- reg.dcs_en := dma_dcs_en;
-            -- reg.use_owner_pred := dma_use_owner_pred;
-            -- reg.dcs := dma_dcs;
-            -- reg.pred_cid := dma_pred_cid;
 
             reg.offset := to_integer(unsigned(dma_address(W_OFF_RANGE_HI downto W_OFF_RANGE_LO)));
 
@@ -916,15 +898,6 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_valid        <= '1';
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= reg.addr;
-            ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
-            -- cpu_req_data_dcs_en  <= reg.dcs_en;
-            -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
-            -- cpu_req_data_dcs     <= reg.dcs;
-            -- cpu_req_data_pred_cid <= reg.pred_cid;
 
             reg.line   := rd_rsp_data_line;
             reg.offset := 0;
@@ -1005,17 +978,6 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_cpu_msg <= CPU_WRITE;
             cpu_req_data_addr    <= reg.addr;
             cpu_req_data_word    <= dma_snd_data(ARCH_BITS - 1 downto 0);
-
-            -- cpu_req_data_dcs_en  <= reg.dcs_en;
-            -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
-            -- cpu_req_data_dcs     <= reg.dcs;
-            -- cpu_req_data_pred_cid <= reg.pred_cid;
-
-            --------------------------------SPANDEX_SWITCH-----------------------------------------------------------------------------------
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
 
             reg.addr := reg.addr + BYTES_PER_WORD;
 
