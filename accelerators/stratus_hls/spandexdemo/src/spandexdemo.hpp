@@ -33,10 +33,10 @@ public:
 
         // Map arrays to memories
         /* <<--plm-bind-->> */
-        HLS_MAP_plm(plm_out_pong, PLM_OUT_NAME);
-        HLS_MAP_plm(plm_out_ping, PLM_OUT_NAME);
-        HLS_MAP_plm(plm_in_pong, PLM_IN_NAME);
-        HLS_MAP_plm(plm_in_ping, PLM_IN_NAME);
+        // HLS_MAP_plm(plm_out_pong, PLM_OUT_NAME);
+        // HLS_MAP_plm(plm_out_ping, PLM_OUT_NAME);
+        // HLS_MAP_plm(plm_in_pong, PLM_IN_NAME);
+        // HLS_MAP_plm(plm_in_ping, PLM_IN_NAME);
     }
 
     // Processes
@@ -56,10 +56,11 @@ public:
     // Functions
 
     // Private local memories
-    sc_dt::sc_int<DATA_WIDTH> plm_in_ping[PLM_IN_WORD];
-    sc_dt::sc_int<DATA_WIDTH> plm_in_pong[PLM_IN_WORD];
-    sc_dt::sc_int<DATA_WIDTH> plm_out_ping[PLM_OUT_WORD];
-    sc_dt::sc_int<DATA_WIDTH> plm_out_pong[PLM_OUT_WORD];
+    // sc_dt::sc_int<DATA_WIDTH> plm_in_ping[PLM_IN_WORD];
+    // sc_dt::sc_int<DATA_WIDTH> plm_in_pong[PLM_IN_WORD];
+    // sc_dt::sc_int<DATA_WIDTH> plm_out_ping[PLM_OUT_WORD];
+    // sc_dt::sc_int<DATA_WIDTH> plm_out_pong[PLM_OUT_WORD];
+    uint64_t tmp;
 
 };
 

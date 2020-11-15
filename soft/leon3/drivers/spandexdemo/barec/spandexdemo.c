@@ -119,7 +119,16 @@ int main(int argc, char * argv[])
 	// Search for the device
 	printf("Scanning device tree... \n");
 
-	ndev = probe(&espdevs, SLD_SPANDEXDEMO, DEV_NAME);
+	// ndev = probe(&espdevs, SLD_SPANDEXDEMO, DEV_NAME);
+	// printf("vendor:%u\nid:%u\nnumber:%u\nirq:%u\naddr:%lu\ncompat:%u\n",espdevs->vendor, espdevs->id,espdevs->number,espdevs->irq,espdevs->addr,espdevs->compat);
+	ndev = 1;
+	espdevs.vendor = 235;
+	espdevs.id = 88;
+	espdevs.number = 2147626072;
+	espdevs.irq = 6;
+	espdevs.addr = 0x60011400;
+	espdevs.compat = 1;
+	printf("fast probe done\n");
 	if (ndev == 0) {
 		printf("spandexdemo not found\n");
 		return 0;
@@ -159,7 +168,7 @@ int main(int argc, char * argv[])
 		// Pass common configuration parameters
 
 		iowrite32(dev, SELECT_REG, ioread32(dev, DEVID_REG));
-		iowrite32(dev, COHERENCE_REG, ACC_COH_NONE);
+		iowrite32(dev, COHERENCE_REG, ACC_COH_LLC);
 
 #ifndef __sparc
 		iowrite32(dev, PT_ADDRESS_REG, (unsigned long long) ptable);
@@ -185,7 +194,7 @@ int main(int argc, char * argv[])
 		iowrite32(dev, SPANDEXDEMO_ELEMENT_SIZE_REG, element_size);
 
 		// Flush (customize coherence model here)
-		esp_flush(ACC_COH_NONE);
+		esp_flush(ACC_COH_LLC);
 
 		// Start accelerators
 		printf("  Start...\n");
