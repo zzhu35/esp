@@ -1170,11 +1170,11 @@ def gen_noc_interface(acc, dma_width, template_dir, out_dir, is_axi):
 
 
         if not is_axi:
-          if acc.name.upper() == 'SPANDEXDEMO':
+          if acc.name.upper() in ['SPANDEXDEMO', 'DUMMY']:
             f.write("  cpu_req_data_dcs_en         <= '1';\n")
-            f.write("  cpu_req_data_use_owner_pred <= bank(SPANDEXDEMO_OWNER_PRED_REG)(0);\n")
-            f.write("  cpu_req_data_dcs            <= bank(SPANDEXDEMO_COH_MSG_REG)(1 downto 0);\n")
-            f.write("  cpu_req_data_pred_cid       <= bank(SPANDEXDEMO_OWNER_REG)(3 downto 0);\n")
+            f.write("  cpu_req_data_use_owner_pred <= bank(" + acc.name.upper() + "_OWNER_PRED_REG)(0);\n")
+            f.write("  cpu_req_data_dcs            <= bank(" + acc.name.upper() + "_COH_MSG_REG)(1 downto 0);\n")
+            f.write("  cpu_req_data_pred_cid       <= bank(" + acc.name.upper() + "_OWNER_REG)(3 downto 0);\n")
           else:
             f.write("  cpu_req_data_dcs_en         <= '0';\n")
             f.write("  cpu_req_data_use_owner_pred <= '0';\n")

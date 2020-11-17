@@ -35,8 +35,14 @@ static unsigned size;
 			(size / CHUNK_SIZE) + 1)
 
 // User defined registers
-#define TOKENS_REG	0x40
-#define BATCH_REG	0x44
+#define DUMMY_BASE_ADDR_REG 0x5c
+#define DUMMY_OWNER_REG 0x58
+#define DUMMY_OWNER_PRED_REG 0x54
+#define DUMMY_STRIDE_SIZE_REG 0x50
+#define DUMMY_COH_MSG_REG 0x4c
+#define DUMMY_ARRAY_LENGTH_REG 0x48
+#define DUMMY_REQ_TYPE_REG 0x44
+#define DUMMY_ELEMENT_SIZE_REG 0x40
 
 
 static int validate_dummy(token_t *mem)
@@ -116,17 +122,17 @@ int main(int argc, char * argv[])
 	init_buf(mem);
 
 	iowrite32(dev, SELECT_REG, ioread32(dev, DEVID_REG));
-	iowrite32(dev, COHERENCE_REG, ACC_COH_NONE);
+	iowrite32(dev, COHERENCE_REG, ACC_COH_FULL);
 	iowrite32(dev, PT_ADDRESS_REG, (unsigned long) ptable);
 	iowrite32(dev, PT_NCHUNK_REG, NCHUNK);
 	iowrite32(dev, PT_SHIFT_REG, CHUNK_SHIFT);
-	iowrite32(dev, TOKENS_REG, TOKENS);
-	iowrite32(dev, BATCH_REG, BATCH);
+	iowrite32(dev, DUMMY_BASE_ADDR_REG, TOKENS);
+	iowrite32(dev, DUMMY_OWNER_REG, BATCH);
 	iowrite32(dev, SRC_OFFSET_REG, 0x0);
 	iowrite32(dev, DST_OFFSET_REG, out_offset);
 
 	// Flush for non-coherent DMA
-	esp_flush(ACC_COH_NONE);
+	// esp_flush(ACC_COH_NONE);
 
 	// Start accelerators
 	printf("  Start...\n");

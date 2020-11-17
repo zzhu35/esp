@@ -31,8 +31,8 @@ void dummy::load_input()
         cfg.wait_for_config(); // config process
         conf_info_t config = this->conf_info.read();
 
-        tokens = config.tokens;
-        batch = config.batch;
+        tokens = config.base_addr;
+        batch = config.owner;
     }
 
     // Load
@@ -100,8 +100,8 @@ void dummy::store_output()
         cfg.wait_for_config(); // config process
         conf_info_t config = this->conf_info.read();
 
-        tokens = config.tokens;
-        batch = config.batch;
+        tokens = config.base_addr;
+        batch = config.owner;
     }
 
     // Store
