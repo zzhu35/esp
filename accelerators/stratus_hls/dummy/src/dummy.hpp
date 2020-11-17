@@ -48,6 +48,7 @@ public:
     // Private local memories
     uint64_t plm0[PLM_SIZE];
     uint64_t plm1[PLM_SIZE];
+    uint64_t tmp;
 
 };
 
