@@ -128,6 +128,12 @@ int main(int argc, char * argv[])
 	iowrite32(dev, PT_SHIFT_REG, CHUNK_SHIFT);
 	iowrite32(dev, DUMMY_BASE_ADDR_REG, TOKENS);
 	iowrite32(dev, DUMMY_OWNER_REG, BATCH);
+	iowrite32(dev, DUMMY_OWNER_PRED_REG, 1);
+	iowrite32(dev, DUMMY_STRIDE_SIZE_REG, 1);
+	iowrite32(dev, DUMMY_COH_MSG_REG, 1);
+	iowrite32(dev, DUMMY_ARRAY_LENGTH_REG, 1);
+	iowrite32(dev, DUMMY_REQ_TYPE_REG, 1);
+	iowrite32(dev, DUMMY_ELEMENT_SIZE_REG, 1);
 	iowrite32(dev, SRC_OFFSET_REG, 0x0);
 	iowrite32(dev, DST_OFFSET_REG, out_offset);
 
