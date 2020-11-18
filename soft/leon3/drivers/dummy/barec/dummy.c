@@ -23,6 +23,9 @@ typedef u64 token_t;
 
 #define TOKENS 64
 #define BATCH 4
+const int32_t stride_size = 2;
+const int32_t array_length = 8;
+const int32_t req_type = 0;
 
 static unsigned out_offset;
 static unsigned size;
@@ -75,7 +78,7 @@ int main(int argc, char * argv[])
 	int i;
 	int n;
 	int ndev;
-	struct esp_device *espdevs;
+	struct esp_device espdevs;
 	struct esp_device *dev;
 	struct esp_device *srcs[4];
 	unsigned all_done;
@@ -83,19 +86,28 @@ int main(int argc, char * argv[])
 	token_t *mem;
 	unsigned errors = 0;
 
-	out_offset = BATCH * TOKENS * sizeof(u64);
+	// out_offset = BATCH * TOKENS * sizeof(u64);
+	out_offset = (stride_size) * array_length * sizeof(u64);
 	size = 2 * out_offset;
 
 	printf("Scanning device tree... \n");
 
-	ndev = probe(&espdevs, SLD_DUMMY, DEV_NAME);
+	//ndev = probe(&espdevs, SLD_DUMMY, DEV_NAME);
+	ndev = 1;
+	espdevs.vendor = 235;
+	espdevs.id = 88;
+	espdevs.number = 2147626072;
+	espdevs.irq = 6;
+	espdevs.addr = 0x60011400;
+	espdevs.compat = 1;
+	printf("fast probe done\n");
 	if (ndev < 1) {
 		printf("This test requires a dummy device!\n");
 		return 0;
 	}
 
 	// Check DMA capabilities
-	dev = &espdevs[0];
+	dev = &espdevs;
 
 	if (ioread32(dev, PT_NCHUNK_MAX_REG) == 0) {
 		printf("  -> scatter-gather DMA is disabled. Abort.\n");
@@ -129,11 +141,11 @@ int main(int argc, char * argv[])
 	iowrite32(dev, DUMMY_BASE_ADDR_REG, TOKENS);
 	iowrite32(dev, DUMMY_OWNER_REG, BATCH);
 	iowrite32(dev, DUMMY_OWNER_PRED_REG, 1);
-	iowrite32(dev, DUMMY_STRIDE_SIZE_REG, 1);
 	iowrite32(dev, DUMMY_COH_MSG_REG, 1);
-	iowrite32(dev, DUMMY_ARRAY_LENGTH_REG, 1);
-	iowrite32(dev, DUMMY_REQ_TYPE_REG, 1);
 	iowrite32(dev, DUMMY_ELEMENT_SIZE_REG, 1);
+	iowrite32(dev, DUMMY_STRIDE_SIZE_REG, stride_size);
+	iowrite32(dev, DUMMY_ARRAY_LENGTH_REG, array_length);
+	iowrite32(dev, DUMMY_REQ_TYPE_REG, req_type);
 	iowrite32(dev, SRC_OFFSET_REG, 0x0);
 	iowrite32(dev, DST_OFFSET_REG, out_offset);
 
