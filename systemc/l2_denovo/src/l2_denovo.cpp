@@ -273,6 +273,7 @@ void l2_denovo::ctrl()
 	if (do_sync) {
 
 		self_invalidate();
+        drain_in_progress = true;
 
 	} else if (do_flush) {
 

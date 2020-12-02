@@ -150,71 +150,7 @@ void dummy::load_input()
 
 void dummy::store_output()
 {
-//     // Reset
-//     {
-//         HLS_PROTO("store-reset");
 
-//         this->reset_store_output();
-
-//         wait();
-//     }
-
-//     // Config
-//     uint32_t tokens;
-//     uint32_t batch;
-//     {
-//         HLS_PROTO("store-config");
-
-//         cfg.wait_for_config(); // config process
-//         conf_info_t config = this->conf_info.read();
-
-//         tokens = config.base_addr;
-//         batch = config.owner;
-//     }
-
-//     // Store
-//     bool ping = true;
-//     uint32_t offset = 0;
-//     for (int n = 0; n < batch; n++)
-//         for (int b = tokens; b > 0; b -= PLM_SIZE)
-//         {
-//             HLS_PROTO("store-dma");
-//             this->store_compute_handshake();
-
-//             uint32_t len = b > PLM_SIZE ? PLM_SIZE : b;
-//             dma_info_t dma_info(offset * DMA_BEAT_PER_WORD, len * DMA_BEAT_PER_WORD, DMA_SIZE);
-//             offset += len;
-
-//             this->dma_write_ctrl.put(dma_info);
-
-//             for (uint16_t i = 0; i < len; i++) {
-
-//                 wait();
-//                 uint64_t data;
-//                 if (ping)
-//                     data = plm0[i];
-//                 else
-//                     data = plm1[i];
-//                 sc_dt::sc_bv<64> data_bv(data);
-
-// #if (DMA_WIDTH == 64)
-//                 this->dma_write_chnl.put(data_bv);
-// #elif (DMA_WIDTH == 32)
-//                 this->dma_write_chnl.put(data_bv.range(31, 0));
-//                 wait();
-//                 this->dma_write_chnl.put(data_bv.range(64, 32));
-// #endif
-//             }
-//             ping = !ping;
-//         }
-
-//     // Conclude
-//     {
-//         this->accelerator_done();
-//         this->process_done();
-//     }
-
-// Reset
     {
         HLS_PROTO("store-reset");
 

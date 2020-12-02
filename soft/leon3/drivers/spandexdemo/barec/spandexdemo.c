@@ -21,7 +21,7 @@ static unsigned DMA_WORD_PER_BEAT(unsigned _st)
 #define DEV_NAME "sld,spandexdemo"
 
 /* <<--params-->> */
-const int32_t base_addr = 0;
+const int32_t base_addr = 0x1000;
 const int32_t owner = 0;
 const int32_t owner_pred = 0;
 const int32_t stride_size = 0;
@@ -93,7 +93,7 @@ int main(int argc, char * argv[])
 	int i;
 	int n;
 	int ndev;
-	struct esp_device *espdevs;
+	struct esp_device espdevs;
 	struct esp_device *dev;
 	unsigned done;
 	unsigned **ptable;
@@ -119,8 +119,6 @@ int main(int argc, char * argv[])
 	// Search for the device
 	printf("Scanning device tree... \n");
 
-	// ndev = probe(&espdevs, SLD_SPANDEXDEMO, DEV_NAME);
-	// printf("vendor:%u\nid:%u\nnumber:%u\nirq:%u\naddr:%lu\ncompat:%u\n",espdevs->vendor, espdevs->id,espdevs->number,espdevs->irq,espdevs->addr,espdevs->compat);
 	ndev = 1;
 	espdevs.vendor = 235;
 	espdevs.id = 88;
@@ -136,7 +134,7 @@ int main(int argc, char * argv[])
 
 	for (n = 0; n < ndev; n++) {
 
-		dev = &espdevs[n];
+		dev = &espdevs;
 
 		// Check DMA capabilities
 		if (ioread32(dev, PT_NCHUNK_MAX_REG) == 0) {
@@ -168,7 +166,7 @@ int main(int argc, char * argv[])
 		// Pass common configuration parameters
 
 		iowrite32(dev, SELECT_REG, ioread32(dev, DEVID_REG));
-		iowrite32(dev, COHERENCE_REG, ACC_COH_LLC);
+		iowrite32(dev, COHERENCE_REG, ACC_COH_FULL);
 
 #ifndef __sparc
 		iowrite32(dev, PT_ADDRESS_REG, (unsigned long long) ptable);
@@ -179,8 +177,8 @@ int main(int argc, char * argv[])
 		iowrite32(dev, PT_SHIFT_REG, CHUNK_SHIFT);
 
 		// Use the following if input and output data are not allocated at the default offsets
-		iowrite32(dev, SRC_OFFSET_REG, 0x0);
-		iowrite32(dev, DST_OFFSET_REG, 0x0);
+		iowrite32(dev, SRC_OFFSET_REG, 0);
+		iowrite32(dev, DST_OFFSET_REG, 0);
 
 		// Pass accelerator-specific configuration parameters
 		/* <<--regs-config-->> */
@@ -194,7 +192,7 @@ int main(int argc, char * argv[])
 		iowrite32(dev, SPANDEXDEMO_ELEMENT_SIZE_REG, element_size);
 
 		// Flush (customize coherence model here)
-		esp_flush(ACC_COH_LLC);
+		// esp_flush(ACC_COH_FULL);
 
 		// Start accelerators
 		printf("  Start...\n");
