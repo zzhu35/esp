@@ -1167,6 +1167,22 @@ def gen_noc_interface(acc, dma_width, template_dir, out_dir, is_axi):
       elif tline.find("-- <<axi_unused>>") >= 0:
         tie_unused_axi(f, acc, dma_width)
       elif tline.find("-- <<accelerator_instance>>") >= 0:
+
+
+        if not is_axi:
+          if acc.name.upper() in ['SPANDEXDEMO', 'DUMMY']:
+            f.write("  cpu_req_data_dcs_en         <= '1';\n")
+            f.write("  cpu_req_data_use_owner_pred <= bank(" + acc.name.upper() + "_OWNER_PRED_REG)(0);\n")
+            f.write("  cpu_req_data_dcs            <= bank(" + acc.name.upper() + "_COH_MSG_REG)(1 downto 0);\n")
+            f.write("  cpu_req_data_pred_cid       <= bank(" + acc.name.upper() + "_OWNER_REG)(3 downto 0);\n")
+          else:
+            f.write("  cpu_req_data_dcs_en         <= '0';\n")
+            f.write("  cpu_req_data_use_owner_pred <= '0';\n")
+            f.write('  cpu_req_data_dcs            <= "00";\n')
+            f.write('  cpu_req_data_pred_cid       <= "0000";\n')
+
+          f.write('\n')
+
         f.write("  " + acc.name + "_rlt_i: " + acc.name)
         if is_axi:
           f.write("_wrapper\n")

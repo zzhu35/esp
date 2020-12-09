@@ -17,8 +17,15 @@
 
 struct dummy_access {
 	struct esp_access esp;
-	unsigned tokens;
-	unsigned batch;
+	/* <<--regs-->> */
+	unsigned base_addr;
+	unsigned owner;
+	unsigned owner_pred;
+	unsigned stride_size;
+	unsigned coh_msg;
+	unsigned array_length;
+	unsigned req_type;
+	unsigned element_size;
 	unsigned src_offset;
 	unsigned dst_offset;
 };

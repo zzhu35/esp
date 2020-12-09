@@ -1324,7 +1324,7 @@ void llc::ctrl()
                                     if (word_owner_mask) {
                                             other_owner = send_fwd_with_owner_mask(FWD_REQ_V, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                             if (other_owner) {
-                                                    //fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
+                                                    send_rsp_out(RSP_V, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask & ~owners_buf[way]);
                                                     break;
                                             }
                                     }

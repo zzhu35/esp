@@ -1,8 +1,8 @@
 // Copyright (c) 2011-2019 Columbia University, System Level Design Group
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef __DUMMY_CONF_INFO_HPP__
-#define __DUMMY_CONF_INFO_HPP__
+#ifndef __SPANDEXDEMO_CONF_INFO_HPP__
+#define __SPANDEXDEMO_CONF_INFO_HPP__
 
 #include <systemc.h>
 
@@ -114,4 +114,4 @@ public:
         int32_t element_size;
 };
 
-#endif // __DUMMY_CONF_INFO_HPP__
+#endif // __SPANDEXDEMO_CONF_INFO_HPP__

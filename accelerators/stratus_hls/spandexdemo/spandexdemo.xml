@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <sld>
-  <accelerator name="dummy" desc="DUMMY" data_size="4" device_id="042" hls_tool="stratus_hls">
+  <accelerator name="spandexdemo" desc="Accelerator SPANDEXDEMO" data_size="8" device_id="058" hls_tool="stratus_hls">
     <param name="element_size" desc="element_size" />
     <param name="req_type" desc="req_type" />
     <param name="array_length" desc="array_length" />

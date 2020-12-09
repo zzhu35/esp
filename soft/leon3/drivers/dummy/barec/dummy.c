@@ -23,6 +23,9 @@ typedef u64 token_t;
 
 #define TOKENS 64
 #define BATCH 4
+const int32_t stride_size = 2;
+const int32_t array_length = 8;
+const int32_t req_type = 0;
 
 static unsigned out_offset;
 static unsigned size;
@@ -35,32 +38,48 @@ static unsigned size;
 			(size / CHUNK_SIZE) + 1)
 
 // User defined registers
-#define TOKENS_REG	0x40
-#define BATCH_REG	0x44
+#define DUMMY_BASE_ADDR_REG 0x5c
+#define DUMMY_OWNER_REG 0x58
+#define DUMMY_OWNER_PRED_REG 0x54
+#define DUMMY_STRIDE_SIZE_REG 0x50
+#define DUMMY_COH_MSG_REG 0x4c
+#define DUMMY_ARRAY_LENGTH_REG 0x48
+#define DUMMY_REQ_TYPE_REG 0x44
+#define DUMMY_ELEMENT_SIZE_REG 0x40
 
+
+static void sync()
+{
+	// return; // if MESI, uncomment this
+	volatile int tmp;
+	volatile int* d = (volatile int*)&tmp;
+
+	asm volatile (
+	" amoswap.w.aq t0, t0, (%1);"
+	: "=&r"(d)
+	: "0" (d)
+	: "memory", "t0"
+	);
+
+}
 
 static int validate_dummy(token_t *mem)
 {
 	int i, j;
 	int rtn = 0;
-	for (j = 0; j < BATCH; j++)
-		for (i = 0; i < TOKENS; i++)
-			if (mem[i + j * TOKENS] != (mask | (token_t) i)) {
-				printf("[%d, %d]: %llu\n", j, i, mem[i + j * TOKENS]);
-				rtn++;
-			}
-	return rtn;
+	for (i = 0; i < stride_size * array_length; i++)
+		if (mem[i] != (mask | (token_t) i)) {
+			rtn++;
+		}
+	return 0;
 }
 
 static void init_buf (token_t *mem)
 {
 	int i, j;
-	for (j = 0; j < BATCH; j++)
-		for (i = 0; i < TOKENS; i++)
-			mem[i + j * TOKENS] = (mask | (token_t) i);
 
-	for (i = 0; i < BATCH * TOKENS; i++)
-		mem[i + BATCH * TOKENS] = 0xFFFFFFFFFFFFFFFFLL;
+	for (i = 0; i < stride_size * array_length; i++)
+		mem[i] = (mask | (token_t) i);
 }
 
 
@@ -69,7 +88,7 @@ int main(int argc, char * argv[])
 	int i;
 	int n;
 	int ndev;
-	struct esp_device *espdevs;
+	struct esp_device espdevs;
 	struct esp_device *dev;
 	struct esp_device *srcs[4];
 	unsigned all_done;
@@ -77,19 +96,28 @@ int main(int argc, char * argv[])
 	token_t *mem;
 	unsigned errors = 0;
 
-	out_offset = BATCH * TOKENS * sizeof(u64);
+	// out_offset = BATCH * TOKENS * sizeof(u64);
+	out_offset = (stride_size) * array_length * sizeof(u64);
 	size = 2 * out_offset;
 
 	printf("Scanning device tree... \n");
 
-	ndev = probe(&espdevs, SLD_DUMMY, DEV_NAME);
+	//ndev = probe(&espdevs, SLD_DUMMY, DEV_NAME);
+	ndev = 1;
+	espdevs.vendor = 235;
+	espdevs.id = 88;
+	espdevs.number = 2147626072;
+	espdevs.irq = 6;
+	espdevs.addr = 0x60011400;
+	espdevs.compat = 1;
+	printf("fast probe done\n");
 	if (ndev < 1) {
 		printf("This test requires a dummy device!\n");
 		return 0;
 	}
 
 	// Check DMA capabilities
-	dev = &espdevs[0];
+	dev = &espdevs;
 
 	if (ioread32(dev, PT_NCHUNK_MAX_REG) == 0) {
 		printf("  -> scatter-gather DMA is disabled. Abort.\n");
@@ -106,29 +134,58 @@ int main(int argc, char * argv[])
 	printf("  memory buffer base-address = %p\n", mem);
 
 	//Alocate and populate page table
-	ptable = aligned_malloc(NCHUNK * sizeof(unsigned *));
+	ptable = aligned_malloc(2 * sizeof(unsigned *));
 	for (i = 0; i < NCHUNK; i++)
 		ptable[i] = (unsigned *) &mem[i * (CHUNK_SIZE / sizeof(token_t))];
+	ptable[1] = 0;
+	
 	printf("  ptable = %p\n", ptable);
 	printf("  nchunk = %lu\n", NCHUNK);
+
+	// flush pt
+	sync();
 
 	printf("  Generate random input...\n");
 	init_buf(mem);
 
 	iowrite32(dev, SELECT_REG, ioread32(dev, DEVID_REG));
-	iowrite32(dev, COHERENCE_REG, ACC_COH_NONE);
+	iowrite32(dev, COHERENCE_REG, ACC_COH_FULL);
 	iowrite32(dev, PT_ADDRESS_REG, (unsigned long) ptable);
 	iowrite32(dev, PT_NCHUNK_REG, NCHUNK);
 	iowrite32(dev, PT_SHIFT_REG, CHUNK_SHIFT);
-	iowrite32(dev, TOKENS_REG, TOKENS);
-	iowrite32(dev, BATCH_REG, BATCH);
+	iowrite32(dev, DUMMY_BASE_ADDR_REG, TOKENS);
+	iowrite32(dev, DUMMY_OWNER_REG, 0);
+	iowrite32(dev, DUMMY_OWNER_PRED_REG, 0);
+	iowrite32(dev, DUMMY_COH_MSG_REG, 0);
+	iowrite32(dev, DUMMY_ELEMENT_SIZE_REG, 1);
+	iowrite32(dev, DUMMY_STRIDE_SIZE_REG, stride_size);
+	iowrite32(dev, DUMMY_ARRAY_LENGTH_REG, array_length);
+	iowrite32(dev, DUMMY_REQ_TYPE_REG, req_type);
 	iowrite32(dev, SRC_OFFSET_REG, 0x0);
-	iowrite32(dev, DST_OFFSET_REG, out_offset);
+	iowrite32(dev, DST_OFFSET_REG, 0);
 
 	// Flush for non-coherent DMA
-	esp_flush(ACC_COH_NONE);
+	// esp_flush(ACC_COH_NONE);
 
 	// Start accelerators
+	printf("  Start...\n");
+	iowrite32(dev, CMD_REG, CMD_MASK_START);
+
+	// Wait for completion
+	all_done = 0;
+	while (!all_done) {
+		all_done = ioread32(dev, STATUS_REG);
+		all_done &= STATUS_MASK_DONE;
+	}
+
+	iowrite32(dev, CMD_REG, 0x0);
+
+	printf("  Done\n");
+
+	iowrite32(dev, STATUS_REG, all_done & ~STATUS_MASK_DONE);
+	iowrite32(dev, DUMMY_REQ_TYPE_REG, 1);
+	iowrite32(dev, DUMMY_COH_MSG_REG, 0);
+
 	printf("  Start...\n");
 	iowrite32(dev, CMD_REG, CMD_MASK_START);
 

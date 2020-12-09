@@ -223,6 +223,12 @@ end;
   signal apbo              : apb_slv_out_vector;
   signal mon_dvfs_feedthru : monitor_dvfs_type;
 
+  -- dcs
+  signal cpu_req_data_dcs_en          : std_ulogic;
+  signal cpu_req_data_use_owner_pred  : std_ulogic;
+  signal cpu_req_data_dcs             : dcs_t;
+  signal cpu_req_data_pred_cid        : cache_id_t;
+
   constant ahbslv_proxy_hindex : hindex_vector(0 to NAHBSLV - 1) := (
     others => 0);
 
@@ -321,6 +327,12 @@ begin
         coherence_fwd_snd_wrreq    => coherence_fwd_snd_wrreq,
         coherence_fwd_snd_data_in  => coherence_fwd_snd_data_in,
         coherence_fwd_snd_full     => coherence_fwd_snd_full,
+
+        cpu_req_data_dcs_en         => cpu_req_data_dcs_en,
+        cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+        cpu_req_data_dcs            => cpu_req_data_dcs,
+        cpu_req_data_pred_cid       => cpu_req_data_pred_cid,
+
         mon_cache                  => mon_cache);
   end generate l2_gen;
 
