@@ -69,11 +69,13 @@ public:
     nb_get_initiator<l2_fwd_in_t>	l2_fwd_in;
     nb_get_initiator<l2_rsp_in_t>	l2_rsp_in;
     nb_get_initiator<bool>		l2_flush;
+    nb_get_initiator<bool>		    l2_sync;
 
     // Output ports
     put_initiator<l2_rd_rsp_t>	l2_rd_rsp;
     put_initiator<l2_inval_t>	l2_inval;
     nb_put_initiator<l2_req_out_t> l2_req_out;
+    nb_put_initiator<l2_fwd_out_t> l2_fwd_out;
     nb_put_initiator<l2_rsp_out_t> l2_rsp_out;
 
 #ifdef STATS_ENABLE
@@ -96,6 +98,13 @@ public:
     line_t	 line_buf[L2_WAYS];
     l2_way_t	 evict_way;
 
+#if (USE_SPANDEX == 1)
+    coh_msg_t orig_spdx_msg;
+    l2_fwd_in_t spdx_tu_fake_putack;
+    bool spdx_tu_fake_putack_valid;
+    bool spdx_tu_pending_inv_valid[N_REQS];
+#endif
+
     // Constructor
     SC_CTOR(l2)
 	: clk("clk")
@@ -109,9 +118,11 @@ public:
 	, l2_fwd_in("l2_fwd_in")
 	, l2_rsp_in("l2_rsp_in")
 	, l2_flush("l2_flush")
+    , l2_sync("l2_sync")
 	, l2_rd_rsp("l2_rd_rsp")
 	, l2_inval("l2_inval")
 	, l2_req_out("l2_req_out")
+	, l2_fwd_out("l2_fwd_out")
 	, l2_rsp_out("l2_rsp_out")
 #ifdef STATS_ENABLE
 	, l2_stats("l2_stats")  
@@ -125,8 +136,10 @@ public:
 	    // Assign clock and reset to put_get ports
 	    l2_cpu_req.clk_rst (clk, rst);
 	    l2_fwd_in.clk_rst (clk, rst);
+	    l2_fwd_out.clk_rst (clk, rst);
 	    l2_rsp_in.clk_rst (clk, rst);
 	    l2_flush.clk_rst (clk, rst);
+        l2_sync.clk_rst (clk, rst);
 	    l2_rd_rsp.clk_rst(clk, rst);
 	    l2_inval.clk_rst(clk, rst);
 	    l2_req_out.clk_rst(clk, rst);
@@ -165,7 +178,9 @@ public:
     void send_rd_rsp(line_t lines);
     void send_inval(line_addr_t addr_inval);
     void send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t lines);
+    void send_req_out_word_mask(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line, word_mask_t word_mask);
     void send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line);
+    void send_rsp_out_word_mask(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line, word_mask_t word_mask);
 
     /* Functions to move around buffered lines */
     void fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t tag_estall, l2_way_t way_hit, 
@@ -178,7 +193,7 @@ public:
     void read_set(l2_set_t set);
     void tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &way_hit, bool &empty_way_found,
 		    l2_way_t &empty_way);
-    void tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, l2_way_t &way_hit);
+    void tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, bool &tag_hit, l2_way_t &way_hit);
     void reqs_lookup(line_breakdown_t<l2_tag_t, l2_set_t> line_addr_br,
 		     sc_uint<REQS_BITS> &reqs_hit_i);
     bool reqs_peek_req(l2_set_t set, sc_uint<REQS_BITS> &reqs_i);

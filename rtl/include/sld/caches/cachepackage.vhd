@@ -18,6 +18,10 @@ package cachepackage is
   -- Constants
   -----------------------------------------------------------------------------
 
+  -- DCS
+  constant USE_DCS               : std_logic := '0';
+  constant USE_OWNER_PRED        : std_logic := '0';
+
   -- Asserts
   constant AS_AHBS_HSIZE         : integer := 0;
   constant AS_AHBS_CACHEABLE     : integer := 1;
@@ -56,6 +60,24 @@ package cachepackage is
 
   constant COH_T_LOG2 : integer := 2;
 
+  -- constant OFFSET_BITS        : integer := WORD_OFFSET_BITS + BYTE_OFFSET_BITS;
+  -- constant LINE_ADDR_BITS     : integer := ADDR_BITS - OFFSET_BITS;
+  -- constant WORDS_PER_LINE     : integer := 2**WORD_OFFSET_BITS;
+  -- constant BYTES_PER_WORD     : integer := 2**BYTE_OFFSET_BITS;
+  -- constant BYTES_PER_LINE     : integer := WORDS_PER_LINE * BYTES_PER_WORD;
+  -- constant BITS_PER_WORD      : integer := (BYTES_PER_WORD * 8);
+  -- constant BITS_PER_HWORD     : integer := BITS_PER_WORD/2;
+  -- constant BITS_PER_LINE      : integer := (BITS_PER_WORD * WORDS_PER_LINE);
+
+  -- Cache data types width
+  -- constant CPU_MSG_TYPE_WIDTH : integer := 2;
+  -- constant COH_MSG_TYPE_WIDTH : integer := 4;
+  -- constant MIX_MSG_TYPE_WIDTH : integer := 5;
+
+  -- constant HSIZE_WIDTH           : integer := 3;
+  -- constant HPROT_WIDTH           : integer := 2;
+  -- constant INVACK_CNT_WIDTH      : integer := NL2_MAX_LOG2;
+  -- constant INVACK_CNT_CALC_WIDTH : integer := INVACK_CNT_WIDTH + 1;
   -- Bus state
   constant AS_AHBM_LOAD_NOT_GRANTED  : integer := 0;
   constant AS_AHBM_STORE_NOT_GRANTED : integer := 1;
@@ -88,7 +110,10 @@ package cachepackage is
   subtype hsize_t is std_logic_vector(HSIZE_WIDTH - 1 downto 0);
   subtype hprot_t is std_logic_vector(HPROT_WIDTH - 1 downto 0);
   subtype word_t is std_logic_vector(BITS_PER_WORD - 1 downto 0);
+  subtype dcs_t is std_logic_vector(DCS_BITS - 1 downto 0);
   subtype line_t is std_logic_vector(BITS_PER_LINE - 1 downto 0);
+  subtype word_mask_t is std_logic_vector(WORDS_PER_LINE - 1 downto 0);
+  subtype amo_t is std_logic_vector(AMO_BITS - 1 downto 0);
   subtype coh_msg_t is std_logic_vector(COH_MSG_TYPE_WIDTH - 1 downto 0);
   subtype mix_msg_t is std_logic_vector(MIX_MSG_TYPE_WIDTH - 1 downto 0);
   -- subtype l2_set_t is std_logic_vector(SET_BITS - 1 downto 0);
@@ -141,7 +166,17 @@ package cachepackage is
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;
                         cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-                        cache_y       : yx_vec(0 to 2**NL2_MAX_LOG2 - 1))
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
+    return noc_flit_type;
+
+  function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
+    mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
+    local_x     : local_yx; local_y : local_yx;
+    to_req      : std_ulogic; req_id : cache_id_t; src_id : cache_id_t;
+    cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+    cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+    word_mask    : word_mask_t)
     return noc_flit_type;
 
   function get_owner_bits (ncpu_bits : integer)
@@ -165,7 +200,9 @@ package cachepackage is
       mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
       cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-      cache_tile_id : cache_attribute_array);
+      cache_id      : integer := 0;
+      cache_tile_id : cache_attribute_array;
+      tile_id     : integer := 0);
     port (
       rst : in std_ulogic;
       clk : in std_ulogic;
@@ -185,6 +222,7 @@ package cachepackage is
       apbi  : in  apb_slv_in_type;
       apbo  : out apb_slv_out_type;
       flush : in  std_ulogic;           -- flush request from CPU
+      sync_l2 : in std_logic;
 
       -- backend (cache - NoC)
       -- tile->NoC1
@@ -203,6 +241,10 @@ package cachepackage is
       coherence_rsp_snd_wrreq    : out std_ulogic;
       coherence_rsp_snd_data_in  : out noc_flit_type;
       coherence_rsp_snd_full     : in  std_ulogic;
+      -- tile->Noc3
+      coherence_fwd_snd_wrreq    : out std_ulogic;
+      coherence_fwd_snd_data_in  : out noc_flit_type;
+      coherence_fwd_snd_full     : in  std_ulogic;
 
       mon_cache                  : out monitor_cache_type
       );
@@ -217,7 +259,8 @@ package cachepackage is
       mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
       cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-      cache_tile_id : cache_attribute_array);
+      cache_tile_id : cache_attribute_array;
+      tile_id     : integer := 0);
     port (
       rst : in std_ulogic;
       clk : in std_ulogic;
@@ -260,6 +303,10 @@ package cachepackage is
       coherence_rsp_snd_wrreq    : out std_ulogic;
       coherence_rsp_snd_data_in  : out noc_flit_type;
       coherence_rsp_snd_full     : in  std_ulogic;
+      -- tile->Noc3
+      coherence_fwd_snd_wrreq    : out std_ulogic;
+      coherence_fwd_snd_data_in  : out noc_flit_type;
+      coherence_fwd_snd_full     : in  std_ulogic;
 
       mon_cache                  : out monitor_cache_type
       );
@@ -411,12 +458,14 @@ package body cachepackage is
                         local_x     : local_yx; local_y : local_yx;
                         to_req      : std_ulogic; req_id : cache_id_t;
                         cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1))
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
     return noc_flit_type is
 
     variable header         : noc_flit_type;
     variable dest_x, dest_y : local_yx;
     variable dest_init      : integer;
+    variable reserved       : std_logic_vector(RESERVED_WIDTH-1 downto 0);
 
   begin
 
@@ -448,12 +497,63 @@ package body cachepackage is
     end if;
 
     -- compose header
-    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg,
-                            std_logic_vector(resize(unsigned(hprot), RESERVED_WIDTH)));
+    reserved := word_mask & std_logic_vector(resize(unsigned(hprot), RESERVED_WIDTH - WORDS_PER_LINE));
+    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg, reserved);
 
     return header;
 
   end function make_header;
+
+  function make_dcs_header (coh_msg     : coh_msg_t; mem_info : tile_mem_info_vector(0 to CFG_NMEM_TILE - 1);
+                        mem_num     : integer; hprot : hprot_t; addr : line_addr_t;
+                        local_x     : local_yx; local_y : local_yx;
+                        to_req      : std_ulogic; req_id : cache_id_t; src_id : cache_id_t;
+                        cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+                        word_mask    : word_mask_t)
+    return noc_flit_type is
+
+    variable header         : noc_flit_type;
+    variable dest_x, dest_y : local_yx;
+    variable dest_init      : integer;
+    variable reserved       : std_logic_vector(RESERVED_WIDTH-1 downto 0);
+
+  begin
+
+    if to_req = '0' then
+
+      dest_x := mem_info(0).x;
+      dest_y := mem_info(0).y;
+      if mem_num /= 1 then
+        for i in 0 to mem_num - 1 loop
+          if ((addr(LINE_ADDR_BITS - 1 downto LINE_ADDR_BITS - 12)
+               xor conv_std_logic_vector(mem_info(i).haddr, 12))
+              and conv_std_logic_vector(mem_info(i).hmask, 12)) = x"000" then
+            dest_x := mem_info(i).x;
+            dest_y := mem_info(i).y;
+          end if;
+        end loop;
+      end if;
+
+    else
+
+      if req_id >= "0" then
+        dest_init := to_integer(unsigned(req_id));
+        if dest_init >= 0 then
+          dest_x := cache_x(dest_init);
+          dest_y := cache_y(dest_init);
+        end if;
+      end if;
+
+    end if;
+
+    -- compose header
+    reserved := word_mask & std_logic_vector(resize(unsigned(src_id), RESERVED_WIDTH - WORDS_PER_LINE));
+    header := create_header(NOC_FLIT_SIZE, local_y, local_x, dest_y, dest_x, '0' & coh_msg, reserved);
+
+    return header;
+
+  end function make_dcs_header;
 
   function get_owner_bits (ncpu_bits : integer)
     return integer is

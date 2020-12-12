@@ -24,6 +24,8 @@ leon3_test(int domp, int *irqmp, int mtest)
         mptest_start(irqmp);
 
     test_loop_start();
+    if (!pid) printf("test_loop_start\n", ncpu);
+
     
     psync(sync_leon3_test, pid, ncpu);
     report_test(TEST_LEON3);
@@ -31,39 +33,63 @@ leon3_test(int domp, int *irqmp, int mtest)
     /* TESTS */
     /* Uncomment the tests you want to execute. */
     
-    /* report_test(TEST_REG); */
-    /* if (regtest()) report_fail(FAIL_REG); */
+    // report_test(TEST_REG);
+    // if (regtest()) report_fail(FAIL_REG);
 
-    /* report_test(TEST_MUL); */
-    /* multest(); */
+    report_test(TEST_MUL);
+    multest();
+    if (!pid) printf("multest\n", ncpu);
 
-    /* report_test(TEST_DIV); */
-    /* divtest(); */
+    report_test(TEST_DIV);
+    divtest();
+    if (!pid) printf("divtest\n", ncpu);
 
-    /* //report_test(TEST_FPU); */
-    /* //fputest(); */
+    report_test(TEST_FPU);
+    fputest();
+    if (!pid) printf("fputest\n", ncpu);
 
-    /* report_test(TEST_FILL_W); */
-    /* cache_fill(4, ncpu, WORD); */
+	if (!pid) data_structures_setup();
+    report_test(TEST_FILL_B);
+    cache_fill(4, ncpu, BYTE);
+    if (!pid) printf("cache_fill(4, ncpu, BYTE)\n", ncpu);
+
+    report_test(TEST_FILL_HW);
+    cache_fill(4, ncpu, HALFWORD);
+    if (!pid) printf("cache_fill(4, ncpu, HALFWORD)\n", ncpu);
+
+    report_test(TEST_FILL_W);
+    cache_fill(4, ncpu, WORD);
+    if (!pid) printf("cache_fill(4, ncpu, WORD)\n", ncpu);
+
     
     report_test(TEST_SHARING);
     false_sharing(20, ncpu);
+    if (!pid) printf("false_sharing(20, ncpu)\n", ncpu);
 
-    /* report_test(TEST_LEON3); */
-    /* l2_cache_test(domp, irqmp); */
+
+    // l2_cache_test(domp, irqmp);
 
     report_test(TEST_LOCK);
     test_lock(100, ncpu);
+    if (!pid) printf("test_lock(100, ncpu)\n", ncpu);
 
-    /* report_test(TEST_MESI); */
-    /* mesi_test(ncpu, 1); */
 
-    /* report_test(TEST_RAND_RW); */
-    /* rand_rw(200, ncpu); */
+    report_test(TEST_MESI);
+    mesi_test(ncpu, 1);
+    if (!pid) printf("mesi_test(ncpu, 1)\n", ncpu);
+
+
+
+    report_test(TEST_RAND_RW);
+    rand_rw(200, ncpu);
+    if (!pid) printf("rand_rw(200, ncpu)\n", ncpu);
+
     
     /* End of TESTS */
     
     test_loop_end();
+    if (!pid) printf("test_loop_end\n", ncpu);
+
     
     if (domp)
         mptest_end(irqmp);

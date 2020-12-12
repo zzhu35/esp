@@ -63,6 +63,7 @@ BOARD_FILES = $(wildcard $(ESP_ROOT)/constraints/$(BOARD)/*)
 
 ### Default test program ###
 TEST_PROGRAM ?= systest.exe
+BIT_STREAM ?= top.bit
 
 
 ifeq ("$(CPU_ARCH)", "leon3")
@@ -146,6 +147,9 @@ include $(ESP_ROOT)/utils/profpga.mk
 ### FPGA Deploy targets ###
 include $(ESP_ROOT)/utils/fpga.mk
 
+spandex-bench: vivado-prog-fpga-spandex
+	$(QUIET_INFO) echo "Waiting for DDR calibration..."
+	@sleep 5
 
 ### Utils ###
 include $(ESP_ROOT)/utils/utils.mk

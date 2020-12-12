@@ -25,6 +25,7 @@ use work.nocpackage.all;
 use work.allcaches.all;
 use work.cachepackage.all;              -- contains l2 cache component
 use work.sldcommon.all;
+use work.socmap.all;
 
 
 entity l2_wrapper is
@@ -41,7 +42,9 @@ entity l2_wrapper is
     mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-    cache_tile_id : cache_attribute_array);
+    cache_id      : integer := 0;
+    cache_tile_id : cache_attribute_array;
+    tile_id     : integer := 0);
   port (
     rst : in std_ulogic;
     clk : in std_ulogic;
@@ -61,6 +64,7 @@ entity l2_wrapper is
     apbi  : in  apb_slv_in_type;
     apbo  : out apb_slv_out_type;
     flush : in  std_ulogic;             -- flush request from CPU
+    sync_l2 : in std_logic;
 
     -- backend (cache - NoC)
     -- tile->NoC1
@@ -79,6 +83,10 @@ entity l2_wrapper is
     coherence_rsp_snd_wrreq    : out std_ulogic;
     coherence_rsp_snd_data_in  : out noc_flit_type;
     coherence_rsp_snd_full     : in  std_ulogic;
+    -- tile->Noc2
+    coherence_fwd_snd_wrreq    : out std_ulogic;
+    coherence_fwd_snd_data_in  : out noc_flit_type;
+    coherence_fwd_snd_full     : in  std_ulogic;
 
     mon_cache                  : out monitor_cache_type
     );
@@ -97,6 +105,11 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_hprot     : hprot_t;
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
+  signal cpu_req_data_amo       : amo_t;
+  signal cpu_req_data_dcs_en    : std_ulogic;
+  signal cpu_req_data_use_owner_pred : std_ulogic;
+  signal cpu_req_data_dcs       : dcs_t;
+  signal cpu_req_data_pred_cid  : cache_id_t;
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
@@ -114,6 +127,7 @@ architecture rtl of l2_wrapper is
   signal req_out_data_hprot     : hprot_t;
   signal req_out_data_addr      : line_addr_t;
   signal req_out_data_line      : line_t;
+  signal req_out_data_word_mask : word_mask_t;
   signal rsp_out_ready          : std_ulogic;
   signal rsp_out_valid          : std_ulogic;
   signal rsp_out_data_coh_msg   : coh_msg_t;
@@ -121,18 +135,30 @@ architecture rtl of l2_wrapper is
   signal rsp_out_data_to_req    : std_logic_vector(1 downto 0);
   signal rsp_out_data_addr      : line_addr_t;
   signal rsp_out_data_line      : line_t;
+  signal rsp_out_data_word_mask : word_mask_t;
+  signal fwd_out_ready          : std_ulogic;
+  signal fwd_out_valid          : std_ulogic;
+  signal fwd_out_data_coh_msg   : coh_msg_t;
+  signal fwd_out_data_req_id    : cache_id_t;
+  signal fwd_out_data_to_req    : std_logic_vector(1 downto 0);
+  signal fwd_out_data_addr      : line_addr_t;
+  signal fwd_out_data_line      : line_t;
+  signal fwd_out_data_word_mask : word_mask_t;
   -- NoC to cache
   signal fwd_in_ready           : std_ulogic;
   signal fwd_in_valid           : std_ulogic;
   signal fwd_in_data_coh_msg    : mix_msg_t;
   signal fwd_in_data_addr       : line_addr_t;
   signal fwd_in_data_req_id     : cache_id_t;
+  signal fwd_in_data_word_mask  : word_mask_t;
+  signal fwd_in_data_line       : line_t;
   signal rsp_in_valid           : std_ulogic;
   signal rsp_in_ready           : std_ulogic;
   signal rsp_in_data_coh_msg    : coh_msg_t;
   signal rsp_in_data_addr       : line_addr_t;
   signal rsp_in_data_line       : line_t;
   signal rsp_in_data_invack_cnt : invack_cnt_t;
+  signal rsp_in_data_word_mask  : word_mask_t;
   -- debug
   --signal asserts                : asserts_t;
   --signal bookmark               : bookmark_t;
@@ -172,6 +198,10 @@ architecture rtl of l2_wrapper is
     hsize         : hsize_t;
     hprot         : hprot_t;
     haddr         : addr_t;
+    dcs_en        : std_ulogic;
+    use_owner_pred: std_ulogic;
+    dcs           : dcs_t;
+    pred_cid      : cache_id_t;
     req_memorized : std_ulogic;
     asserts       : asserts_ahbs_t;
   end record;
@@ -182,6 +212,10 @@ architecture rtl of l2_wrapper is
     hsize         => HSIZE_W,           -- 1 word
     hprot         => DEFAULT_HPROT,     -- bufferable, non cacheable
     haddr         => (others => '0'),
+    dcs_en        => '0',
+    use_owner_pred=> '0',
+    dcs           => (others => '0'),
+    pred_cid      => (others => '0'),
     req_memorized => '0',
     asserts       => (others => '0'));
 
@@ -312,15 +346,44 @@ architecture rtl of l2_wrapper is
   signal rsp_out_reg_next : rsp_out_reg_type;
 
   -------------------------------------------------------------------------------
+  -- FSM: Forward to NoC
+  -------------------------------------------------------------------------------
+  type fwd_out_fsm is (send_header, send_addr, send_data);
+
+  type fwd_out_reg_type is record
+    state    : fwd_out_fsm;
+    coh_msg  : coh_msg_t;
+    addr     : line_addr_t;
+    line     : line_t;
+    word_cnt : natural range 0 to 3;
+    asserts  : asserts_fwd_t;
+  end record fwd_out_reg_type;
+
+  constant FWD_OUT_REG_DEFAULT : fwd_out_reg_type := (
+    state    => send_header,
+    coh_msg  => (others => '0'),
+    addr     => (others => '0'),
+    line     => (others => '0'),
+    word_cnt => 0,
+    asserts  => (others => '0'));
+
+  signal fwd_out_reg      : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
+  signal fwd_out_reg_next : fwd_out_reg_type := FWD_OUT_REG_DEFAULT;
+
+  -------------------------------------------------------------------------------
   -- FSM: Forward from  NoC
   -------------------------------------------------------------------------------
 
-  type fwd_in_fsm is (rcv_header, rcv_addr);
+  type fwd_in_fsm is (rcv_header, rcv_addr, rcv_data);
 
   type fwd_in_reg_type is record
     state   : fwd_in_fsm;
     coh_msg : mix_msg_t;
     req_id  : cache_id_t;
+    word_mask : word_mask_t;
+    addr    : line_addr_t;
+    line    : line_t;
+    word_cnt : natural range 0 to 3;
     asserts : asserts_fwd_t;
   end record fwd_in_reg_type;
 
@@ -328,6 +391,10 @@ architecture rtl of l2_wrapper is
     state   => rcv_header,
     coh_msg => (others => '0'),
     req_id  => (others => '0'),
+    word_mask => (others => '0'),
+    addr    => (others => '0'),
+    line    => (others => '0'),
+    word_cnt => 0,
     asserts => (others => '0'));
 
   signal fwd_in_reg      : fwd_in_reg_type;
@@ -345,6 +412,7 @@ architecture rtl of l2_wrapper is
     invack_cnt : invack_cnt_t;
     addr       : line_addr_t;
     line       : line_t;
+    word_mask  : word_mask_t;
     word_cnt   : natural range 0 to 3;
     asserts    : asserts_rsp_in_t;
   end record rsp_in_reg_type;
@@ -355,6 +423,7 @@ architecture rtl of l2_wrapper is
     invack_cnt => (others => '0'),
     addr       => (others => '0'),
     line       => (others => '0'),
+    word_mask  => (others => '0'),
     word_cnt   => 0,
     asserts    => (others => '0'));
 
@@ -486,8 +555,8 @@ begin  -- architecture rtl of l2_wrapper
   -----------------------------------------------------------------------------
   -- Instantiations
   -----------------------------------------------------------------------------
-
-  l2_cache_i : l2
+  l2_gen: if SPANDEX_L2_CONFIG(tile_id) = 0 generate
+    l2_cache_i : l2
     generic map (
       use_rtl => CFG_CACHE_RTL,
       sets => sets,
@@ -504,6 +573,11 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_hprot     => cpu_req_data_hprot,
       l2_cpu_req_data_addr      => cpu_req_data_addr,
       l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -521,6 +595,7 @@ begin  -- architecture rtl of l2_wrapper
       l2_req_out_data_hprot     => req_out_data_hprot,
       l2_req_out_data_addr      => req_out_data_addr,
       l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
       l2_rsp_out_ready          => rsp_out_ready,
       l2_rsp_out_valid          => rsp_out_valid,
       l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
@@ -528,23 +603,203 @@ begin  -- architecture rtl of l2_wrapper
       l2_rsp_out_data_to_req    => rsp_out_data_to_req,
       l2_rsp_out_data_addr      => rsp_out_data_addr,
       l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
       -- NoC to cache
       l2_fwd_in_ready           => fwd_in_ready,
       l2_fwd_in_valid           => fwd_in_valid,
       l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
       l2_fwd_in_data_addr       => fwd_in_data_addr,
       l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
       l2_rsp_in_ready           => rsp_in_ready,
       l2_rsp_in_valid           => rsp_in_valid,
       l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
       l2_rsp_in_data_addr       => rsp_in_data_addr,
       l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
       l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
       flush_done                => flush_done,
       l2_stats_ready            => stats_ready,
       l2_stats_valid            => stats_valid,
-      l2_stats_data             => stats_data
-      );
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_gen;
+
+  l2_gpu_gen: if SPANDEX_L2_CONFIG(tile_id) = 1 generate
+    l2_cache_i : l2_gpu
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_gpu_gen;
+
+  l2_denovo_gen: if SPANDEX_L2_CONFIG(tile_id) = 2 generate
+    l2_cache_i : l2_denovo
+    generic map (
+      use_rtl => CFG_CACHE_RTL,
+      sets => sets,
+      ways => ways)
+    port map (
+      clk => clk,
+      rst => rst,
+
+      -- AHB to cache
+      l2_cpu_req_ready          => cpu_req_ready,
+      l2_cpu_req_valid          => cpu_req_valid,
+      l2_cpu_req_data_cpu_msg   => cpu_req_data_cpu_msg,
+      l2_cpu_req_data_hsize     => cpu_req_data_hsize,
+      l2_cpu_req_data_hprot     => cpu_req_data_hprot,
+      l2_cpu_req_data_addr      => cpu_req_data_addr,
+      l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
+      l2_cpu_req_data_dcs       => cpu_req_data_dcs,
+      l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
+      l2_cpu_req_data_word      => cpu_req_data_word,
+      l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_flush_ready            => flush_ready,
+      l2_flush_valid            => flush_valid,
+      l2_flush_data             => flush_data,
+      -- cache to AHB
+      l2_rd_rsp_ready           => rd_rsp_ready,
+      l2_rd_rsp_valid           => rd_rsp_valid,
+      l2_rd_rsp_data_line       => rd_rsp_data_line,
+      l2_inval_ready            => inval_ready,
+      l2_inval_valid            => inval_valid,
+      l2_inval_data             => inval_data,
+      -- cache to NoC
+      l2_req_out_ready          => req_out_ready,
+      l2_req_out_valid          => req_out_valid,
+      l2_req_out_data_coh_msg   => req_out_data_coh_msg,
+      l2_req_out_data_hprot     => req_out_data_hprot,
+      l2_req_out_data_addr      => req_out_data_addr,
+      l2_req_out_data_line      => req_out_data_line,
+      l2_req_out_data_word_mask => req_out_data_word_mask,
+      l2_rsp_out_ready          => rsp_out_ready,
+      l2_rsp_out_valid          => rsp_out_valid,
+      l2_rsp_out_data_coh_msg   => rsp_out_data_coh_msg,
+      l2_rsp_out_data_req_id    => rsp_out_data_req_id,
+      l2_rsp_out_data_to_req    => rsp_out_data_to_req,
+      l2_rsp_out_data_addr      => rsp_out_data_addr,
+      l2_rsp_out_data_line      => rsp_out_data_line,
+      l2_rsp_out_data_word_mask => rsp_out_data_word_mask,
+      l2_fwd_out_ready          => fwd_out_ready,
+      l2_fwd_out_valid          => fwd_out_valid,
+      l2_fwd_out_data_coh_msg   => fwd_out_data_coh_msg,
+      l2_fwd_out_data_req_id    => fwd_out_data_req_id,
+      l2_fwd_out_data_to_req    => fwd_out_data_to_req,
+      l2_fwd_out_data_addr      => fwd_out_data_addr,
+      l2_fwd_out_data_line      => fwd_out_data_line,
+      l2_fwd_out_data_word_mask => fwd_out_data_word_mask,
+      -- NoC to cache
+      l2_fwd_in_ready           => fwd_in_ready,
+      l2_fwd_in_valid           => fwd_in_valid,
+      l2_fwd_in_data_coh_msg    => fwd_in_data_coh_msg,
+      l2_fwd_in_data_addr       => fwd_in_data_addr,
+      l2_fwd_in_data_req_id     => fwd_in_data_req_id,
+      l2_fwd_in_data_word_mask  => fwd_in_data_word_mask,
+      l2_fwd_in_data_line       => fwd_in_data_line,
+      l2_rsp_in_ready           => rsp_in_ready,
+      l2_rsp_in_valid           => rsp_in_valid,
+      l2_rsp_in_data_coh_msg    => rsp_in_data_coh_msg,
+      l2_rsp_in_data_addr       => rsp_in_data_addr,
+      l2_rsp_in_data_line       => rsp_in_data_line,
+      l2_rsp_in_data_word_mask  => rsp_in_data_word_mask,
+      l2_rsp_in_data_invack_cnt => rsp_in_data_invack_cnt,
+      flush_done                => flush_done,
+      l2_stats_ready            => stats_ready,
+      l2_stats_valid            => stats_valid,
+      l2_stats_data             => stats_data,
+      l2_sync_ready             => open,
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
+    );
+  end generate l2_denovo_gen;
 
   Invalidate_fifo : fifo_custom
     generic map (
@@ -702,6 +957,7 @@ begin  -- architecture rtl of l2_wrapper
       rsp_out_reg    <= RSP_OUT_REG_DEFAULT;
       fwd_in_reg     <= FWD_IN_REG_DEFAULT;
       rsp_in_reg     <= RSP_IN_REG_DEFAULT;
+      fwd_out_reg    <= FWD_OUT_REG_DEFAULT;
       load_alloc_reg <= LOAD_ALLOC_REG_DEFAULT;
 
     elsif clk'event and clk = '1' then
@@ -712,6 +968,7 @@ begin  -- architecture rtl of l2_wrapper
       req_reg        <= req_reg_next;
       fwd_in_reg     <= fwd_in_reg_next;
       rsp_out_reg    <= rsp_out_reg_next;
+      fwd_out_reg    <= fwd_out_reg_next;
       rsp_in_reg     <= rsp_in_reg_next;
       load_alloc_reg <= load_alloc_reg_next;
 
@@ -770,6 +1027,7 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
     cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
 
     flush_valid <= '0';
 
@@ -1216,11 +1474,11 @@ begin  -- architecture rtl of l2_wrapper
 -------------------------------------------------------------------------------
   fsm_req : process (req_reg, coherence_req_full,
                      req_out_valid, req_out_data_coh_msg, req_out_data_hprot,
-                     req_out_data_addr, req_out_data_line,
-                     local_x, local_y) is
+                     req_out_data_addr, req_out_data_line, req_out_data_word_mask， local_x, local_y) is
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t;
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -1257,7 +1515,7 @@ begin  -- architecture rtl of l2_wrapper
                                                  mem_num, req_out_data_hprot,
                                                  req_out_data_addr, local_x, local_y,
                                                  '0', req_id,
-                                                 cache_x, cache_y);
+                                                 cache_x, cache_y, req_out_data_word_mask);
 
             reg.state := send_addr;
 
@@ -1271,20 +1529,24 @@ begin  -- architecture rtl of l2_wrapper
 
           coherence_req_wrreq <= '1';
 
-          if '0' & reg.coh_msg = REQ_PUTM then
+          mix_msg := '0' & reg.coh_msg;
+
+          case mix_msg is
+
+            when REQ_WB | REQ_WTdata | REQ_WT | REQ_WTfwd | REQ_AMO_ADD | REQ_AMO_AND | REQ_AMO_OR | REQ_AMO_XOR | REQ_AMO_MAX | REQ_AMO_MAXU | REQ_AMO_MIN | REQ_AMO_MINU =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_data;
             reg.word_cnt          := 0;
 
-          else
+            when others =>
 
             coherence_req_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
             coherence_req_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
             reg.state             := send_header;
 
-          end if;
+          end case;
         end if;
 
       -- SEND DATA
@@ -1323,11 +1585,11 @@ begin  -- architecture rtl of l2_wrapper
 -------------------------------------------------------------------------------
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          rsp_out_valid, rsp_out_data_coh_msg, rsp_out_data_req_id,
-                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line,
-                         local_x, local_y) is
+                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask， local_x, local_y) is
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');
+    variable mix_msg : mix_msg_t;
 
   begin  -- process fsm_cache2noc
 
@@ -1364,7 +1626,7 @@ begin  -- architecture rtl of l2_wrapper
                                                      mem_num, hprot, rsp_out_data_addr, local_x,
                                                      local_y, rsp_out_data_to_req(0),
                                                      rsp_out_data_req_id,
-                                                     cache_x, cache_y);
+                                                     cache_x, cache_y, rsp_out_data_word_mask);
             reg.state := send_addr;
 
           end if;
@@ -1376,21 +1638,24 @@ begin  -- architecture rtl of l2_wrapper
         if coherence_rsp_snd_full = '0' then
 
           coherence_rsp_snd_wrreq <= '1';
+          mix_msg := '0' & reg.coh_msg;
 
-          if '0' & reg.coh_msg = RSP_DATA then
+          case mix_msg is
 
-            coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
-            coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-            reg.state                 := send_data;
-            reg.word_cnt              := 0;
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
-          else
+              coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+              coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state                 := send_data;
+              reg.word_cnt              := 0;
 
-            coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
-            coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
-            reg.state                 := send_header;
+            when others =>
 
-          end if;
+              coherence_rsp_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+              coherence_rsp_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+              reg.state                 := send_header;
+
+          end case;
         end if;
 
       -- SEND DATA
@@ -1426,15 +1691,142 @@ begin  -- architecture rtl of l2_wrapper
 
   end process fsm_rsp_out;
 
+
+-------------------------------------------------------------------------------
+-- FSM: Forwards to NoC -- DCS hprot == DATA Only
+-------------------------------------------------------------------------------
+fsm_fwd_out : process (fwd_out_reg, coherence_fwd_snd_full,
+fwd_out_valid, fwd_out_data_coh_msg, fwd_out_data_req_id,
+fwd_out_data_to_req, fwd_out_data_addr, fwd_out_data_line, fwd_out_data_word_mask) is
+
+variable reg   : fwd_out_reg_type;
+variable hprot : hprot_t := (others => '0');
+variable mix_msg : mix_msg_t;
+
+begin  -- process fsm_cache2noc
+
+  -- initialize variables
+  reg         := fwd_out_reg;
+  reg.asserts := (others => '0');
+
+  -- initialize signals toward cache (receive from cache)
+  fwd_out_ready <= '0';
+
+  -- initialize signals toward noc
+  coherence_fwd_snd_wrreq   <= '0';
+  coherence_fwd_snd_data_in <= (others => '0');
+
+
+  case reg.state is
+
+    -- SEND HEADER
+    when send_header =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        fwd_out_ready <= '1';
+
+        if fwd_out_valid = '1' then
+
+          reg.coh_msg := fwd_out_data_coh_msg;
+          reg.addr    := fwd_out_data_addr;
+          reg.line    := fwd_out_data_line;
+
+          coherence_fwd_snd_wrreq <= '1';
+
+          coherence_fwd_snd_data_in <= make_dcs_header(fwd_out_data_coh_msg, mem_info,
+                                      mem_num, hprot, fwd_out_data_addr, local_x,
+                                      local_y, fwd_out_data_to_req(0),
+                                      fwd_out_data_req_id, std_logic_vector(to_unsigned(tile_cache_id(tile_id), NL2_MAX_LOG2)),
+                                      cache_x, cache_y, fwd_out_data_word_mask);
+          reg.state := send_addr;
+
+        end if;
+      end if;
+
+    -- SEND ADDRESS
+    when send_addr =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        coherence_fwd_snd_wrreq <= '1';
+        mix_msg := '0' & reg.coh_msg;
+
+        case mix_msg is
+
+          when FWD_WTfwd =>
+
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_data;
+            reg.word_cnt              := 0;
+
+          when others =>
+
+            coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+            coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+            reg.state                 := send_header;
+
+        end case;
+
+
+        -- always send data
+
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_BODY;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_data;
+        -- reg.word_cnt              := 0;
+
+        -- always not send data
+        -- coherence_fwd_snd_data_in(NOC_FLIT_SIZE - 1 downto NOC_FLIT_SIZE - PREAMBLE_WIDTH) <= PREAMBLE_TAIL;
+        -- coherence_fwd_snd_data_in(GLOB_PHYS_ADDR_BITS - 1 downto 0) <= reg.addr & empty_offset;
+        -- reg.state                 := send_header;
+
+
+      end if;
+
+    -- SEND DATA
+    when send_data =>
+
+      if coherence_fwd_snd_full = '0' then
+
+        coherence_fwd_snd_wrreq <= '1';
+
+      if reg.word_cnt = WORDS_PER_LINE - 1 then
+
+        coherence_fwd_snd_data_in <=
+        PREAMBLE_TAIL & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1
+                      downto (BITS_PER_WORD * reg.word_cnt));
+
+        reg.state := send_header;
+
+      else
+
+        coherence_fwd_snd_data_in <=
+        PREAMBLE_BODY & reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1
+                      downto (BITS_PER_WORD * reg.word_cnt));
+
+        reg.word_cnt := reg.word_cnt + 1;
+
+      end if;
+
+      end if;
+
+  end case;
+
+  fwd_out_reg_next <= reg;
+
+end process fsm_fwd_out;
+
 -----------------------------------------------------------------------------
 -- FSM: Forwards from NoC
 -----------------------------------------------------------------------------
   fsm_fwd_in : process (fwd_in_reg, fwd_in_ready,
                         coherence_fwd_empty, coherence_fwd_data_out) is
-
     variable reg          : fwd_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
 
   begin  -- process fsm_fwd_in
@@ -1448,6 +1840,8 @@ begin  -- architecture rtl of l2_wrapper
     fwd_in_data_coh_msg <= (others => '0');
     fwd_in_data_addr    <= (others => '0');
     fwd_in_data_req_id  <= (others => '0');
+    fwd_in_data_word_mask    <= (others => '0');
+    fwd_in_data_line    <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_fwd_rdreq <= '0';
@@ -1469,6 +1863,7 @@ begin  -- architecture rtl of l2_wrapper
           reg.coh_msg := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved    := get_reserved_field(NOC_FLIT_SIZE, coherence_fwd_data_out);
           reg.req_id  := reserved(reg.req_id'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -1476,17 +1871,63 @@ begin  -- architecture rtl of l2_wrapper
 
       -- RECEIVE ADDRESS
       when rcv_addr =>
-        if coherence_fwd_empty = '0' and fwd_in_ready = '1' then
+        if coherence_fwd_empty = '0' then
 
-          coherence_fwd_rdreq <= '1';
+          case reg.coh_msg is
+            when FWD_WTfwd =>
 
-          fwd_in_valid        <= '1';
-          fwd_in_data_coh_msg <= reg.coh_msg;
-          fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-          fwd_in_data_req_id  <= reg.req_id;
+              coherence_fwd_rdreq <= '1';
 
-          reg.state := rcv_header;
+              reg.addr     := coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+              reg.word_cnt := 0;
+              reg.state    := rcv_data;
 
+            when others =>
+
+              if fwd_in_ready = '1' then
+
+                coherence_fwd_rdreq <= '1';
+
+                fwd_in_valid        <= '1';
+                fwd_in_data_coh_msg <= reg.coh_msg;
+                fwd_in_data_addr    <= coherence_fwd_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                fwd_in_data_req_id  <= reg.req_id;
+                fwd_in_data_word_mask    <= reg.word_mask;
+
+                reg.state := rcv_header;
+
+              end if;
+          end case;
+        end if;
+
+      when rcv_data =>
+        if coherence_fwd_empty = '0' then
+          if reg.word_cnt = WORDS_PER_LINE - 1 then
+            if fwd_in_ready = '1' then
+              coherence_fwd_rdreq <= '1';
+
+              reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                      BITS_PER_WORD * reg.word_cnt)
+                := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+              reg.state := rcv_header;
+
+              fwd_in_valid        <= '1';
+              fwd_in_data_coh_msg <= reg.coh_msg;
+              fwd_in_data_addr    <= reg.addr;
+              fwd_in_data_line    <= reg.line;
+              fwd_in_data_req_id  <= reg.req_id;
+              fwd_in_data_word_mask    <= reg.word_mask;
+            end if;
+
+          else
+            coherence_fwd_rdreq <= '1';
+
+            reg.line((BITS_PER_WORD * reg.word_cnt) + BITS_PER_WORD - 1 downto
+                    (BITS_PER_WORD * reg.word_cnt))
+              := coherence_fwd_data_out(BITS_PER_WORD - 1 downto 0);
+
+            reg.word_cnt := reg.word_cnt + 1;
+          end if;
         end if;
 
     end case;
@@ -1504,7 +1945,9 @@ begin  -- architecture rtl of l2_wrapper
     variable reg          : rsp_in_reg_type;
     variable rsp_preamble : noc_preamble_type;
     variable msg_type     : noc_msg_type;
+    variable word_mask    : word_mask_t;
     variable reserved     : reserved_field_type;
+    variable mix_msg      : mix_msg_t;
 
   begin  -- process fsm_rsp_in
 
@@ -1518,6 +1961,7 @@ begin  -- architecture rtl of l2_wrapper
     rsp_in_data_addr       <= (others => '0');
     rsp_in_data_line       <= (others => '0');
     rsp_in_data_invack_cnt <= (others => '0');
+    rsp_in_data_word_mask       <= (others => '0');
 
     -- initialize signals toward noc (receive from noc)
     coherence_rsp_rcv_rdreq <= '0';
@@ -1539,6 +1983,7 @@ begin  -- architecture rtl of l2_wrapper
           reg.coh_msg    := msg_type(reg.coh_msg'length - 1 downto 0);
           reserved       := get_reserved_field(NOC_FLIT_SIZE, coherence_rsp_rcv_data_out);
           reg.invack_cnt := reserved(reg.invack_cnt'length - 1 downto 0);
+          reg.word_mask := reserved(RESERVED_WIDTH - 1 downto RESERVED_WIDTH - WORDS_PER_LINE);
 
           reg.state := rcv_addr;
 
@@ -1548,27 +1993,30 @@ begin  -- architecture rtl of l2_wrapper
       when rcv_addr =>
         if coherence_rsp_rcv_empty = '0' then
 
-          if ('0' & reg.coh_msg = RSP_INV_ACK) then
+          mix_msg := '0' & reg.coh_msg;
+          case mix_msg is
 
-            if rsp_in_ready = '1' then
+            when RSP_S | RSP_Odata | RSP_RVK_O | RSP_WTdata | RSP_V =>
 
               coherence_rsp_rcv_rdreq <= '1';
-              rsp_in_valid            <= '1';
-              rsp_in_data_coh_msg     <= reg.coh_msg;
-              rsp_in_data_addr        <= coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-              reg.state               := rcv_header;
+              reg.addr                := coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+              reg.word_cnt            := 0;
+              reg.state               := rcv_data;
 
-            end if;
+            when others =>
 
-          else
-            -- RSP_DATA, RSP_EDATA
+              if rsp_in_ready = '1' then
 
-            coherence_rsp_rcv_rdreq <= '1';
-            reg.addr                := coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
-            reg.word_cnt            := 0;
-            reg.state               := rcv_data;
+                coherence_rsp_rcv_rdreq <= '1';
+                rsp_in_valid            <= '1';
+                rsp_in_data_coh_msg     <= reg.coh_msg;
+                rsp_in_data_addr        <= coherence_rsp_rcv_data_out(ADDR_BITS - 1 downto LINE_RANGE_LO);
+                rsp_in_data_word_mask   <= reg.word_mask;
+                reg.state               := rcv_header;
 
-          end if;
+              end if;
+
+          end case;
 
         end if;
 
@@ -1593,6 +2041,7 @@ begin  -- architecture rtl of l2_wrapper
               rsp_in_data_invack_cnt <= reg.invack_cnt;
               rsp_in_data_addr       <= reg.addr;
               rsp_in_data_line       <= reg.line;
+              rsp_in_data_word_mask  <= reg.word_mask;
             end if;
 
           else
@@ -1675,7 +2124,12 @@ begin  -- architecture rtl of l2_wrapper
     cpu_req_data_hsize   <= (others => '0');
     cpu_req_data_hprot   <= (others => '0');
     cpu_req_data_addr    <= (others => '0');
+    cpu_req_data_dcs_en  <= '0';
+    cpu_req_data_use_owner_pred <= '0';
+    cpu_req_data_dcs     <= (others => '0');
+    cpu_req_data_pred_cid<= (others => '0');
     cpu_req_data_word    <= (others => '0');
+    cpu_req_data_amo     <= (others => '0');
 
     flush_valid <= '0';
 
@@ -1696,6 +2150,10 @@ begin  -- architecture rtl of l2_wrapper
             reg.hsize   := mosi.ar.size;
             reg.hprot   := '0' & not mosi.ar.prot(2);
             reg.haddr   := mosi.ar.addr;
+            reg.dcs_en  := mosi.ar.user(7);
+            reg.use_owner_pred := mosi.ar.user(6);
+            reg.dcs     := mosi.ar.user(5 downto 4);
+            reg.pred_cid:= mosi.ar.user(3 downto 0);
             xreg.id     := mosi.ar.id;
             xreg.len    := mosi.ar.len;
             xreg.lock   := mosi.ar.lock;
@@ -1708,6 +2166,10 @@ begin  -- architecture rtl of l2_wrapper
             reg.hsize   := mosi.aw.size;
             reg.hprot   := '0' & not mosi.aw.prot(2);
             reg.haddr   := mosi.aw.addr;
+            reg.dcs_en  := mosi.aw.user(7);
+            reg.use_owner_pred := mosi.aw.user(6);
+            reg.dcs     := mosi.aw.user(5 downto 4);
+            reg.pred_cid:= mosi.aw.user(3 downto 0);
             xreg.id     := mosi.aw.id;
             xreg.len    := mosi.aw.len;
             xreg.lock   := mosi.aw.lock;
@@ -1755,7 +2217,10 @@ begin  -- architecture rtl of l2_wrapper
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
 
 
       -- LOAD REQUEST
@@ -1764,7 +2229,10 @@ begin  -- architecture rtl of l2_wrapper
         cpu_req_data_hsize   <= reg.hsize;
         cpu_req_data_hprot   <= reg.hprot;
         cpu_req_data_addr    <= reg.haddr;
-
+        cpu_req_data_dcs_en  <= reg.dcs_en;
+        cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+        cpu_req_data_dcs     <= reg.dcs;
+        cpu_req_data_pred_cid<= reg.pred_cid;
         cpu_req_valid <= '1';
 
         if cpu_req_ready = '1' then
@@ -1794,6 +2262,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -1806,6 +2278,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -1900,6 +2376,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.ar.size;
                 reg.hprot   := '0' & not mosi.ar.prot(2);
                 reg.haddr   := mosi.ar.addr;
+                reg.dcs_en  := mosi.ar.user(7);
+                reg.use_owner_pred := mosi.ar.user(6);
+                reg.dcs     := mosi.ar.user(5 downto 4);
+                reg.pred_cid:= mosi.ar.user(3 downto 0);
                 xreg.id     := mosi.ar.id;
                 xreg.len    := mosi.ar.len;
                 xreg.lock   := mosi.ar.lock;
@@ -1912,6 +2392,10 @@ begin  -- architecture rtl of l2_wrapper
                 reg.hsize   := mosi.aw.size;
                 reg.hprot   := '0' & not mosi.aw.prot(2);
                 reg.haddr   := mosi.aw.addr;
+                reg.dcs_en  := mosi.aw.user(7);
+                reg.use_owner_pred := mosi.aw.user(6);
+                reg.dcs     := mosi.aw.user(5 downto 4);
+                reg.pred_cid:= mosi.aw.user(3 downto 0);
                 xreg.id     := mosi.aw.id;
                 xreg.len    := mosi.aw.len;
                 xreg.lock   := mosi.aw.lock;
@@ -2002,7 +2486,12 @@ begin  -- architecture rtl of l2_wrapper
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
           cpu_req_data_word    <= mosi.w.data;
+          cpu_req_data_amo     <= xreg.atop;
           cpu_req_valid <= '1';
 
           if cpu_req_ready = '1' then
@@ -2014,6 +2503,10 @@ begin  -- architecture rtl of l2_wrapper
                   reg.hsize   := mosi.ar.size;
                   reg.hprot   := '0' & not mosi.ar.prot(2);
                   reg.haddr   := mosi.ar.addr;
+                  reg.dcs_en  := mosi.ar.user(7);
+                  reg.use_owner_pred := mosi.ar.user(6);
+                  reg.dcs     := mosi.ar.user(5 downto 4);
+                  reg.pred_cid:= mosi.ar.user(3 downto 0);
                   xreg.id     := mosi.ar.id;
                   xreg.len    := mosi.ar.len;
                   xreg.lock   := mosi.ar.lock;
@@ -2026,6 +2519,10 @@ begin  -- architecture rtl of l2_wrapper
                   reg.hsize   := mosi.aw.size;
                   reg.hprot   := '0' & not mosi.aw.prot(2);
                   reg.haddr   := mosi.aw.addr;
+                  reg.dcs_en  := mosi.aw.user(7);
+                  reg.use_owner_pred := mosi.aw.user(6);
+                  reg.dcs     := mosi.aw.user(5 downto 4);
+                  reg.pred_cid:= mosi.aw.user(3 downto 0);
                   xreg.id     := mosi.aw.id;
                   xreg.len    := mosi.aw.len;
                   xreg.lock   := mosi.aw.lock;
@@ -2092,12 +2589,19 @@ begin  -- architecture rtl of l2_wrapper
 
         if mosi.b.ready = '1' then
 
-          if valid_axi_req = '1' then
+          if unsigned(xreg.atop) > 0 then
+            reg.state := load_rsp;
+
+          elsif valid_axi_req = '1' then
             if mosi.aw.valid = '0' then
               reg.cpu_msg := '0' & mosi.ar.lock;
               reg.hsize   := mosi.ar.size;
               reg.hprot   := '0' & not mosi.ar.prot(2);
               reg.haddr   := mosi.ar.addr;
+              reg.dcs_en  := mosi.ar.user(7);
+              reg.use_owner_pred := mosi.ar.user(6);
+              reg.dcs     := mosi.ar.user(5 downto 4);
+              reg.pred_cid:= mosi.ar.user(3 downto 0);
               xreg.id     := mosi.ar.id;
               xreg.len    := mosi.ar.len;
               xreg.lock   := mosi.ar.lock;
@@ -2110,6 +2614,10 @@ begin  -- architecture rtl of l2_wrapper
               reg.hsize   := mosi.aw.size;
               reg.hprot   := '0' & not mosi.aw.prot(2);
               reg.haddr   := mosi.aw.addr;
+              reg.dcs_en  := mosi.aw.user(7);
+              reg.use_owner_pred := mosi.aw.user(6);
+              reg.dcs     := mosi.aw.user(5 downto 4);
+              reg.pred_cid:= mosi.aw.user(3 downto 0);
               xreg.id     := mosi.aw.id;
               xreg.len    := mosi.aw.len;
               xreg.lock   := mosi.aw.lock;
@@ -2157,6 +2665,10 @@ begin  -- architecture rtl of l2_wrapper
           cpu_req_data_hsize   <= reg.hsize;
           cpu_req_data_hprot   <= reg.hprot;
           cpu_req_data_addr    <= reg.haddr;
+          cpu_req_data_dcs_en  <= reg.dcs_en;
+          cpu_req_data_use_owner_pred <= reg.use_owner_pred;
+          cpu_req_data_dcs     <= reg.dcs;
+          cpu_req_data_pred_cid<= reg.pred_cid;
 
         else
 
