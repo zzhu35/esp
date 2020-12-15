@@ -42,7 +42,6 @@ entity l2_wrapper is
     mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
     cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
     cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-    cache_id      : integer := 0;
     cache_tile_id : cache_attribute_array;
     tile_id     : integer := 0);
   port (
@@ -1474,7 +1473,7 @@ begin  -- architecture rtl of l2_wrapper
 -------------------------------------------------------------------------------
   fsm_req : process (req_reg, coherence_req_full,
                      req_out_valid, req_out_data_coh_msg, req_out_data_hprot,
-                     req_out_data_addr, req_out_data_line, req_out_data_word_mask， local_x, local_y) is
+                     req_out_data_addr, req_out_data_line, req_out_data_word_mask, local_x, local_y) is
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t;
@@ -1585,7 +1584,7 @@ begin  -- architecture rtl of l2_wrapper
 -------------------------------------------------------------------------------
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          rsp_out_valid, rsp_out_data_coh_msg, rsp_out_data_req_id,
-                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask， local_x, local_y) is
+                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask, local_x, local_y) is
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');

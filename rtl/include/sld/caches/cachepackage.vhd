@@ -200,7 +200,6 @@ package cachepackage is
       mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
       cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
       cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
-      cache_id      : integer := 0;
       cache_tile_id : cache_attribute_array;
       tile_id     : integer := 0);
     port (

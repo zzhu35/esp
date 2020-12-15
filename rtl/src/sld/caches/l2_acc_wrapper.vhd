@@ -1041,7 +1041,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_req : process (req_reg, coherence_req_full,
                      req_out_valid, req_out_data_coh_msg, req_out_data_hprot,
-                     req_out_data_addr, req_out_data_line, req_out_data_word_mask， local_x, local_y) is
+                     req_out_data_addr, req_out_data_line, req_out_data_word_mask, local_x, local_y) is
 
     variable reg    : req_reg_type;
     variable req_id : cache_id_t;
@@ -1153,7 +1153,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 -------------------------------------------------------------------------------
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          rsp_out_valid, rsp_out_data_coh_msg, rsp_out_data_req_id,
-                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask， local_x, local_y) is
+                         rsp_out_data_to_req, rsp_out_data_addr, rsp_out_data_line, rsp_out_data_word_mask, local_x, local_y) is
 
     variable reg   : rsp_out_reg_type;
     variable hprot : hprot_t := (others => '0');

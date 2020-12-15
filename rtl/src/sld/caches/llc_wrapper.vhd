@@ -1613,7 +1613,7 @@ begin  -- architecture rtl
   fsm_fwd_out : process (fwd_out_reg, coherence_fwd_full,
                          llc_fwd_out_valid, llc_fwd_out_data_coh_msg, llc_fwd_out_data_addr,
                          llc_fwd_out_data_req_id, llc_fwd_out_data_dest_id, llc_fwd_out_data_word_mask,
-                         llc_fwd_out_data_line， local_y, local_x) is
+                         llc_fwd_out_data_line, local_y, local_x) is
 
     variable reg       : fwd_out_reg_type;
     variable dest_init : integer;
@@ -1735,7 +1735,7 @@ begin  -- architecture rtl
   fsm_rsp_out : process (rsp_out_reg, coherence_rsp_snd_full,
                          llc_rsp_out_valid, llc_rsp_out_data_coh_msg, llc_rsp_out_data_addr,
                          llc_rsp_out_data_line, llc_rsp_out_data_invack_cnt, llc_rsp_out_data_word_offset,
-                         llc_rsp_out_data_req_id, llc_rsp_out_data_dest_id, llc_rsp_out_data_word_mask， local_y, local_x) is
+                         llc_rsp_out_data_req_id, llc_rsp_out_data_dest_id, llc_rsp_out_data_word_mask, local_y, local_x) is
 
     variable reg       : rsp_out_reg_type;
     variable dest_init : integer;
