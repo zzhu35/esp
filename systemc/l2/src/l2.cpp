@@ -147,16 +147,6 @@ void l2::ctrl()
 				{
 					RSP_DATA_ISD;
 
-					for (int i = 0; i < WORDS_PER_LINE; i++) {
-						HLS_UNROLL_LOOP("fill reqs");
-						if ((~reqs[reqs_hit_i].word_mask) & 1 << i) {
-							reqs[reqs_hit_i].word_mask |= 1 << i;
-							reqs[reqs_hit_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write in new data
-						}
-					}
-
-					if (reqs[reqs_hit_i].word_mask != WORD_MASK_ALL) break;
-
 					// read response
 					send_rd_rsp(rsp_in.line);
 
@@ -305,36 +295,11 @@ void l2::ctrl()
 
 	    tag_lookup_fwd(line_br, tag_hit, way_hit);
 
-	    fwd_stall = reqs_peek_fwd(line_br, reqs_hit_i, reqs_hit, fwd_in.coh_msg) || (reqs_cnt == 0 && fwd_in.word_mask != WORD_MASK_ALL && fwd_in.coh_msg == FWD_GETM);
-		// Spandex partial word WB
+	    fwd_stall = reqs_peek_fwd(line_br, reqs_hit_i, reqs_hit, fwd_in.coh_msg);
 
 #if (USE_SPANDEX)
 		if (!(tag_hit || reqs_hit)) {
 			if (fwd_in.coh_msg == FWD_INV) send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-		} else if (fwd_in.coh_msg == FWD_REQ_V) {
-			bool nack = true;
-			if (tag_hit && (state_buf[way_hit] == MODIFIED)) {
-				nack = false;
-				send_rsp_out_word_mask(RSP_V, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], fwd_in.word_mask);
-			} else if (reqs_hit) {
-				// we can serve reqv
-				if (reqs[reqs_hit_i].state == MIA || reqs[reqs_hit_i].state == SMA) {
-					nack = false;
-					fwd_stall = false;
-					send_rsp_out_word_mask(RSP_V, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], fwd_in.word_mask);
-					// we can serve reqv later, just need to wait... so just let it stall and don't sent nack
-				} else if (reqs[reqs_hit_i].state == IMAD) {
-					// ####################################
-					// This is the only path in this blllllllck othat stalls. Others go through, either rsp or nack
-					nack = false;
-					fwd_in_stalled = fwd_in;
-				} else {
-					// we will just nack...
-				}
-			} else {
-				// we will just nack...
-			}
-			if (nack) send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0);
 		} else
 #endif
 		
@@ -387,11 +352,9 @@ void l2::ctrl()
 				send_req_out(coh_msg_tmp, reqs[reqs_hit_i].hprot, line_addr_tmp, 0);
 
 			} else {
-				// if already set invalid because of a second FWD_GETM, do nothing
-				if(reqs_hit){
-					reqs[reqs_hit_i].state = INVALID;
-					reqs_cnt++;
-				}
+
+				reqs[reqs_hit_i].state = INVALID;
+				reqs_cnt++;
 			}
 
 	    } else if (fwd_stall) {
@@ -476,13 +439,7 @@ void l2::ctrl()
 	#if (USE_SPANDEX == 0)
 					send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
 	#else
-					send_rsp_out_word_mask(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line, fwd_in.word_mask); // to requestor
-					// if all ownerships are taken away, LLC will not send us a RespWB, so we must go to I state here
-					if ((fwd_in.word_mask | reqs[reqs_hit_i].word_mask) == WORD_MASK_ALL){
-						reqs[reqs_hit_i].state = INVALID;
-						reqs_cnt++;
-						break;
-					}
+					send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
 	#endif
 				}
 				else
@@ -561,24 +518,7 @@ void l2::ctrl()
 	#if (USE_SPANDEX == 0)
 				send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
 	#else
-				{
-					HLS_DEFINE_PROTOCOL("partial resp out");
-					send_rsp_out_word_mask(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit], fwd_in.word_mask); // to requestor
-				}
-				if (fwd_in.word_mask != WORD_MASK_ALL)
-				{
-					HLS_DEFINE_PROTOCOL("partial req out");
-					send_req_out_word_mask(REQ_WB, hprot_buf[way_hit], fwd_in.addr, line_buf[way_hit], ~fwd_in.word_mask);
-					sc_uint<REQS_BITS> reqs_hit_i;
-					set_conflict = reqs_peek_req(line_br.set, reqs_hit_i);
-					addr_breakdown_t addr_br;
-					addr_br.tag = line_br.tag; addr_br.set = line_br.set; // all that's important is the tag and set
-					fill_reqs(0, addr_br, 0, way_hit, 0, MIA, 0, 0, line_buf[way_hit], reqs_hit_i); // @TODO maybe not needed, but put wb request anyways
-					reqs[reqs_hit_i].word_mask = fwd_in.word_mask;
-				} 
-				else{
-					
-				}
+				send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // to requestor
 	#endif
 
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
