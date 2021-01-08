@@ -835,8 +835,8 @@ void llc::ctrl()
         // -----------------------------
 
         {
-                // HLS_DEFINE_PROTOCOL("proto-llc-io-check");
-                HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-io");
+                HLS_DEFINE_PROTOCOL("proto-llc-io-check");
+
                 bool do_get_req = false;
                 bool do_get_dma_req = false;
 
@@ -844,7 +844,7 @@ void llc::ctrl()
                 can_get_req_in = llc_req_in.nb_can_get();
                 can_get_dma_in = llc_dma_req_in.nb_can_get();
 
-                // wait();
+                wait();
                 if (recall_pending) {
                         if (!recall_valid) {
                                 // Response (could be related to the recall or not)
@@ -889,16 +889,20 @@ void llc::ctrl()
                         is_dma_req_to_get = true;
                         do_get_dma_req = true;
                 }
+                wait();
 
                 if (is_rsp_to_get) {
+                        LLC_GET_RSP_IN;
                         llc_rsp_in.nb_get(rsp_in);
                 }
 
                 if (do_get_req) {
+                        GET_REQ_IN;
                         llc_req_in.nb_get(req_in);
                 }
 
                 if (do_get_dma_req) {
+                        HLS_DEFINE_PROTOCOL();
                         llc_dma_req_in.nb_get(dma_req_in);
                 }
 
@@ -1031,8 +1035,6 @@ void llc::ctrl()
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_V;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
-                                                        if (recall_pending && rsp_in.addr == recall_addr) recall_valid = true;
-                                                        dbg_recall_valid.write(recall_valid);
                                                 }
                                                 break;
                                                 case LLC_SWB:
@@ -1934,26 +1936,30 @@ void llc::ctrl()
             }
             else
             {
+                wait();
                 if (!recall_valid && !recall_pending) {
 #ifdef LLC_DEBUG
                         dbg_evict_addr.write(addr_evict);
 #endif
+                        wait();
                         // Recall (may or may not evict depending on miss/hit)
-                        if (states_buf[way] == LLC_S && dma_req_in.coh_msg == REQ_DMA_WRITE_BURST) {
-                                int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
-                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_SV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
-                                reqs[reqs_empty_i].invack_cnt = cnt;
-                                recall_addr = addr_evict;
-                                recall_pending = true;
-                                dbg_recall_pending.write(recall_pending);
-                        } else if ((states_buf[way] == LLC_V) && send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0))
+                        bool need_recall = send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
+                        wait();
+                        if (need_recall)
                         {
                                 fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
                                 recall_addr = addr_evict;
                                 recall_pending = true;
                                 dbg_recall_pending.write(recall_pending);
                         }
+                        else if (states_buf[way] == LLC_S) {
+                                int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
+                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_SV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
+                                reqs[reqs_empty_i].invack_cnt = cnt;
+                        }
+
                 }
+                wait();
 
                 if (!recall_pending || recall_valid) {
 
