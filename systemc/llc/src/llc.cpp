@@ -1939,23 +1939,20 @@ void llc::ctrl()
                         dbg_evict_addr.write(addr_evict);
 #endif
                         // Recall (may or may not evict depending on miss/hit)
-                        bool need_recall = (states_buf[way] == LLC_V) && send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
-                        if (need_recall)
-                        {
-                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
-                                recall_addr = addr_evict;
-                                recall_pending = true;
-                                dbg_recall_pending.write(recall_pending);
-                        }
-                        else if (states_buf[way] == LLC_S && dma_req_in.coh_msg == REQ_DMA_WRITE_BURST) {
+                        if (states_buf[way] == LLC_S && dma_req_in.coh_msg == REQ_DMA_WRITE_BURST) {
                                 int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
                                 fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_SV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
                                 reqs[reqs_empty_i].invack_cnt = cnt;
                                 recall_addr = addr_evict;
                                 recall_pending = true;
                                 dbg_recall_pending.write(recall_pending);
+                        } else if ((states_buf[way] == LLC_V) && send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0))
+                        {
+                                fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
+                                recall_addr = addr_evict;
+                                recall_pending = true;
+                                dbg_recall_pending.write(recall_pending);
                         }
-
                 }
 
                 if (!recall_pending || recall_valid) {
