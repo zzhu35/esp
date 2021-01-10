@@ -432,6 +432,8 @@
     HLS_PRESERVE_SIGNAL(dbg_recall_addr, true); \
     HLS_PRESERVE_SIGNAL(dbg_recall_pending, true); \
     HLS_PRESERVE_SIGNAL(dbg_recall_valid, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_read_pending, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_write_pending, true); \
     HLS_PRESERVE_SIGNAL(dbg_is_dma_read_to_resume, true); \
     HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true); \
     HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true); \

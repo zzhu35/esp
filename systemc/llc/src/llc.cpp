@@ -260,6 +260,8 @@ inline void llc::reset_state()
     dbg_dma_length.write(0);
     dbg_dma_done.write(0);
     dbg_dma_addr.write(0);
+    dbg_dma_read_pending.write(0);
+    dbg_dma_write_pending.write(0);
 
 //     dbg_length.write(0);
 #endif
@@ -924,6 +926,8 @@ void llc::ctrl()
         dbg_recall_addr.write(recall_addr);
         dbg_recall_pending.write(recall_pending);
         dbg_recall_valid.write(recall_valid);
+        dbg_dma_read_pending.write(dma_read_pending);
+        dbg_dma_write_pending.write(dma_write_pending);
 
 #endif
 
@@ -1031,6 +1035,8 @@ void llc::ctrl()
                                                         states_buf[reqs[reqs_hit_i].way] = LLC_V;
                                                         reqs[reqs_hit_i].state = LLC_I;
                                                         reqs_cnt++;
+                                                        if (recall_pending && rsp_in.addr == recall_addr) recall_valid = true;
+                                                        dbg_recall_valid.write(recall_valid);
                                                 }
                                                 break;
                                                 case LLC_SWB:
@@ -1937,19 +1943,21 @@ void llc::ctrl()
                         dbg_evict_addr.write(addr_evict);
 #endif
                         // Recall (may or may not evict depending on miss/hit)
-                        bool need_recall = send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
-                        wait();
-                        if (need_recall)
+                        if (states_buf[way] == LLC_V && owners_buf[way] != 0)
                         {
+                                send_fwd_with_owner_mask(FWD_RVK_O, addr_evict, dma_req_in.req_id, owners_buf[way], 0);
                                 fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_OV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
                                 recall_addr = addr_evict;
                                 recall_pending = true;
                                 dbg_recall_pending.write(recall_pending);
                         }
-                        else if (states_buf[way] == LLC_S) {
+                        else if (states_buf[way] == LLC_S && dma_req_in.coh_msg == REQ_DMA_WRITE_BURST) {
                                 int cnt = send_inv_with_sharer_list(addr_evict, sharers_buf[way]);
                                 fill_reqs(req_in.coh_msg, req_in.req_id, evict_addr_br, 0, way, LLC_SV, hprots_buf[way], 0, req_in.line, owners_buf[way], reqs_empty_i);
                                 reqs[reqs_empty_i].invack_cnt = cnt;
+                                recall_addr = addr_evict;
+                                recall_pending = true;
+                                dbg_recall_pending.write(recall_pending);
                         }
 
                 }

@@ -72,6 +72,9 @@ public:
     sc_signal<bool>		dbg_set_conflict;
     sc_signal<bool> dbg_recall_pending;
     sc_signal<bool> dbg_recall_valid;
+    sc_signal<bool> dbg_dma_read_pending;
+    sc_signal<bool> dbg_dma_write_pending;
+
 
 #endif
 
