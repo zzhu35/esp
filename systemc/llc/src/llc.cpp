@@ -837,8 +837,8 @@ void llc::ctrl()
         // -----------------------------
 
         {
-                // HLS_DEFINE_PROTOCOL("proto-llc-io-check");
-                HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-io");
+                HLS_DEFINE_PROTOCOL("proto-llc-io-check");
+                // HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-io");
                 bool do_get_req = false;
                 bool do_get_dma_req = false;
 
@@ -846,7 +846,7 @@ void llc::ctrl()
                 can_get_req_in = llc_req_in.nb_can_get();
                 can_get_dma_in = llc_dma_req_in.nb_can_get();
 
-                // wait();
+                wait();
                 if (recall_pending) {
                         if (!recall_valid) {
                                 // Response (could be related to the recall or not)
