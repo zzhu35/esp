@@ -7,8 +7,6 @@
 #define L2_DENOVO_FLATTEN_REGS				\
     HLS_FLATTEN_ARRAY(reqs);			\
     HLS_FLATTEN_ARRAY(wbs);			\
-    HLS_FLATTEN_ARRAY(states);			\
-    HLS_FLATTEN_ARRAY(touched);			\
     HLS_FLATTEN_ARRAY(tag_buf);			\
     HLS_FLATTEN_ARRAY(state_buf);		\
     HLS_FLATTEN_ARRAY(touched_buf);			\
