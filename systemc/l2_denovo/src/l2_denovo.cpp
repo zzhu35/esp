@@ -223,6 +223,7 @@ void l2_denovo::ctrl()
         bool can_get_req_in = false;
         bool can_get_sync_in = false;
         bool can_get_fwd_in = false;
+        bool can_get_flush_in = false;
 
         sc_uint<L2_SET_BITS+L2_WAY_BITS>  base = 0;
 
@@ -235,18 +236,22 @@ void l2_denovo::ctrl()
 #endif
 
         {
-            // HLS_DEFINE_PROTOCOL("llc-io-check");
-            HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
+            HLS_DEFINE_PROTOCOL("llc-io-check");
+            // HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
 
             can_get_rsp_in = l2_rsp_in.nb_can_get();
             can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0 || ongoing_atomic); // if drain in progress, block all cpu requests
             can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
             can_get_sync_in = l2_sync.nb_can_get();
+            can_get_flush_in = l2_flush.nb_can_get();
 
-            // wait();
+            wait();
 
 			if (can_get_sync_in) {
 				l2_sync.nb_get(is_sync);
+				do_sync = true;
+            } else if (can_get_flush_in) {
+				l2_flush.nb_get(is_sync);
 				do_sync = true;
             } else if (can_get_rsp_in) {
                 get_rsp_in(rsp_in);
@@ -259,7 +264,7 @@ void l2_denovo::ctrl()
                 }
                 do_fwd = true;
             } else if (can_get_req_in) { // assuming
-                // wait();
+                wait();
 				if (!set_conflict) {
                     get_cpu_req(cpu_req);
                 } else {
@@ -273,6 +278,7 @@ void l2_denovo::ctrl()
 	if (do_sync) {
 
 		self_invalidate();
+        drain_in_progress = true;
 
 	} else if (do_flush) {
 
@@ -860,8 +866,17 @@ void l2_denovo::ctrl()
                         state_buf[evict_way][i] = DNV_I;
                         touched_buf[evict_way][i] = false;
                         // Update it now b/c set_conflict could be true
-                        states[base + evict_way][i] = DNV_I;
-                        touched[base + evict_way][i] = false;
+                        // states[base + evict_way][i] = DNV_I;
+                        // touched[base + evict_way][i] = false;
+                    }
+                    {
+                        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
+                        for (int j = 0; j < WORDS_PER_LINE; j++) {
+                            HLS_UNROLL_LOOP(ON, "5");
+                            line_state |= DNV_I << (j * STABLE_STATE_BITS);
+                        }
+                        states.port1[0][base + evict_way] = line_state;
+                        touched.port1[0][base + evict_way] = 0;
                     }
                     send_inval(line_addr_evict);
 
@@ -910,12 +925,15 @@ void l2_denovo::ctrl()
 	}
     if ((do_cpu_req && !set_conflict) || (do_fwd && !fwd_stall) || do_rsp){
         for (int i = 0; i < L2_WAYS; i++) {
-            HLS_UNROLL_LOOP(ON, "5");
+            sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
+            word_mask_t line_touched = 0;
             for (int j = 0; j < WORDS_PER_LINE; j++) {
-                HLS_UNROLL_LOOP(ON, "6");
-                states[base + i][j] = state_buf[i][j];
-                touched[base + i][j] = touched_buf[i][j];
+                HLS_UNROLL_LOOP(ON, "5");
+                line_state |= state_buf[i][j] << (j * STABLE_STATE_BITS);
+                line_touched |= touched_buf[i][j] << (j);
             }
+            states.port1[0][base + i] = line_state;
+            touched.port1[0][base + i] = line_touched;
         }
     }
 
@@ -957,15 +975,15 @@ void l2_denovo::ctrl()
         }
 	}
 
-    for (int i = 0; i < L2_LINES; i++) {
-        HLS_UNROLL_LOOP(ON, "states_dbg_i");
-        for (int j = 0; j < WORDS_PER_LINE; j++) {
-            HLS_UNROLL_LOOP(ON, "states_dbg_j");
-            states_dbg[i][j] = states[i][j];
+    // for (int i = 0; i < L2_LINES; i++) {
+    //     HLS_UNROLL_LOOP(ON, "states_dbg_i");
+    //     for (int j = 0; j < WORDS_PER_LINE; j++) {
+    //         HLS_UNROLL_LOOP(ON, "states_dbg_j");
+    //         states_dbg[i][j] = states[i][j];
 
-        }
+    //     }
 
-    }
+    // }
 
 	evict_way_dbg.write(evict_way);
 #endif
@@ -1002,10 +1020,14 @@ inline void l2_denovo::reset_io()
     tags.port1.reset();
     hprots.port1.reset();
     lines.port1.reset();
+    states.port1.reset();
+    touched.port1.reset();
 
     tags.port2.reset();
     hprots.port2.reset();
     lines.port2.reset();
+    states.port2.reset();
+    touched.port2.reset();
 
 #if (L2_WAYS >= 2)
 
@@ -1015,34 +1037,48 @@ inline void l2_denovo::reset_io()
     tags.port3.reset();
     hprots.port3.reset();
     lines.port3.reset();
+    states.port3.reset();
+    touched.port3.reset();
 
 #if (L2_WAYS >= 4)
 
     tags.port4.reset();
     hprots.port4.reset();
     lines.port4.reset();
+    states.port4.reset();
+    touched.port4.reset();
 
     tags.port5.reset();
     hprots.port5.reset();
     lines.port5.reset();
+    states.port5.reset();
+    touched.port5.reset();
 
 #if (L2_WAYS >= 8)
 
     tags.port6.reset();
     hprots.port6.reset();
     lines.port6.reset();
+    states.port6.reset();
+    touched.port6.reset();
 
     tags.port7.reset();
     hprots.port7.reset();
     lines.port7.reset();
+    states.port7.reset();
+    touched.port7.reset();
 
     tags.port8.reset();
     hprots.port8.reset();
     lines.port8.reset();
+    states.port8.reset();
+    touched.port8.reset();
 
     tags.port9.reset();
     hprots.port9.reset();
     lines.port9.reset();
+    states.port9.reset();
+    touched.port9.reset();
 
 #endif
 #endif
@@ -1095,11 +1131,11 @@ inline void l2_denovo::reset_io()
     for (int i = 0; i < L2_WAYS; i++) {
     	BUFS_DBG;
     	tag_buf_dbg[i] = 0;
-        for (int j = 0; j < WORDS_PER_LINE; j++) {
-            HLS_UNROLL_LOOP(ON, "6");
-            states[i][j] = DNV_I;
-            touched[i][j] = false;
-        }
+        // for (int j = 0; j < WORDS_PER_LINE; j++) {
+        //     HLS_UNROLL_LOOP(ON, "6");
+        //     states[i][j] = DNV_I;
+        //     touched[i][j] = false;
+        // }
     }
 
     evict_way_dbg.write(0);
@@ -1127,14 +1163,14 @@ inline void l2_denovo::reset_io()
     flush_set = 0;
     flush_way = 0;
 
-	for (int i = 0; i < L2_LINES; i++)
-	{
-        HLS_UNROLL_LOOP(ON, "reset-states");
-        for (int j = 0; j < WORDS_PER_LINE; j++) {
-            HLS_UNROLL_LOOP(ON, "7");
-            states[i][j] = DNV_I;
-        }
-	}
+	// for (int i = 0; i < L2_LINES; i++)
+	// {
+    //     HLS_UNROLL_LOOP(ON, "reset-states");
+    //     for (int j = 0; j < WORDS_PER_LINE; j++) {
+    //         HLS_UNROLL_LOOP(ON, "7");
+    //         states[i][j] = DNV_I;
+    //     }
+	// }
 
 }
 
@@ -1317,11 +1353,17 @@ inline void l2_denovo::read_set(l2_set_t set)
     // below for implicit memories usage
     sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
 
+    sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
+    word_mask_t line_touched;
+
     tag_buf[0] = tags.port2[0][base + 0];
+    line_state = states.port2[0][base + 0];
+    line_touched = touched.port2[0][base + 0];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "8");
-        state_buf[0][i] = states[base + 0][i];
-        touched_buf[0][i] = touched[base + 0][i];
+        state_buf[0][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[0][i] = (line_touched >> i) & 1;
+
     }
     hprot_buf[0] = hprots.port2[0][base + 0];
     line_buf[0] = lines.port2[0][base + 0];
@@ -1329,10 +1371,12 @@ inline void l2_denovo::read_set(l2_set_t set)
 #if (L2_WAYS >= 2)
 
     tag_buf[1] = tags.port3[0][base + 1];
+    line_state = states.port3[0][base + 1];
+    line_touched = touched.port3[0][base + 1];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "9");
-        state_buf[1][i] = states[base + 1][i];
-        touched_buf[1][i] = touched[base + 1][i];
+        state_buf[1][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[1][i] = (line_touched >> i) & 1;
     }
     hprot_buf[1] = hprots.port3[0][base + 1];
     line_buf[1] = lines.port3[0][base + 1];
@@ -1340,19 +1384,23 @@ inline void l2_denovo::read_set(l2_set_t set)
 #if (L2_WAYS >= 4)
 
     tag_buf[2] = tags.port4[0][base + 2];
+    line_state = states.port4[0][base + 2];
+    line_touched = touched.port4[0][base + 2];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "10");
-        state_buf[2][i] = states[base + 2][i];
-        touched_buf[2][i] = touched[base + 2][i];
+        state_buf[2][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[2][i] = (line_touched >> i) & 1;
     }
     hprot_buf[2] = hprots.port4[0][base + 2];
     line_buf[2] = lines.port4[0][base + 2];
 
     tag_buf[3] = tags.port5[0][base + 3];
+    line_state = states.port5[0][base + 3];
+    line_touched = touched.port5[0][base + 3];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "11");
-        state_buf[3][i] = states[base + 3][i];
-        touched_buf[3][i] = touched[base + 3][i];
+        state_buf[3][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[3][i] = (line_touched >> i) & 1;
     }
     hprot_buf[3] = hprots.port5[0][base + 3];
     line_buf[3] = lines.port5[0][base + 3];
@@ -1360,37 +1408,45 @@ inline void l2_denovo::read_set(l2_set_t set)
 #if (L2_WAYS >= 8)
 
     tag_buf[4] = tags.port6[0][base + 4];
+    line_state = states.port6[0][base + 4];
+    line_touched = touched.port6[0][base + 4];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "12");
-        state_buf[4][i] = states[base + 4][i];
-        touched_buf[4][i] = touched[base + 4][i];
+        state_buf[4][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[4][i] = (line_touched >> i) & 1;
     }
     hprot_buf[4] = hprots.port6[0][base + 4];
     line_buf[4] = lines.port6[0][base + 4];
 
     tag_buf[5] = tags.port7[0][base + 5];
+    line_state = states.port7[0][base + 5];
+    line_touched = touched.port7[0][base + 5];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "13");
-        state_buf[5][i] = states[base + 5][i];
-        touched_buf[5][i] = touched[base + 5][i];
+        state_buf[5][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[5][i] = (line_touched >> i) & 1;
     }
     hprot_buf[5] = hprots.port7[0][base + 5];
     line_buf[5] = lines.port7[0][base + 5];
 
     tag_buf[6] = tags.port8[0][base + 6];
+    line_state = states.port8[0][base + 6];
+    line_touched = touched.port8[0][base + 6];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "14");
-        state_buf[6][i] = states[base + 6][i];
-        touched_buf[6][i] = touched[base + 6][i];
+        state_buf[6][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[6][i] = (line_touched >> i) & 1;
     }
     hprot_buf[6] = hprots.port8[0][base + 6];
     line_buf[6] = lines.port8[0][base + 6];
 
     tag_buf[7] = tags.port9[0][base + 7];
+    line_state = states.port9[0][base + 7];
+    line_touched = touched.port9[0][base + 7];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "15");
-        state_buf[7][i] = states[base + 7][i];
-        touched_buf[7][i] = touched[base + 7][i];
+        state_buf[7][i] = line_state >> (i * STABLE_STATE_BITS);
+        touched_buf[7][i] = (line_touched >> i) & 1;
     }
     hprot_buf[7] = hprots.port9[0][base + 7];
     line_buf[7] = lines.port9[0][base + 7];
@@ -1542,15 +1598,38 @@ void l2_denovo::self_invalidate()
 {
 	for (int i = 0; i < L2_LINES; i++)
 	{
-        HLS_UNROLL_LOOP(ON, "reset-states");
-        for (int j = 0; j < WORDS_PER_LINE; j++)
+        HLS_UNROLL_LOOP(OFF, "self invalidate");
+        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
+        word_mask_t line_touched;
+        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state_in;
         {
-            HLS_UNROLL_LOOP(ON, "reset-states");
-            if (states[i][j] == DNV_V && !touched[i][j])
-            {
-                states[i][j] = DNV_I;
+            HLS_DEFINE_PROTOCOL("self invalidate read");
+            wait();
+            line_state = states.port2[0][i];
+            line_touched = touched.port2[0][i];
+            wait();
+        }
+        
+
+        state_t state_tmp;
+        bool touched_tmp;
+        line_state_in = 0;
+        for (int j = 0; j < WORDS_PER_LINE; j++) {
+            HLS_UNROLL_LOOP(ON, "8");
+            state_tmp = line_state >> (j * STABLE_STATE_BITS);
+            touched_tmp = (line_touched >> j) & 1;
+            if(state_tmp == DNV_V && !touched_tmp){
+                state_tmp = DNV_I;
             }
-            touched[i][j] = false;
+            line_state_in |= state_tmp << (j * STABLE_STATE_BITS);
+        }
+
+        {
+            HLS_DEFINE_PROTOCOL("self invalidate write");
+            wait();
+            states.port1[0][i] = line_state_in;
+            touched.port1[0][i] = 0;
+            wait();
         }
 	}
 
