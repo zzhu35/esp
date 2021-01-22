@@ -299,7 +299,18 @@ void l2::ctrl()
 
 #if (USE_SPANDEX)
 		if (!(tag_hit || reqs_hit)) {
-			if (fwd_in.coh_msg == FWD_INV) send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
+			switch (fwd_in.coh_msg) {
+
+				case FWD_INV:
+					send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
+				break;
+				case FWD_REQ_V:
+					send_rsp_out(RSP_NACK, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
+				break;
+				default:
+				break;
+			}
+
 		} else
 #endif
 		
@@ -383,6 +394,20 @@ void l2::ctrl()
 					default:
 						send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
 					break;
+				}
+			}
+			if (fwd_in.coh_msg == FWD_REQ_V) {
+				switch (reqs[reqs_hit_i].state) {
+					case MIA:
+					case XMW:
+						send_rsp_out(RSP_V, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // handle silent eviction
+					break;
+
+					default:
+						send_rsp_out(RSP_NACK, fwd_in.req_id, 1, fwd_in.addr, 0); // handle silent eviction
+
+					break;
+
 				}
 			}
 #endif
@@ -482,6 +507,17 @@ void l2::ctrl()
 	    } else {
 
 			switch (fwd_in.coh_msg) {
+
+	#if (USE_SPANDEX == 1)
+			case FWD_REQ_V:
+			{
+				if (state_buf[way_hit] == MODIFIED) send_rsp_out(RSP_V, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
+				else send_rsp_out(RSP_NACK, fwd_in.req_id, 1, fwd_in.addr, 0);
+			}
+			break;
+
+	#endif
+
 
 			case FWD_GETS :
 			{

@@ -105,7 +105,7 @@ package nocpackage is
   constant RSP_O              : noc_msg_type := "00110";
   constant RSP_WT             : noc_msg_type := "00111";
   constant RSP_WTdata         : noc_msg_type := "01000";
-
+  constant RSP_DATA_DMA       : noc_msg_type := "00011";
 
 -- ********
 -- Original ESP
@@ -136,7 +136,7 @@ package nocpackage is
   -- [LLC|Non]-Coherent DMA request plane 6 and response plane 4
   constant DMA_TO_DEV    : noc_msg_type := "11001";
   constant DMA_FROM_DEV  : noc_msg_type := "11010";
-  constant RSP_DATA_DMA  : noc_msg_type := "11011";  --CacheLine (DMA)
+  -- constant RSP_DATA_DMA  : noc_msg_type := "11011";  --CacheLine (DMA)
   constant RSP_P2P       : noc_msg_type := "11100";
   constant REQ_P2P       : noc_msg_type := "11101";
   constant REQ_DMA_READ  : noc_msg_type := "11110";  -- Read coherent with LLC
