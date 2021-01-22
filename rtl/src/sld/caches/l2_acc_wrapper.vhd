@@ -67,6 +67,8 @@ entity l2_acc_wrapper is
     dma_snd_ready             : out std_ulogic;
     -- Accelerator done causes a flush
     flush                     : in  std_ulogic;
+    aq                        : in  std_ulogic;
+    rl                        : in  std_ulogic;
 
     -- backend (cache - NoC)
     -- tile->NoC1
@@ -114,6 +116,7 @@ architecture rtl of l2_acc_wrapper is
   signal flush_ready            : std_ulogic;
   signal flush_valid            : std_ulogic;
   signal flush_data             : std_ulogic;
+  signal sync_l2                : std_ulogic;
   -- cache to AHB
   signal rd_rsp_ready           : std_ulogic;
   signal rd_rsp_valid           : std_ulogic;
@@ -687,8 +690,8 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_stats_valid            => stats_valid,
       l2_stats_data             => stats_data,
       l2_sync_ready             => open,
-      l2_sync_valid             => '0',
-      l2_sync_data              => '0'
+      l2_sync_valid             => sync_l2,
+      l2_sync_data              => sync_l2
     );
   end generate l2_denovo_gen;
 
@@ -696,6 +699,7 @@ begin  -- architecture rtl of l2_acc_wrapper
 -- Static signals
 -------------------------------------------------------------------------------
 
+  sync_l2              <= aq or rl;
   flush_data           <= '0';
   inval_ready          <= '1'; -- inval not used by accelerators
   hsize32_gen: if ARCH_BITS = 32 generate

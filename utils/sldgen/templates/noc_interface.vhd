@@ -299,6 +299,8 @@ begin
         dma_snd_data               => dma_snd_data,
         dma_snd_ready              => dma_snd_ready,
         flush                      => flush,
+        aq                         => conf_done,
+        rl                         => acc_done,
         coherence_req_wrreq        => coherence_req_wrreq,
         coherence_req_data_in      => coherence_req_data_in,
         coherence_req_full         => coherence_req_full,

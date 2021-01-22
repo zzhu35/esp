@@ -284,6 +284,8 @@ package cachepackage is
       dma_snd_ready             : out std_ulogic;
       -- Accelerator done causes a flush
       flush                     : in  std_ulogic;
+      aq                        : in  std_ulogic;
+      rl                        : in  std_ulogic;
 
       -- backend (cache - NoC)
       -- tile->NoC1
