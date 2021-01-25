@@ -249,6 +249,73 @@ package cachepackage is
       );
   end component;
 
+  -----------------------------------------------------------------------------
+  -- l2_wrapper dual cache component
+  -----------------------------------------------------------------------------
+
+  component l2_wrapper_dual_cache is
+    generic (
+      tech        : integer := virtex7;
+      sets        : integer := 256;
+      ways        : integer := 8;
+      hindex_mst  : integer := 0;
+      pindex      : integer range 0 to NAPBSLV - 1 := 6;
+      pirq        : integer := 4;
+      mem_hindex  : integer := 4;
+      mem_hconfig : ahb_config_type;
+      mem_num     : integer := 1;
+      mem_info    : tile_mem_info_vector(0 to MEM_ID_RANGE_MSB);
+      cache_y     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+      cache_x     : yx_vec(0 to 2**NL2_MAX_LOG2 - 1);
+      cache_tile_id : cache_attribute_array;
+      tile_id     : integer := 0);
+    port (
+      rst : in std_ulogic;
+      clk : in std_ulogic;
+
+      local_y  : in local_yx;
+      local_x  : in local_yx;
+      pconfig  : in apb_config_type;
+      cache_id : in integer;
+
+      -- frontend (cache - AMBA)
+      ahbsi : in  ahb_slv_in_type;
+      ahbso : out ahb_slv_out_type;
+      ahbmi : in  ahb_mst_in_type;
+      ahbmo : out ahb_mst_out_type;
+      mosi  : in  axi_mosi_type;
+      somi  : out axi_somi_type;
+      apbi  : in  apb_slv_in_type;
+      apbo  : out apb_slv_out_type;
+      flush : in  std_ulogic;           -- flush request from CPU
+      sync_l2 : in std_logic;
+
+      -- backend (cache - NoC)
+      -- tile->NoC1
+      coherence_req_wrreq        : out std_ulogic;
+      coherence_req_data_in      : out noc_flit_type;
+      coherence_req_full         : in  std_ulogic;
+      -- NoC2->tile
+      coherence_fwd_rdreq        : out std_ulogic;
+      coherence_fwd_data_out     : in  noc_flit_type;
+      coherence_fwd_empty        : in  std_ulogic;
+      -- Noc3->tile
+      coherence_rsp_rcv_rdreq    : out std_ulogic;
+      coherence_rsp_rcv_data_out : in  noc_flit_type;
+      coherence_rsp_rcv_empty    : in  std_ulogic;
+      -- tile->Noc3
+      coherence_rsp_snd_wrreq    : out std_ulogic;
+      coherence_rsp_snd_data_in  : out noc_flit_type;
+      coherence_rsp_snd_full     : in  std_ulogic;
+      -- tile->Noc3
+      coherence_fwd_snd_wrreq    : out std_ulogic;
+      coherence_fwd_snd_data_in  : out noc_flit_type;
+      coherence_fwd_snd_full     : in  std_ulogic;
+
+      mon_cache                  : out monitor_cache_type
+      );
+  end component;
+
   component l2_acc_wrapper is
     generic (
       tech        : integer := virtex7;
