@@ -3,7 +3,9 @@ build:
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
+    - source /projects/hls-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - git checkout $CI_COMMIT_BRANCH
     - make l2-distclean
     - make l2-hls
     - make l2_denovo-distclean
