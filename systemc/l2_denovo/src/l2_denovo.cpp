@@ -307,7 +307,9 @@ void l2_denovo::ctrl()
                 HLS_UNROLL_LOOP(ON, "watch dog");
                 if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
             }
+#ifdef L2_DEBUG
             if (bad) watch_dog.write(WDOG_1);
+#endif
 
             reqs[reqs_hit_i].word_mask &= ~(rsp_in.word_mask);
 
@@ -356,11 +358,11 @@ void l2_denovo::ctrl()
             if (reqs[reqs_hit_i].word_mask == WORD_MASK_ALL){
                 
                 HLS_DEFINE_PROTOCOL("denovo-resp");
-                touched_buf[reqs[reqs_hit_i].way][reqs[reqs_hit_i].w_off] = true;
+                // touched_buf[reqs[reqs_hit_i].way][reqs[reqs_hit_i].w_off] = true;
                 send_rd_rsp(reqs[reqs_hit_i].line);
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
-                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_V, reqs_hit_i);
+                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, current_valid_state, reqs_hit_i);
             }
 	    }
 	    break;
@@ -450,9 +452,9 @@ void l2_denovo::ctrl()
                         {
                             HLS_UNROLL_LOOP(ON, "1");
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
-                                // go to valid state
-                                state_buf[way_hit][i] = DNV_V;
-                                touched_buf[way_hit][i] = false; // enable flush on next sync
+                                // go to invalid state
+                                state_buf[way_hit][i] = DNV_I;
+                                // touched_buf[way_hit][i] = false; // enable flush on next sync
                                 ack_mask |= 1 << i;
                             }
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_R) { // if reqo and we do not have this word in registered
@@ -484,10 +486,10 @@ void l2_denovo::ctrl()
                         for (int i = 0; i < WORDS_PER_LINE; i++)
                         {
                             HLS_UNROLL_LOOP(ON, "1");
-                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_I) { // if reqv and we have this word in registered
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] >= current_valid_state) { // if reqv and we have this word in valid or registered
                                 ack_mask |= 1 << i;
                             }
-                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_I) { // if reqo and we do not have this word in registered
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] < current_valid_state) { // if reqv and we have this word in invalid
                                 nack_mask |= 1 << i;
                             }
                         }
@@ -516,8 +518,8 @@ void l2_denovo::ctrl()
                             HLS_UNROLL_LOOP(ON, "1");
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
                                 rsp_mask |= 1 << i;
-                                state_buf[way_hit][i] = DNV_V;
-                                touched_buf[way_hit][i] = false; // enable flush on next sync
+                                state_buf[way_hit][i] = DNV_I;
+                                // touched_buf[way_hit][i] = false; // enable flush on next sync
                             }
                         }
                         if (rsp_mask) {
@@ -536,7 +538,7 @@ void l2_denovo::ctrl()
                             HLS_UNROLL_LOOP(ON, "1");
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
                                 rsp_mask |= 1 << i;
-                                state_buf[way_hit][i] = DNV_V;
+                                state_buf[way_hit][i] = current_valid_state;
                             }
                         }
                         if (rsp_mask) {
@@ -562,7 +564,7 @@ void l2_denovo::ctrl()
                                     line_buf[way_hit].range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i) = fwd_in.line.range(BITS_PER_WORD*(i+1)-1,BITS_PER_WORD*i);
                                 } else {
                                     word_mask |= 1 << i;
-                                    touched_buf[way_hit][i] = false;
+                                    // touched_buf[way_hit][i] = false;
                                 }
                             }
                         }
@@ -653,7 +655,7 @@ void l2_denovo::ctrl()
                 line_t line;
                 line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = cpu_req.word;
 
-                if (word_hit && (state_buf[way_hit][addr_br.w_off] == DNV_R || (state_buf[way_hit][addr_br.w_off] == DNV_V && touched_buf[way_hit][addr_br.w_off]))) {
+                if (word_hit && (state_buf[way_hit][addr_br.w_off] == DNV_R || (state_buf[way_hit][addr_br.w_off] == current_valid_state))) {
                     state_buf[way_hit][addr_br.w_off] = DNV_R;
 
                     calc_amo(line_buf[way_hit], line, msg, 1 << addr_br.w_off);
@@ -703,7 +705,9 @@ void l2_denovo::ctrl()
                             set_conflict = true;
                             cpu_req_conflict = cpu_req;
                             // continue control loop
+#ifdef L2_DEBUG
                             set_conflict_dbg.write(set_conflict);
+#endif
                             wait();
                             continue;
                         }
@@ -719,7 +723,7 @@ void l2_denovo::ctrl()
                     {
                         HLS_UNROLL_LOOP(ON, "4");
                         state_buf[evict_way][i] = DNV_I;
-                        touched_buf[evict_way][i] = false;
+                        // touched_buf[evict_way][i] = false;
                     }
                     send_inval(line_addr_evict);
                     way_write = evict_way;
@@ -743,8 +747,8 @@ void l2_denovo::ctrl()
                                         set_conflict = true;
                                         cpu_req_conflict = cpu_req;
                                     } else {
-                                        state_buf[way_write][addr_br.w_off] = DNV_V;
-                                        touched_buf[way_write][addr_br.w_off] = false;
+                                        state_buf[way_write][addr_br.w_off] = current_valid_state;
+                                        // touched_buf[way_write][addr_br.w_off] = false;
                                     }
 #else
                                     HLS_DEFINE_PROTOCOL("req_wtfwd out");
@@ -754,8 +758,8 @@ void l2_denovo::ctrl()
                                         send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
                                     }
                                     wait();
-                                    state_buf[way_write][addr_br.w_off] = DNV_V;
-                                    touched_buf[way_write][addr_br.w_off] = false;
+                                    state_buf[way_write][addr_br.w_off] = current_valid_state;
+                                    // touched_buf[way_write][addr_br.w_off] = false;
 #endif
 
                                 }
@@ -796,7 +800,7 @@ void l2_denovo::ctrl()
                 for (int i = 0; i < WORDS_PER_LINE; i ++)
                 {
                     HLS_UNROLL_LOOP(ON, "2");
-                    if (state_buf[way_hit][i] == DNV_I)
+                    if (state_buf[way_hit][i] < current_valid_state)
                     {
                         word_mask |= 1 << i;
                     }
@@ -813,7 +817,7 @@ void l2_denovo::ctrl()
                     }
                 }
                 else {
-                    touched_buf[way_hit][addr_br.w_off] = true;
+                    // touched_buf[way_hit][addr_br.w_off] = true;
                     send_rd_rsp(line_buf[way_hit]);
                 }
                 
@@ -864,19 +868,19 @@ void l2_denovo::ctrl()
                     {
                         HLS_UNROLL_LOOP(ON, "4");
                         state_buf[evict_way][i] = DNV_I;
-                        touched_buf[evict_way][i] = false;
+                        // touched_buf[evict_way][i] = false;
                         // Update it now b/c set_conflict could be true
                         // states[base + evict_way][i] = DNV_I;
                         // touched[base + evict_way][i] = false;
                     }
                     {
-                        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
+                        sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
                         for (int j = 0; j < WORDS_PER_LINE; j++) {
                             HLS_UNROLL_LOOP(ON, "5");
-                            line_state |= DNV_I << (j * STABLE_STATE_BITS);
+                            line_state |= DNV_I << (j * DNV_STABLE_STATE_BITS);
                         }
                         states.port1[0][base + evict_way] = line_state;
-                        touched.port1[0][base + evict_way] = 0;
+                        // touched.port1[0][base + evict_way] = 0;
                     }
                     send_inval(line_addr_evict);
 
@@ -925,15 +929,15 @@ void l2_denovo::ctrl()
 	}
     if ((do_cpu_req && !set_conflict) || (do_fwd && !fwd_stall) || do_rsp){
         for (int i = 0; i < L2_WAYS; i++) {
-            sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
-            word_mask_t line_touched = 0;
+            sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state = 0;
+            // word_mask_t line_touched = 0;
             for (int j = 0; j < WORDS_PER_LINE; j++) {
                 HLS_UNROLL_LOOP(ON, "5");
-                line_state |= state_buf[i][j] << (j * STABLE_STATE_BITS);
-                line_touched |= touched_buf[i][j] << (j);
+                line_state |= state_buf[i][j] << (j * DNV_STABLE_STATE_BITS);
+                // line_touched |= touched_buf[i][j] << (j);
             }
             states.port1[0][base + i] = line_state;
-            touched.port1[0][base + i] = line_touched;
+            // touched.port1[0][base + i] = line_touched;
         }
     }
 
@@ -943,6 +947,7 @@ void l2_denovo::ctrl()
 	bookmark.write(bookmark_tmp);
 
 	reqs_cnt_dbg.write(reqs_cnt);
+    current_valid_state_dbg.write(current_valid_state);
     wbs_cnt_dbg.write(wbs_cnt);
 	set_conflict_dbg.write(set_conflict);
 	cpu_req_conflict_dbg.write(cpu_req_conflict);
@@ -1021,13 +1026,13 @@ inline void l2_denovo::reset_io()
     hprots.port1.reset();
     lines.port1.reset();
     states.port1.reset();
-    touched.port1.reset();
+    // touched.port1.reset();
 
     tags.port2.reset();
     hprots.port2.reset();
     lines.port2.reset();
     states.port2.reset();
-    touched.port2.reset();
+    // touched.port2.reset();
 
 #if (L2_WAYS >= 2)
 
@@ -1038,7 +1043,7 @@ inline void l2_denovo::reset_io()
     hprots.port3.reset();
     lines.port3.reset();
     states.port3.reset();
-    touched.port3.reset();
+    // touched.port3.reset();
 
 #if (L2_WAYS >= 4)
 
@@ -1046,13 +1051,13 @@ inline void l2_denovo::reset_io()
     hprots.port4.reset();
     lines.port4.reset();
     states.port4.reset();
-    touched.port4.reset();
+    // touched.port4.reset();
 
     tags.port5.reset();
     hprots.port5.reset();
     lines.port5.reset();
     states.port5.reset();
-    touched.port5.reset();
+    // touched.port5.reset();
 
 #if (L2_WAYS >= 8)
 
@@ -1060,25 +1065,25 @@ inline void l2_denovo::reset_io()
     hprots.port6.reset();
     lines.port6.reset();
     states.port6.reset();
-    touched.port6.reset();
+    // touched.port6.reset();
 
     tags.port7.reset();
     hprots.port7.reset();
     lines.port7.reset();
     states.port7.reset();
-    touched.port7.reset();
+    // touched.port7.reset();
 
     tags.port8.reset();
     hprots.port8.reset();
     lines.port8.reset();
     states.port8.reset();
-    touched.port8.reset();
+    // touched.port8.reset();
 
     tags.port9.reset();
     hprots.port9.reset();
     lines.port9.reset();
     states.port9.reset();
-    touched.port9.reset();
+    // touched.port9.reset();
 
 #endif
 #endif
@@ -1097,6 +1102,7 @@ inline void l2_denovo::reset_io()
 
     /* Reset signals exported to output ports */
     reqs_cnt_dbg.write(0);
+    current_valid_state_dbg.write(0);
     wbs_cnt_dbg.write(0);
     set_conflict_dbg.write(0);
     // cpu_req_conflict_dbg.write(0);
@@ -1162,6 +1168,7 @@ inline void l2_denovo::reset_io()
     wb_evict = 0;
     flush_set = 0;
     flush_way = 0;
+    current_valid_state = 1;
 
 	// for (int i = 0; i < L2_LINES; i++)
 	// {
@@ -1324,7 +1331,7 @@ void l2_denovo::fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t 
     reqs_cnt--;
 }
 
-void l2_denovo::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, hprot_t hprot, state_t state,
+void l2_denovo::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, hprot_t hprot, dnv_state_t state,
 		  sc_uint<REQS_BITS> reqs_i)
 {
     PUT_REQS;
@@ -1353,16 +1360,16 @@ inline void l2_denovo::read_set(l2_set_t set)
     // below for implicit memories usage
     sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
 
-    sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
-    word_mask_t line_touched;
+    sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
+    // word_mask_t line_touched;
 
     tag_buf[0] = tags.port2[0][base + 0];
     line_state = states.port2[0][base + 0];
-    line_touched = touched.port2[0][base + 0];
+    // line_touched = touched.port2[0][base + 0];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "8");
-        state_buf[0][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[0][i] = (line_touched >> i) & 1;
+        state_buf[0][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[0][i] = (line_touched >> i) & 1;
 
     }
     hprot_buf[0] = hprots.port2[0][base + 0];
@@ -1372,11 +1379,11 @@ inline void l2_denovo::read_set(l2_set_t set)
 
     tag_buf[1] = tags.port3[0][base + 1];
     line_state = states.port3[0][base + 1];
-    line_touched = touched.port3[0][base + 1];
+    // line_touched = touched.port3[0][base + 1];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "9");
-        state_buf[1][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[1][i] = (line_touched >> i) & 1;
+        state_buf[1][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[1][i] = (line_touched >> i) & 1;
     }
     hprot_buf[1] = hprots.port3[0][base + 1];
     line_buf[1] = lines.port3[0][base + 1];
@@ -1385,22 +1392,22 @@ inline void l2_denovo::read_set(l2_set_t set)
 
     tag_buf[2] = tags.port4[0][base + 2];
     line_state = states.port4[0][base + 2];
-    line_touched = touched.port4[0][base + 2];
+    // line_touched = touched.port4[0][base + 2];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "10");
-        state_buf[2][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[2][i] = (line_touched >> i) & 1;
+        state_buf[2][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[2][i] = (line_touched >> i) & 1;
     }
     hprot_buf[2] = hprots.port4[0][base + 2];
     line_buf[2] = lines.port4[0][base + 2];
 
     tag_buf[3] = tags.port5[0][base + 3];
     line_state = states.port5[0][base + 3];
-    line_touched = touched.port5[0][base + 3];
+    // line_touched = touched.port5[0][base + 3];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "11");
-        state_buf[3][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[3][i] = (line_touched >> i) & 1;
+        state_buf[3][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[3][i] = (line_touched >> i) & 1;
     }
     hprot_buf[3] = hprots.port5[0][base + 3];
     line_buf[3] = lines.port5[0][base + 3];
@@ -1409,44 +1416,44 @@ inline void l2_denovo::read_set(l2_set_t set)
 
     tag_buf[4] = tags.port6[0][base + 4];
     line_state = states.port6[0][base + 4];
-    line_touched = touched.port6[0][base + 4];
+    // line_touched = touched.port6[0][base + 4];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "12");
-        state_buf[4][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[4][i] = (line_touched >> i) & 1;
+        state_buf[4][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[4][i] = (line_touched >> i) & 1;
     }
     hprot_buf[4] = hprots.port6[0][base + 4];
     line_buf[4] = lines.port6[0][base + 4];
 
     tag_buf[5] = tags.port7[0][base + 5];
     line_state = states.port7[0][base + 5];
-    line_touched = touched.port7[0][base + 5];
+    // line_touched = touched.port7[0][base + 5];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "13");
-        state_buf[5][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[5][i] = (line_touched >> i) & 1;
+        state_buf[5][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[5][i] = (line_touched >> i) & 1;
     }
     hprot_buf[5] = hprots.port7[0][base + 5];
     line_buf[5] = lines.port7[0][base + 5];
 
     tag_buf[6] = tags.port8[0][base + 6];
     line_state = states.port8[0][base + 6];
-    line_touched = touched.port8[0][base + 6];
+    // line_touched = touched.port8[0][base + 6];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "14");
-        state_buf[6][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[6][i] = (line_touched >> i) & 1;
+        state_buf[6][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[6][i] = (line_touched >> i) & 1;
     }
     hprot_buf[6] = hprots.port8[0][base + 6];
     line_buf[6] = lines.port8[0][base + 6];
 
     tag_buf[7] = tags.port9[0][base + 7];
     line_state = states.port9[0][base + 7];
-    line_touched = touched.port9[0][base + 7];
+    // line_touched = touched.port9[0][base + 7];
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "15");
-        state_buf[7][i] = line_state >> (i * STABLE_STATE_BITS);
-        touched_buf[7][i] = (line_touched >> i) & 1;
+        state_buf[7][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+        // touched_buf[7][i] = (line_touched >> i) & 1;
     }
     hprot_buf[7] = hprots.port9[0][base + 7];
     line_buf[7] = lines.port9[0][base + 7];
@@ -1480,7 +1487,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
     for (int j = 0; j < WORDS_PER_LINE; j++)
     {
         HLS_UNROLL_LOOP(ON, "16");
-        if (state_buf[i][j] != DNV_I) {
+        if (state_buf[i][j] >= current_valid_state) {
             line_present = true;
         }
     }
@@ -1490,7 +1497,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
 	    way_hit = i;
 	}
 
-	if (tag_buf[i] == addr_br.tag && line_present && state_buf[i][addr_br.w_off] != DNV_I) {
+	if (tag_buf[i] == addr_br.tag && line_present && state_buf[i][addr_br.w_off] >= current_valid_state) {
 	    word_hit = true;
 	}
 
@@ -1596,43 +1603,37 @@ void l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
 
 void l2_denovo::self_invalidate()
 {
-	for (int i = 0; i < L2_LINES; i++)
-	{
-        HLS_UNROLL_LOOP(OFF, "self invalidate");
-        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
-        word_mask_t line_touched;
-        sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE> line_state_in;
-        {
-            HLS_DEFINE_PROTOCOL("self invalidate read");
-            wait();
-            line_state = states.port2[0][i];
-            line_touched = touched.port2[0][i];
-            wait();
-        }
-        
-
-        state_t state_tmp;
-        bool touched_tmp;
-        line_state_in = 0;
-        for (int j = 0; j < WORDS_PER_LINE; j++) {
-            HLS_UNROLL_LOOP(ON, "8");
-            state_tmp = line_state >> (j * STABLE_STATE_BITS);
-            touched_tmp = (line_touched >> j) & 1;
-            if(state_tmp == DNV_V && !touched_tmp){
-                state_tmp = DNV_I;
+    if(current_valid_state != DNV_MAX_V){
+        current_valid_state++;
+    }else{
+        for (int i = 0; i < L2_LINES; i++){
+            HLS_UNROLL_LOOP(OFF, "self invalidate");
+            sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state, line_state_in;
+            {
+                HLS_DEFINE_PROTOCOL("self invalidate read");
+                wait();
+                line_state = states.port2[0][i];
+                wait();
             }
-            line_state_in |= state_tmp << (j * STABLE_STATE_BITS);
+
+            dnv_state_t state_tmp;
+            line_state_in = 0;
+            for (int j = 0; j < WORDS_PER_LINE; j++){
+                HLS_UNROLL_LOOP(ON, "8");
+                state_tmp = line_state >> (j * DNV_STABLE_STATE_BITS);
+                if(state_tmp != DNV_R){
+                    state_tmp = DNV_I;
+                }
+                line_state_in |= state_tmp << (j * DNV_STABLE_STATE_BITS);
+            }
+
+            {
+                HLS_DEFINE_PROTOCOL("self invalidate write");
+                wait();
+                states.port1[0][i] = line_state_in;
+                wait();
+            }
         }
-
-        {
-            HLS_DEFINE_PROTOCOL("self invalidate write");
-            wait();
-            states.port1[0][i] = line_state_in;
-            touched.port1[0][i] = 0;
-            wait();
-        }
-	}
-
-
+        current_valid_state = 1;
+    }
 }
-

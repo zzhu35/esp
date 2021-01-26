@@ -174,6 +174,8 @@
 /* Protocol states */
 
 // N bits to indicate the state
+#define DNV_NUM_STATE       8
+#define DNV_STABLE_STATE_BITS   ilog2(DNV_NUM_STATE)
 #define STABLE_STATE_BITS	2	// depends on # of stable states
 #define LLC_STABLE_STATE_BITS	2
 #define UNSTABLE_STATE_BITS	4	// depends on # of unstable states
@@ -227,8 +229,8 @@
 
 // DeNovo states
 #define DNV_I       0
-#define DNV_V       1
-#define DNV_R       2
+#define DNV_MAX_V   (DNV_R - 1)
+#define DNV_R       (DNV_NUM_STATE-1)
 
 // DeNovo Transient state
 #define DNV_IV      1

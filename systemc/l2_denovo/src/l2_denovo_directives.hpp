@@ -9,7 +9,6 @@
     HLS_FLATTEN_ARRAY(wbs);			\
     HLS_FLATTEN_ARRAY(tag_buf);			\
     HLS_FLATTEN_ARRAY(state_buf);		\
-    HLS_FLATTEN_ARRAY(touched_buf);			\
     HLS_FLATTEN_ARRAY(hprot_buf);		\
     HLS_FLATTEN_ARRAY(line_buf);                \
     HLS_FLATTEN_ARRAY(is_to_req); \
@@ -341,6 +340,7 @@
     HLS_PRESERVE_SIGNAL(bookmark, true);		\
     HLS_PRESERVE_SIGNAL(watch_dog, true);		\
     HLS_PRESERVE_SIGNAL(reqs_cnt_dbg, true);		\
+    HLS_PRESERVE_SIGNAL(current_valid_state_dbg, true);		\
     HLS_PRESERVE_SIGNAL(wbs_cnt_dbg, true);		\
     HLS_PRESERVE_SIGNAL(set_conflict_dbg, true);	\
     HLS_PRESERVE_SIGNAL(cpu_req_conflict_dbg, true);	\

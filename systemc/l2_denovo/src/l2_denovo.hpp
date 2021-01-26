@@ -12,7 +12,7 @@
 
 #include EXP_MEM_INCLUDE_STRING(l2_denovo, tags, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_denovo, states, L2_SETS, L2_WAYS)
-#include EXP_MEM_INCLUDE_STRING(l2_denovo, touched, L2_SETS, L2_WAYS)
+// #include EXP_MEM_INCLUDE_STRING(l2_denovo, touched, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_denovo, lines, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_denovo, hprots, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_denovo, evict_ways, L2_SETS, L2_WAYS)
@@ -34,6 +34,7 @@ public:
     sc_signal< sc_bv<BOOKMARK_WIDTH> > bookmark;
 
     sc_signal< sc_uint<REQS_BITS_P1> > reqs_cnt_dbg;
+    sc_signal< sc_uint<DNV_STABLE_STATE_BITS> > current_valid_state_dbg;
     sc_signal< sc_uint<WB_BITS_P1> > wbs_cnt_dbg;
     sc_signal< bool > set_conflict_dbg;
     sc_signal< l2_cpu_req_t > cpu_req_conflict_dbg;
@@ -63,8 +64,8 @@ public:
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
     sc_signal<wb_t> wbs_dbg[N_WB];
     sc_signal<l2_tag_t> tag_buf_dbg[L2_WAYS];
-    sc_signal<state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
-    sc_signal<state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
+    sc_signal<dnv_state_t> state_buf_dbg[L2_WAYS][WORDS_PER_LINE];
+    sc_signal<dnv_state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
     sc_signal< sc_uint<3> > watch_dog;
 #endif
@@ -94,8 +95,8 @@ public:
     EXP_MEM_TYPE_STRING(l2_denovo, tags, L2_SETS, L2_WAYS)<l2_tag_t, L2_LINES> tags;
     // state_t states[L2_LINES][WORDS_PER_LINE]; // fast flush
     // bool touched[L2_LINES][WORDS_PER_LINE];
-    EXP_MEM_TYPE_STRING(l2_denovo, states, L2_SETS, L2_WAYS)<sc_uint<STABLE_STATE_BITS * WORDS_PER_LINE>, L2_LINES> states;
-    EXP_MEM_TYPE_STRING(l2_denovo, touched, L2_SETS, L2_WAYS)<word_mask_t, L2_LINES> touched;
+    EXP_MEM_TYPE_STRING(l2_denovo, states, L2_SETS, L2_WAYS)<sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE>, L2_LINES> states;
+    // EXP_MEM_TYPE_STRING(l2_denovo, touched, L2_SETS, L2_WAYS)<word_mask_t, L2_LINES> touched;
     EXP_MEM_TYPE_STRING(l2_denovo, lines, L2_SETS, L2_WAYS)<line_t, L2_LINES> lines;
     EXP_MEM_TYPE_STRING(l2_denovo, hprots, L2_SETS, L2_WAYS)<hprot_t, L2_LINES> hprots;
     EXP_MEM_TYPE_STRING(l2_denovo, evict_ways, L2_SETS, L2_WAYS)<l2_way_t, L2_SETS> evict_ways;
@@ -108,8 +109,9 @@ public:
 
 
     l2_tag_t	 tag_buf[L2_WAYS];
-    state_t	 state_buf[L2_WAYS][WORDS_PER_LINE];
-    bool	 touched_buf[L2_WAYS][WORDS_PER_LINE];
+    dnv_state_t	 state_buf[L2_WAYS][WORDS_PER_LINE];
+    dnv_state_t  current_valid_state;
+    // bool	 touched_buf[L2_WAYS][WORDS_PER_LINE];
     hprot_t	 hprot_buf[L2_WAYS];
     line_t	 line_buf[L2_WAYS];
     l2_way_t	 evict_way;
@@ -167,7 +169,7 @@ public:
 	    // Clock binding for memories
 	    tags.clk(this->clk);
         states.clk(this->clk);
-        touched.clk(this->clk);
+        // touched.clk(this->clk);
 	    hprots.clk(this->clk);
 	    lines.clk(this->clk);
 	    evict_ways.clk(this->clk);
@@ -195,7 +197,7 @@ public:
     void fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t tag_estall, l2_way_t way_hit, 
 		   hsize_t hsize, unstable_state_t state, hprot_t hprot, word_t word, line_t line, word_mask_t word_mask,
 		   sc_uint<REQS_BITS> reqs_i);
-    void put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t lines, hprot_t hprot, state_t state,
+    void put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t lines, hprot_t hprot, dnv_state_t state,
 		  sc_uint<REQS_BITS> reqs_i);
 
     /* Functions to search for cache lines either in memory or buffered */
