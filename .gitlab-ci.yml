@@ -1,7 +1,16 @@
-build-job:
+build:
   stage: build
   script:
-    - echo "Hello, $GITLAB_USER_LOGIN!"
+    - echo "Running RTL build..."
+    - source /projects/sim-gitlab
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - make l2-distclean
+    - make l2-hls
+    - make l2_denovo-distclean
+    - make l2_denovo-hls
+    - make llc-distclean
+    - make llc-hls
+    - echo "PASS"
 
 test-job1:
   stage: test
