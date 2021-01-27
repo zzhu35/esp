@@ -23,6 +23,7 @@ test-sort-baseline:
   script:
     - echo "Running simulation..."
     - rm -f /projects/simout.txt
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - printf "run\nexit\n" | make xmsim
     - python3 check.py sort-gold
     - echo "PASS"
