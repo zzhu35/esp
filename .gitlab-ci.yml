@@ -21,6 +21,8 @@ build:
 test-sort-baseline:
   stage: test
   script:
+    - echo "Running simulation..."
+    - rm -f /projects/simout.txt
     - printf "run\nexit\n" | make xmsim
     - python3 check.py sort-gold
     - echo "PASS"
