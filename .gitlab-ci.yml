@@ -21,13 +21,8 @@ build:
 test-sort-baseline:
   stage: test
   script:
-    - echo "Generating ESP configs..."
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
-    - make esp-config-distclean
-    - cp /projects/.esp_config-sort ./esp_config
-    - make esp-config
     - printf "run\nexit\n" | make xmsim
-    - python3 check.py sort-gold.txt
+    - python3 check.py sort-gold
     - echo "PASS"
 
 deploy:
