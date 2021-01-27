@@ -9,12 +9,10 @@ build:
     - source /projects/hls-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - git checkout $CI_COMMIT_BRANCH
-    - make l2-distclean
-    - make l2-hls
-    - make l2_denovo-distclean
-    - make l2_denovo-hls
-    - make llc-distclean
-    - make llc-hls
+    - git pull origin $CI_COMMIT_BRANCH
+    - git diff-tree --no-commit-id --name-only -r $CI_COMMIT_SHA | grep systemc || exit_code=$?
+    - if [ $exit_code -ne 0 ]; then echo "Skipping SystemC builds..."; fi;
+    - if [ $exit_code -eq 0 ]; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
     - source /projects/sim-gitlab
     - rm -rf xcelium/
     - make xmsim-compile
