@@ -13,6 +13,7 @@ void l2_denovo::drain_wb()
         bool success = false;
         if (wbs[i].valid && reqs_cnt > 0) {
             dispatch_wb(success, i);
+            break;
         }
         wait();
 
