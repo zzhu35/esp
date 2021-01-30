@@ -1,22 +1,34 @@
-build-job:
+include:
+  - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
+
+build:
   stage: build
   script:
-    - echo "Hello, $GITLAB_USER_LOGIN!"
+    - echo "Running RTL build..."
+    - source /projects/sim-gitlab
+    - source /projects/hls-gitlab
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - git checkout $CI_COMMIT_BRANCH
+    - git pull origin $CI_COMMIT_BRANCH
+    - git diff-tree --no-commit-id --name-only -r $CI_COMMIT_SHA | grep systemc || exit_code=$?
+    - if [ $exit_code -ne 0 ]; then echo "Skipping SystemC builds..."; fi;
+    - if [ $exit_code -eq 0 ]; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
+    - source /projects/sim-gitlab
+    - rm -rf xcelium/
+    - make xmsim-compile soft-distclean soft sort-barec
+    - echo "PASS"
 
-test-job1:
+test-sort-baseline:
   stage: test
   script:
-    - echo "This job tests something"
+    - echo "Running simulation..."
+    - rm -f /projects/simout.txt
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - source /projects/sim-gitlab
+    - printf "run\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - echo "PASS"
 
-test-job2:
-  stage: test
-  script:
-    - echo "This job tests something, but takes more time than test-job1."
-    - echo "After the echo commands complete, it runs the sleep command for 20 seconds"
-    - echo "which simulates a test that runs 20 seconds longer than test-job1"
-    - sleep 20
-
-deploy-prod:
+deploy:
   stage: deploy
   script:
-    - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
+    - echo "PASS"
