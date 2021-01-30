@@ -5,7 +5,6 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.esp_global.all;
-use work.spandex_config.all;
 use work.amba.all;
 use work.stdlib.all;
 use work.gencomp.all;
