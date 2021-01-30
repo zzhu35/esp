@@ -5,6 +5,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.esp_global.all;
+use work.spandex_config.all;
 use work.amba.all;
 use work.stdlib.all;
 use work.gencomp.all;
@@ -19,8 +20,7 @@ package cachepackage is
   -----------------------------------------------------------------------------
 
   -- DCS
-  constant USE_DCS               : std_logic := '0';
-  constant USE_OWNER_PRED        : std_logic := '0';
+
 
   -- Asserts
   constant AS_AHBS_HSIZE         : integer := 0;

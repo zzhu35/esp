@@ -2253,7 +2253,9 @@ def create_socmap(esp_config, soc):
     spandex_l2_config += ', ' * (i > 0) + spandex_l2_type
 
   fp.write('  type SPANDEX_L2_CONFIG_T is ARRAY(0 to {}) of integer;\n'.format(str(soc.noc.cols * soc.noc.rows - 1)))
-  fp.write('  constant SPANDEX_L2_CONFIG : SPANDEX_L2_CONFIG_T  := ({});\n\n'.format(spandex_l2_config))
+  fp.write('  constant SPANDEX_L2_CONFIG : SPANDEX_L2_CONFIG_T  := ({});\n'.format(spandex_l2_config))
+  fp.write("  constant USE_DCS               : std_logic := '1';\n")
+  fp.write("  constant USE_OWNER_PRED        : std_logic := '1';\n\n")
 
   fp.write("end esp_global;\n")
   fp.close()
