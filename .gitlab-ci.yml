@@ -41,7 +41,7 @@ test-sort-none:
     - rm -f /projects/simout.txt
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 6000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
     - cp xcelium/simout.txt test_outputs/test-sort-none.txt
     - echo "PASS"
 
@@ -55,7 +55,7 @@ test-sort-dma:
     - rm -f /projects/simout.txt
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 6000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - cp xcelium/simout.txt test_outputs/test-sort-dma.txt
     - echo "PASS"
@@ -70,7 +70,7 @@ test-sort-full:
     - rm -f /projects/simout.txt
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 6000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - cp xcelium/simout.txt test_outputs/test-sort-full.txt
     - echo "PASS"
@@ -86,7 +86,7 @@ test-sort-dcs:
     - rm -f /projects/simout.txt
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 6000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - cp /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/esp_global-bak.vhd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/esp_global.vhd
     - cp xcelium/simout.txt test_outputs/test-sort-dcs.txt
