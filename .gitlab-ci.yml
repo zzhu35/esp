@@ -6,7 +6,6 @@ build:
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
-    - source /projects/hls-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - git checkout $CI_COMMIT_BRANCH
     - git pull origin $CI_COMMIT_BRANCH
@@ -16,14 +15,15 @@ build:
     - make xmsim-compile soft-distclean soft sort-barec
     - echo "PASS"
 
-test-sort-baseline:
+test-systest:
   stage: test
   script:
+    - make soft
     - echo "Running simulation..."
     - rm -f /projects/simout.txt
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - source /projects/sim-gitlab
-    - printf "run\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run\nexit\n" | make xmsim
     - echo "PASS"
 
 deploy:

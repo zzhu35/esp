@@ -677,7 +677,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       l2_sync_data              => '0'
     );
 
-  l2_denovo_i : l2
+  l2_denovo_i : l2_denovo
     generic map (
       use_rtl => CFG_CACHE_RTL,
       sets => sets,
@@ -2271,7 +2271,7 @@ end process fsm_fwd_out;
                      rd_rsp_valid_mesi, rd_rsp_data_line_mesi, rd_rsp_valid_dnv, rd_rsp_data_line_dnv, load_alloc_reg,
                      inv_fifo_full)
 
-    file outfile : text open write_mode is "/projects/simout.txt";
+    file outfile : text open write_mode is "./simout.txt";
     variable row : line;
     variable can_write : std_ulogic := '0';
     variable write_line_data : std_logic_vector(AXIDW-1 downto 0);
@@ -2476,7 +2476,7 @@ end process fsm_fwd_out;
           write_line_data := read_from_line(reg.haddr, rd_rsp_data_line_dnv);
         end if;
 
-        if ((rd_rsp_valid_mesi = '1') or (rd_rsp_valid_dnv = '1')) and mosi.r.ready = '1' then -- TODO
+        if ((rd_rsp_valid_mesi = '1') or (rd_rsp_valid_dnv = '1')) and mosi.r.ready = '1' then
 
           if xreg.len = axi_len_zero then
             somi.r.last <= '1';
