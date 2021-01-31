@@ -27,16 +27,16 @@ test-systest:
     - source /projects/sim-gitlab
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 1000us\nexit\n" | make xmsim
+    - printf "run 2000us\nexit\n" | make xmsim
     - cp xcelium/simout.txt test_outputs/test-systest.txt
     - echo "PASS"
 
 test-sort-none:
   stage: test
   script:
-    - source /projects/sim-gitlab
-    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - source /projects/sim-gitlab\
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
     - rm -f /projects/simout.txt
     - rm -rf xcelium/
@@ -98,7 +98,6 @@ fpga-bitstream:
   stage: deploy
   script:
     - cd /projects/spandex-gitlab
-    - git checkout -- .
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - source /projects/sim-gitlab
     - yes | make vivado-syn
