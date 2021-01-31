@@ -1,0 +1,16 @@
+{
+    "l2_types": [
+        "denovo",
+        "gpu"
+    ],
+    "l2": {
+        "1": "mesi",
+        "2": "denovo",
+        "3": "mesi",
+        "4": "mesi"
+    },
+    "dcs_config": {
+        "USE_DCS": "0",
+        "USE_OWNER_PRED": "0"
+    }
+}
