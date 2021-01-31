@@ -3060,12 +3060,12 @@ end process fsm_fwd_out;
 
     end case;
 
--- synthesis translate_off
+-- pragma translate_off
     if (can_write = '1') and (mosi.r.ready = '1') then
       hwrite(row, write_line_data);
       writeline(outfile, row);
     end if;
--- synthesis translate_on
+-- pragma translate_on
 
     axi_reg_next        <= xreg;
     ahbs_reg_next       <= reg;
