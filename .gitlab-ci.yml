@@ -34,7 +34,7 @@ test-systest:
 test-sort-none:
   stage: test
   script:
-    - source /projects/sim-gitlab\
+    - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
