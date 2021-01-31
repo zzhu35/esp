@@ -2271,8 +2271,10 @@ end process fsm_fwd_out;
                      rd_rsp_valid_mesi, rd_rsp_data_line_mesi, rd_rsp_valid_dnv, rd_rsp_data_line_dnv, load_alloc_reg,
                      inv_fifo_full)
 
+-- synthesis translate_off
     file outfile : text open write_mode is "./simout.txt";
     variable row : line;
+-- synthesis translate_on
     variable can_write : std_ulogic := '0';
     variable write_line_data : std_logic_vector(AXIDW-1 downto 0);
 
@@ -3058,10 +3060,12 @@ end process fsm_fwd_out;
 
     end case;
 
+-- synthesis translate_off
     if (can_write = '1') and (mosi.r.ready = '1') then
       hwrite(row, write_line_data);
       writeline(outfile, row);
     end if;
+-- synthesis translate_on
 
     axi_reg_next        <= xreg;
     ahbs_reg_next       <= reg;
