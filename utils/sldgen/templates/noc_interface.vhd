@@ -148,6 +148,7 @@ end;
     COHERENCE_REG      => '1',
     P2P_REG            => '1',
     YX_REG             => '1',
+    SPANDEX_REG        => '1',
     -- <<user_mask>>
     others             => '0');
 
@@ -301,6 +302,7 @@ begin
         flush                      => flush,
         aq                         => conf_done,
         rl                         => acc_done,
+        spandex_conf               => bank(SPANDEX_REG),
         coherence_req_wrreq        => coherence_req_wrreq,
         coherence_req_data_in      => coherence_req_data_in,
         coherence_req_full         => coherence_req_full,

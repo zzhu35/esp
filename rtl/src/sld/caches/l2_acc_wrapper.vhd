@@ -69,6 +69,7 @@ entity l2_acc_wrapper is
     flush                     : in  std_ulogic;
     aq                        : in  std_ulogic;
     rl                        : in  std_ulogic;
+    spandex_conf              : in  std_logic_vector(31 downto 0);
 
     -- backend (cache - NoC)
     -- tile->NoC1
@@ -863,10 +864,10 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= dma_address;
             ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
+            cpu_req_data_dcs_en  <= spandex_conf(0);
+            cpu_req_data_use_owner_pred <= spandex_conf(1);
+            cpu_req_data_dcs     <= spandex_conf(3 downto 2);
+            cpu_req_data_pred_cid <= spandex_conf(7 downto 4);
 
             -- cpu_req_data_dcs_en  <= dma_dcs_en;
             -- cpu_req_data_use_owner_pred <= dma_use_owner_pred;
@@ -922,10 +923,10 @@ begin  -- architecture rtl of l2_acc_wrapper
             cpu_req_data_cpu_msg <= CPU_READ;
             cpu_req_data_addr    <= reg.addr;
             ---------------------------------------- SPANDEX_SWITCH
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
+            cpu_req_data_dcs_en  <= spandex_conf(0);
+            cpu_req_data_use_owner_pred <= spandex_conf(1);
+            cpu_req_data_dcs     <= spandex_conf(3 downto 2);
+            cpu_req_data_pred_cid <= spandex_conf(7 downto 4);
             -- cpu_req_data_dcs_en  <= reg.dcs_en;
             -- cpu_req_data_use_owner_pred <= reg.use_owner_pred;
             -- cpu_req_data_dcs     <= reg.dcs;
@@ -1017,10 +1018,10 @@ begin  -- architecture rtl of l2_acc_wrapper
             -- cpu_req_data_pred_cid <= reg.pred_cid;
 
             --------------------------------SPANDEX_SWITCH-----------------------------------------------------------------------------------
-            cpu_req_data_dcs_en  <= USE_DCS;
-            cpu_req_data_use_owner_pred <= USE_OWNER_PRED;
-            cpu_req_data_dcs     <= "00";
-            cpu_req_data_pred_cid <= "0000";
+            cpu_req_data_dcs_en  <= spandex_conf(0);
+            cpu_req_data_use_owner_pred <= spandex_conf(1);
+            cpu_req_data_dcs     <= spandex_conf(3 downto 2);
+            cpu_req_data_pred_cid <= spandex_conf(7 downto 4);
 
             reg.addr := reg.addr + BYTES_PER_WORD;
 

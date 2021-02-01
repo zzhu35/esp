@@ -352,7 +352,7 @@ package cachepackage is
       flush                     : in  std_ulogic;
       aq                        : in  std_ulogic;
       rl                        : in  std_ulogic;
-
+      spandex_conf              : in  std_logic_vector(31 downto 0);
       -- backend (cache - NoC)
       -- tile->NoC1
       coherence_req_wrreq        : out std_ulogic;
