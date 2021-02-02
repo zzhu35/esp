@@ -14,6 +14,7 @@ build:
     - git diff --name-only HEAD~1 HEAD > diffout.txt
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
     - source /projects/sim-gitlab
+    - make sort-hls
     - rm -rf xcelium/
     - make xmsim-compile soft-distclean soft sort-barec
     - echo "PASS"
@@ -31,19 +32,19 @@ test-systest:
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
-# test-sort-none:
-#   stage: test
-#   script:
-#     - source /projects/sim-gitlab
-#     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
-#     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
-#     - make sort-barec
-#     - rm -rf xcelium/
-#     - echo "Running simulation..."
-#     - printf "run TODOus\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
-#     - cp xcelium/simout.txt test_outputs/test-sort-none.txt
-#     - grep "PASS" xcelium/xmsim.log
-#     - echo "PASS"
+test-sort-none:
+  stage: test
+  script:
+    - source /projects/sim-gitlab
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - make sort-barec
+    - rm -rf xcelium/
+    - echo "Running simulation..."
+    - printf "run 16000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - cp xcelium/simout.txt test_outputs/test-sort-none.txt
+    - grep "PASS" xcelium/xmsim.log
+    - echo "PASS"
 
 test-sort-dma:
   stage: test
@@ -94,18 +95,27 @@ test-sort-dcs:
 
 package:
   stage: deploy
+  needs: [build]
   script:
     - cd /projects/spandex-gitlab
-    # - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
-    # - source /projects/sim-gitlab
-    # - yes | make vivado-syn
-    - cd /projects/spandex-gitlab/tech/virtex7
-    - zip -r archive.zip sccs/
-    - cp -f /projects/spandex-gitlab/tech/virtex7/archive.zip /builds/hou_FuG8/0/cs_adve/spandexesp/archive.zip
+    - cd /projects/spandex-gitlab/tech/
+    - zip -r virtex7.zip virtex7/
+    - cp -f /projects/spandex-gitlab/tech/virtex7.zip /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
     - echo "PASS"
   artifacts:
     paths:
-      # - /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/esp-xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
-      - /builds/hou_FuG8/0/cs_adve/spandexesp/archive.zip
+      - /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
     expire_in: 1 month
   
+
+bistream:
+  stage: deploy
+  script:
+    # - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    # - source /projects/sim-gitlab
+    # - yes | make vivado-syn
+    - echo "PASS"
+  # artifacts:
+  #   paths:
+  #     - /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/esp-xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
+  #   expire_in: 1 month

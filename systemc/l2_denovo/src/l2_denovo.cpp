@@ -39,21 +39,23 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     // dispatch to reqs if full line
     // reset success if wb full && reqs full
 
-    sc_uint<WB_BITS> evict_wb = wb_evict++;
-    for (int i = 0; i < N_WB; i++)
-    {
-        HLS_UNROLL_LOOP(ON, "add wb");
-        if (wbs[i].valid && wbs[i].word_mask == WORD_MASK_ALL)
-        {
-            evict_wb = i;
-        }
-    }
-
     if (wbs_cnt == 0) {
+        sc_uint<WB_BITS> evict_wb = 0;
+        for (int i = 0; i < N_WB; i++)
+        {
+            HLS_UNROLL_LOOP(ON, "add wb");
+            sc_uint<WB_BITS> idx_tmp = wb_evict + i;
+            if (wbs[idx_tmp].valid && wbs[idx_tmp].word_mask == WORD_MASK_ALL)
+            {
+                evict_wb = idx_tmp;
+                break;
+            }
+        }
         // try dispatching
         dispatch_wb(success, evict_wb);
         // if mshr refuse dispatching, return unsuccess
         if (!success) return;
+        wb_evict++;
     }
 
     success = true;

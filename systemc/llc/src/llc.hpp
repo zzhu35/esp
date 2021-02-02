@@ -231,6 +231,9 @@ private:
     // sc_bv<LLC_BOOKMARK_WIDTH> bookmark_tmp;
 #endif
 
+    bool rst_stall;
+    bool flush_stall;
+    llc_set_t rst_flush_stalled_set;
     bool set_conflict;
     bool evict_stall, evict_inprogress;
     llc_req_in_t<CACHE_ID_WIDTH> llc_req_conflict;
