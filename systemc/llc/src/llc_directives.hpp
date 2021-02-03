@@ -398,6 +398,8 @@
 
 #define DMA_WRITE_NOTSD
 
+#ifdef LLC_DEBUG
+
 #define PRESERVE_SIGNALS \
     HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
@@ -438,6 +440,9 @@
     HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true); \
     HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true); \
     HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
+#else
+#define PRESERVE_SIGNALS
+#endif
 
 #endif
 
