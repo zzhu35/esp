@@ -393,7 +393,7 @@ end original ESP messages
  */
 
 // #define L2_DEBUG 1
-#define LLC_DEBUG 1
+// #define LLC_DEBUG 1
 
 #define STATS_ENABLE 1
 

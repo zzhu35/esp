@@ -782,8 +782,8 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
   apbo.pindex  <= pindex;
   apbo.pconfig <= pconfig;
 
-  flush_data_dnv <= '0';
-  flush_valid_dnv <= '0';
+  flush_data_mesi <= '0';
+  flush_valid_mesi <= '0';
   stats_ready_dnv <= '1';
 
   -- rd/wr registers
@@ -810,7 +810,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       status_reg  <= (others => '0');
     elsif clk'event and clk = '1' then  -- rising clock edge
       status_reg(31 downto 28) <= std_logic_vector(to_unsigned(cache_id, 4));
-      if flush_done_mesi = '1' then
+      if flush_done_dnv = '1' then
         status_reg(0) <= '1';
       end if;
       if cmd_reg(1 downto 0) = "00" then
@@ -832,7 +832,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
     end if;
   end process cmd_state_update;
 
-  cmd_state_fsm: process (cmd_state, flush_valid_mesi, flush_ready_mesi, flush_done_mesi, flush, cmd_reg) is
+  cmd_state_fsm: process (cmd_state, flush_valid_dnv, flush_ready_dnv, flush_done_dnv, flush, cmd_reg) is
   begin  -- process cmd_state_fsm
     cmd_next <= cmd_state;
     flush_due <= '0';
@@ -846,7 +846,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       when wait_l1_flush =>
         if flush = '1' then
           flush_due <= '1';
-          if (flush_valid_mesi and flush_ready_mesi) = '1' then
+          if (flush_valid_dnv and flush_ready_dnv) = '1' then
             cmd_next <= pending_cmd;
           else
             cmd_next <= do_cmd;
@@ -855,12 +855,12 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 
       when do_cmd =>
         flush_due <= '1';
-        if (flush_valid_mesi and flush_ready_mesi) = '1' then
+        if (flush_valid_dnv and flush_ready_dnv) = '1' then
           cmd_next <= pending_cmd;
         end if;
 
       when pending_cmd =>
-        if flush_done_mesi = '1' then
+        if flush_done_dnv = '1' then
           cmd_next <= wait_irq_clear;
         end if;
 
@@ -875,7 +875,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 
   end process cmd_state_fsm;
 
-  flush_data_mesi  <= cmd_reg(2);           -- Flush data (0) / flush all (1)
+  flush_data_dnv  <= cmd_reg(2);           -- Flush data (0) / flush all (1)
 
 -------------------------------------------------------------------------------
 -- Static outputs: AHB/AXI slave, AHB master, ACE, NoC
@@ -961,7 +961,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 -- FSM: Bridge from AHB slave to L2 cache frontend input
 -------------------------------------------------------------------------------
   fsm_ahbs : process (ahbsi, flush, ahbs_reg,
-                      cpu_req_ready_mesi, cpu_req_ready_dnv, flush_ready_mesi, flush_due,
+                      cpu_req_ready_mesi, cpu_req_ready_dnv, flush_ready_dnv, flush_due,
                       rd_rsp_valid_mesi, rd_rsp_data_line_mesi,
                       rd_rsp_valid_dnv, rd_rsp_data_line_dnv, load_alloc_reg,
                       inv_fifo_full)
@@ -991,7 +991,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
     cpu_req_data_word    <= (others => '0');
     cpu_req_data_amo     <= (others => '0');
 
-    flush_valid_mesi <= '0';
+    flush_valid_dnv <= '0';
 
     rd_rsp_ready <= '0';
 
@@ -1036,7 +1036,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
         cpu_req_data_addr    <= ahbsi.haddr;
 
         if flush_due = '1' and ahbsi.hmastlock = '0' then
-          flush_valid_mesi <= '1';
+          flush_valid_dnv <= '1';
 
           if valid_ahb_req = '1' then
             reg.cpu_msg := ahbsi.hwrite & ahbsi.hmastlock;
@@ -1044,7 +1044,7 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
             reg.hprot   := '0' & ahbsi.hprot(0);
             reg.haddr   := ahbsi.haddr;
 
-            if flush_ready_mesi = '0' then
+            if flush_ready_dnv = '0' then
               reg.state := flush_req;
             else
               reg.state := mem_req;
@@ -1149,10 +1149,10 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
           if (flush_due = '1' and not (ahbsi.hprot(0) = '0' and valid_ahb_req = '1') and
               ahbsi.hmastlock = '0') then
 
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_ahb_req = '1' then
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -1228,11 +1228,11 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 
         if (flush_due = '1' and not (ahbsi.hprot(0) = '0' and valid_ahb_req = '1') and ahbsi.hmastlock = '0') then
 
-          flush_valid_mesi <= '1';
+          flush_valid_dnv <= '1';
 
           if valid_ahb_req = '1' then
 
-            if flush_ready_mesi = '0' then
+            if flush_ready_dnv = '0' then
               reg.state := flush_req;
             else
               reg.state := mem_req;
@@ -1318,10 +1318,10 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 
           if (flush_due = '1' and not (ahbsi.hprot(0) = '0' and valid_ahb_req = '1') and ahbsi.hmastlock = '0') then
 
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_ahb_req = '1' then
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -1357,10 +1357,10 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
 
           if (flush_due = '1' and not (ahbsi.hprot(0) = '0' and valid_ahb_req = '1') and ahbsi.hmastlock = '0') then
 
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_ahb_req = '1' then
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -1394,9 +1394,9 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       when flush_req =>
         ahbso.hready <= '0';
 
-        flush_valid_mesi <= '1';
+        flush_valid_dnv <= '1';
 
-        if flush_ready_mesi = '1' then
+        if flush_ready_dnv = '1' then
           reg.state := mem_req;
         end if;
 
@@ -2267,7 +2267,7 @@ end process fsm_fwd_out;
 -- FSM: Bridge from AXI slave to L2 cache frontend input
 -------------------------------------------------------------------------------
   fsm_axi : process (mosi, flush, ahbs_reg, axi_reg,
-                     cpu_req_ready_mesi, cpu_req_ready_dnv, flush_ready_mesi, flush_due,
+                     cpu_req_ready_mesi, cpu_req_ready_dnv, flush_ready_dnv, flush_due,
                      rd_rsp_valid_mesi, rd_rsp_data_line_mesi, rd_rsp_valid_dnv, rd_rsp_data_line_dnv, load_alloc_reg,
                      inv_fifo_full)
 
@@ -2327,7 +2327,7 @@ end process fsm_fwd_out;
     cpu_req_data_word    <= (others => '0');
     cpu_req_data_amo     <= (others => '0');
 
-    flush_valid_mesi <= '0';
+    flush_valid_dnv <= '0';
 
     rd_rsp_ready <= '0';
 
@@ -2377,11 +2377,11 @@ end process fsm_fwd_out;
         end if;
 
         if flush_due = '1' and xreg.lock = '0' then
-          flush_valid_mesi <= '1';
+          flush_valid_dnv <= '1';
 
           if valid_axi_req = '1' then
 
-            if flush_ready_mesi = '0' then
+            if flush_ready_dnv = '0' then
               reg.state := flush_req;
             else
               reg.state := mem_req;
@@ -2529,10 +2529,10 @@ end process fsm_fwd_out;
           if flush_due = '1' and xreg.lock = '0' and
             not (reg.hprot(0) = '0' and valid_axi_req = '1') then
 
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_axi_req = '1' then
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -2657,11 +2657,11 @@ end process fsm_fwd_out;
           if flush_due = '1' and xreg.lock = '0' and
             not (reg.hprot(0) = '0' and valid_axi_req = '1') then
 
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_axi_req = '1' then
 
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -2805,10 +2805,10 @@ end process fsm_fwd_out;
               elsif flush_due = '1' and xreg.lock = '0' and
                 not (reg.hprot(0) = '0' and valid_axi_req = '1') then
 
-                flush_valid_mesi <= '1';
+                flush_valid_dnv <= '1';
 
                 if valid_axi_req = '1' then
-                  if flush_ready_mesi = '0' then
+                  if flush_ready_dnv = '0' then
                     reg.state := flush_req;
                   else
                     reg.state := mem_req;
@@ -2891,10 +2891,10 @@ end process fsm_fwd_out;
               elsif flush_due = '1' and xreg.lock = '0' and
                 not (reg.hprot(0) = '0' and valid_axi_req = '1') then
 
-                flush_valid_mesi <= '1';
+                flush_valid_dnv <= '1';
 
                 if valid_axi_req = '1' then
-                  if flush_ready_mesi = '0' then
+                  if flush_ready_dnv = '0' then
                     reg.state := flush_req;
                   else
                     reg.state := mem_req;
@@ -2977,11 +2977,11 @@ end process fsm_fwd_out;
           end if;
 
           if flush_due = '1' and xreg.lock = '0' then
-            flush_valid_mesi <= '1';
+            flush_valid_dnv <= '1';
 
             if valid_axi_req = '1' then
 
-              if flush_ready_mesi = '0' then
+              if flush_ready_dnv = '0' then
                 reg.state := flush_req;
               else
                 reg.state := mem_req;
@@ -3041,9 +3041,9 @@ end process fsm_fwd_out;
       -- FLUSH REQUEST
       when flush_req =>
 
-        flush_valid_mesi <= '1';
+        flush_valid_dnv <= '1';
 
-        if flush_ready_mesi = '1' then
+        if flush_ready_dnv = '1' then
           reg.state := mem_req;
         end if;
 

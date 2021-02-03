@@ -60,6 +60,7 @@ public:
     sc_signal<l2_way_t> peek_reqs_i_dbg;
     sc_signal<l2_way_t> peek_reqs_i_flush_dbg;
     sc_signal<bool> peek_reqs_hit_fwd_dbg;
+    sc_signal<bool> drain_in_progress_dbg;
 
     sc_signal<reqs_buf_t> reqs_dbg[N_REQS];
     sc_signal<wb_t> wbs_dbg[N_WB];
@@ -68,6 +69,7 @@ public:
     sc_signal<dnv_state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
     sc_signal< sc_uint<3> > watch_dog;
+    sc_signal< sc_uint<32> > flush_line_dbg;
 #endif
 
     // Other signals
@@ -210,6 +212,7 @@ public:
     void reqs_peek_fwd(addr_breakdown_t addr_br);
 
     void self_invalidate();
+    void flush();
 
 
     // write buffer
@@ -241,6 +244,9 @@ private:
     sc_uint<WB_BITS> wb_evict;
     bool drain_in_progress;
     bool set_conflict;
+    bool do_ongoing_flush;
+    bool flush_complete;
+    int flush_line;
     
     l2_cpu_req_t cpu_req_conflict;
     bool evict_stall;

@@ -216,7 +216,6 @@ void l2_denovo::ctrl()
         bool do_flush = false;
         bool do_rsp = false;
         bool do_fwd = false;
-        bool do_ongoing_flush = false;
         bool do_cpu_req = false;
 		bool do_sync = false;
 
@@ -233,6 +232,9 @@ void l2_denovo::ctrl()
         l2_cpu_req_t cpu_req;
 
 #if (USE_WB)
+#ifdef L2_DEBUG
+        drain_in_progress_dbg.write(drain_in_progress);
+#endif
         if (drain_in_progress) drain_wb();
 #endif
 
@@ -248,22 +250,33 @@ void l2_denovo::ctrl()
 
             wait();
 
-			if (can_get_sync_in) {
+            if (can_get_sync_in) {
 				l2_sync.nb_get(is_sync);
 				do_sync = true;
             } else if (can_get_flush_in) {
 				l2_flush.nb_get(is_sync);
-				do_sync = true;
+                do_flush = true;
             } else if (can_get_rsp_in) {
                 get_rsp_in(rsp_in);
                 do_rsp = true;
-            } else if (can_get_fwd_in) {
+            }
+			else if (can_get_fwd_in) {
                 if (!fwd_stall) {
                     get_fwd_in(fwd_in);
                 } else {
                     fwd_in = fwd_in_stalled;
                 }
                 do_fwd = true;
+            } else if (do_ongoing_flush && !drain_in_progress) {
+                // if flush has not started, but drain has finished, flush
+                if (!flush_complete) flush();
+                else if (reqs_cnt == N_REQS)
+                {
+                    do_ongoing_flush = false;
+                    flush_done.write(1);
+                    wait();
+                    flush_done.write(0);
+                }
             } else if (can_get_req_in) { // assuming
                 wait();
 				if (!set_conflict) {
@@ -282,8 +295,10 @@ void l2_denovo::ctrl()
         drain_in_progress = true;
 
 	} else if (do_flush) {
-
-
+        drain_in_progress = true;
+        do_ongoing_flush = true;
+        flush_line = 0;
+        flush_complete = false;
 	} else if (do_rsp) {
 
 	    // if (ongoing_flush)
@@ -302,7 +317,6 @@ void l2_denovo::ctrl()
         case RSP_O:
         {
             // if done, don't affect current state
-            // // however, if anything bad happens, wake up our lovely watchdog
             bool bad = false;
             for (int i = 0; i < WORDS_PER_LINE; i++) {
                 HLS_UNROLL_LOOP(ON, "watch dog");
@@ -584,9 +598,6 @@ void l2_denovo::ctrl()
                 break;
             }
         }
-	} else if (do_ongoing_flush) {
-		self_invalidate();
-
 	} else if (do_cpu_req) { // assuming HPROT cacheable
 
 	    addr_breakdown_t addr_br;
@@ -1129,6 +1140,8 @@ inline void l2_denovo::reset_io()
     peek_reqs_i_flush_dbg.write(0);
     peek_reqs_hit_fwd_dbg.write(0);
     watch_dog.write(0);
+    flush_line_dbg.write(0);
+    drain_in_progress_dbg.write(0);
 
     // for (int i = 0; i < N_REQS; i++) {
     // 	REQS_DBGPUT;
@@ -1166,6 +1179,7 @@ inline void l2_denovo::reset_io()
     reqs_atomic_i = 0;
     ongoing_flush = false;
     drain_in_progress = false;
+    do_ongoing_flush = false;
     wb_evict = 0;
     flush_set = 0;
     flush_way = 0;
@@ -1637,4 +1651,84 @@ void l2_denovo::self_invalidate()
         }
         current_valid_state = 1;
     }
+}
+
+void l2_denovo::flush()
+{
+    sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
+    bool success = false;
+    line_t line_data;
+    hprot_t line_hprot;
+    l2_tag_t line_tag;
+    {
+        HLS_DEFINE_PROTOCOL("flush read");
+        wait();
+        line_data = lines.port2[0][flush_line];
+        line_hprot = hprots.port2[0][flush_line];
+        line_tag = tags.port2[0][flush_line];
+        line_state = states.port2[0][flush_line];
+        wait();
+    }
+
+    line_addr_t flush_addr = (line_tag << L2_SET_BITS) | (flush_line >> L2_WAY_BITS);
+    word_mask_t flush_owned = 0;
+    addr_breakdown_t flush_addr_br;
+
+    flush_addr_br.breakdown(flush_addr << OFFSET_BITS);
+
+    for (unsigned int i = 0; i < WORDS_PER_LINE; i++)
+    {
+        HLS_UNROLL_LOOP(ON, "flush");
+        if ((line_state >> (i * DNV_STABLE_STATE_BITS)) & ((1 << DNV_STABLE_STATE_BITS) - 1) == DNV_R)
+        {
+            flush_owned |= 1 << i;
+        }
+    }
+
+    if (flush_owned == 0) 
+    {
+        // do nothing
+        success = true;
+    }
+    else
+    {
+        // send req_wb
+        sc_uint<REQS_BITS> reqs_i;
+        for (unsigned int i = 0; i < N_REQS; ++i) {
+            HLS_UNROLL_LOOP(ON, "flush");
+
+            if (reqs[i].state == DNV_I){
+                reqs_i = i;
+            }
+            if (reqs[i].tag == line_tag && reqs[i].set == flush_line >> L2_WAY_BITS && reqs[i].state != DNV_I){
+                // found conflict, cannot dispatch WB
+                success = false;
+                return;
+            }
+        }
+        {
+            HLS_DEFINE_PROTOCOL("flush req");
+            send_req_out(REQ_WB, line_hprot, flush_addr, line_data, flush_owned);
+            fill_reqs(0, flush_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_data, flush_owned, reqs_i);
+            success = true;
+        }
+    }
+    
+
+    if (success) {
+        HLS_DEFINE_PROTOCOL("flush write");
+        wait();
+        states.port1[0][flush_line] = 0;
+        wait();
+        flush_line++;
+    }
+
+    if (flush_line == L2_LINES - 1)
+    {
+        current_valid_state = 1;
+        flush_complete = true;
+    }
+#ifdef L2_DEBUG
+    flush_line_dbg.write(flush_line);
+#endif
 }
