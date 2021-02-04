@@ -1,6 +1,3 @@
-include:
-  - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
-
 build:
   stage: build
   script:
@@ -18,6 +15,20 @@ build:
     - rm -rf xcelium/
     - make xmsim-compile soft-distclean soft sort-barec
     - echo "PASS"
+
+package:
+  stage: deploy
+  needs: [build]
+  script:
+    - cd /projects/spandex-gitlab
+    - cd /projects/spandex-gitlab/tech/
+    - zip -r virtex7.zip virtex7/
+    - cp -f /projects/spandex-gitlab/tech/virtex7.zip /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
+    - echo "PASS"
+  artifacts:
+    paths:
+      - /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
+    expire_in: 1 month
 
 test-systest:
   stage: test
@@ -90,24 +101,7 @@ test-sort-dcs:
     - cp xcelium/simout.txt test_outputs/test-sort-dcs.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
-
-
-
-package:
-  stage: deploy
-  needs: [build]
-  script:
-    - cd /projects/spandex-gitlab
-    - cd /projects/spandex-gitlab/tech/
-    - zip -r virtex7.zip virtex7/
-    - cp -f /projects/spandex-gitlab/tech/virtex7.zip /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
-    - echo "PASS"
-  artifacts:
-    paths:
-      - /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
-    expire_in: 1 month
   
-
 bistream:
   stage: deploy
   script:
