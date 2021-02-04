@@ -75,6 +75,11 @@
     HLS_DEFINE_PROTOCOL("l2-send-rsp-out-protocol")
     // bookmark_tmp |= BM_SEND_RSP_OUT;			
 
+#define SEND_FWD_OUT							\
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send fwd out.");   \
+    HLS_DEFINE_PROTOCOL("l2-send-fwd-out-protocol")
+    // bookmark_tmp |= BM_SEND_FWD_OUT;	
+
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.");   \
     HLS_DEFINE_PROTOCOL("l2-send-stats-protocol")

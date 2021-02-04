@@ -15,7 +15,7 @@ void l2_denovo::drain_wb()
             dispatch_wb(success, i);
             break;
         }
-        wait();
+        // wait();
 
     }
 
@@ -479,16 +479,21 @@ void l2_denovo::ctrl()
                             }
                         }
 
-                        if (nack_mask) {
-                            send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
-                        }
+                        {
+                            HLS_DEFINE_PROTOCOL("fwd_req_o_rsp_nack/ack");
+                            if (nack_mask) {
+                                send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
+                                wait();
+                            }
 
-                        if (ack_mask) {
-                            send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                            if (ack_mask) {
+                                send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                            }
                         }
                     }
                     else
                     {
+                        HLS_DEFINE_PROTOCOL("fwd_req_o_rsp_nack2");
                         send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
                     }
                     
@@ -511,16 +516,21 @@ void l2_denovo::ctrl()
                             }
                         }
 
-                        if (nack_mask) {
-                            send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
-                        }
+                        {
+                            HLS_DEFINE_PROTOCOL("fwd_req_v_rsp_nack/ack");
+                            if (nack_mask) {
+                                send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
+                                wait();
+                            }
 
-                        if (ack_mask) {
-                            send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], ack_mask);
+                            if (ack_mask) {
+                                send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, line_buf[way_hit], ack_mask);
+                            }
                         }
                     }
                     else
                     {
+                        HLS_DEFINE_PROTOCOL("fwd_req_v_rsp_nack");
                         send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
                     }
                     
@@ -540,6 +550,7 @@ void l2_denovo::ctrl()
                             }
                         }
                         if (rsp_mask) {
+                            HLS_DEFINE_PROTOCOL("fwd_rvk_o_send_rsp_rvk_o");
                             send_rsp_out(RSP_RVK_O, fwd_in.req_id, false, fwd_in.addr, line_buf[way_hit], rsp_mask);
                         }
 
@@ -587,13 +598,18 @@ void l2_denovo::ctrl()
                         }
                         lines.port1[0][base + way_hit] = line_buf[way_hit];
                         if (word_mask) {
+                            HLS_DEFINE_PROTOCOL("fwd_wtfwd_send_req_wt");
                             send_req_out(REQ_WT, 1, fwd_in.addr, fwd_in.line, word_mask);
                         }
                     }else{
                         // not found in the cache, send req_wt back to llc
+                        HLS_DEFINE_PROTOCOL("fwd_wtfwd_send_req_wt2");
                         send_req_out(REQ_WT, 1, fwd_in.addr, fwd_in.line, fwd_in.word_mask);
                     }
-                    send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
+                    {
+                        HLS_DEFINE_PROTOCOL("fwd_wtfwd_send_rsp_o");
+                        send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
+                    }
                 }
                 break;
                 default:
@@ -679,6 +695,7 @@ void l2_denovo::ctrl()
                 }
                 else
                 {
+                    HLS_DEFINE_PROTOCOL("send_req_amo");
                     fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_empty_i);
                     send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
 
@@ -722,15 +739,17 @@ void l2_denovo::ctrl()
 #ifdef L2_DEBUG
                             set_conflict_dbg.write(set_conflict);
 #endif
-                            wait();
+                            // wait();
                             continue;
                         }
 
 #endif
-                        HLS_DEFINE_PROTOCOL("spandex_dual_req");
-                        send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
-                        wait();
-                        fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        {
+                            HLS_DEFINE_PROTOCOL("spandex_dual_req");
+                            send_req_out(REQ_WB, hprot_buf[evict_way], line_addr_evict, line_buf[evict_way], word_mask);
+                            wait();
+                            fill_reqs(0, evict_addr_br, 0, 0, 0, DNV_RI, 0, 0, line_buf[evict_way], word_mask, reqs_empty_i);
+                        }
                     }
 
                     for (int i = 0; i < WORDS_PER_LINE; i ++)
@@ -765,15 +784,17 @@ void l2_denovo::ctrl()
                                         // touched_buf[way_write][addr_br.w_off] = false;
                                     }
 #else
-                                    HLS_DEFINE_PROTOCOL("req_wtfwd out");
-                                    if(cpu_req.use_owner_pred){
-                                        send_fwd_out(FWD_WTfwd, cpu_req.pred_cid, 1, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
-                                    }else{
-                                        send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                    {
+                                        HLS_DEFINE_PROTOCOL("cpu write dcs fwd/req out wtfwd");
+                                        if(cpu_req.use_owner_pred){
+                                            send_fwd_out(FWD_WTfwd, cpu_req.pred_cid, 1, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                        }else{
+                                            send_req_out(REQ_WTfwd, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off);
+                                        }
+                                        // wait();
+                                        state_buf[way_write][addr_br.w_off] = current_valid_state;
+                                        // touched_buf[way_write][addr_br.w_off] = false;
                                     }
-                                    wait();
-                                    state_buf[way_write][addr_br.w_off] = current_valid_state;
-                                    // touched_buf[way_write][addr_br.w_off] = false;
 #endif
 
                                 }
@@ -823,9 +844,11 @@ void l2_denovo::ctrl()
                 if (word_mask) // some words are present but not whole line. send reqv
                 {
                     if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                        HLS_DEFINE_PROTOCOL("cpu read fwd req v");
                         send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, word_mask);
 				        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
                     }else{
+                        HLS_DEFINE_PROTOCOL("cpu read req v");
                         send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, word_mask);
 				        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[way_hit], ~word_mask, reqs_empty_i);
                     }
@@ -840,9 +863,11 @@ void l2_denovo::ctrl()
             else if (empty_way_found) {
 
                 if(cpu_req.dcs_en && cpu_req.use_owner_pred){
+                    HLS_DEFINE_PROTOCOL("cpu read empty way fwd req v");
                     send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
 				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
                 }else{
+                    HLS_DEFINE_PROTOCOL("cpu read empty way req v");
 				    send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
 				    fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
                 }
@@ -1257,9 +1282,9 @@ void l2_denovo::send_inval(line_addr_t addr_inval)
     l2_inval.put(addr_inval);
 }
 
-void l2_denovo::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line, word_mask_t word_mask)
+inline void l2_denovo::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_addr, line_t line, word_mask_t word_mask)
 {
-    SEND_REQ_OUT;
+    // SEND_REQ_OUT;
 
     l2_req_out_t req_out;
 
@@ -1274,7 +1299,7 @@ void l2_denovo::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line_
     l2_req_out.nb_put(req_out);
 }
 
-void l2_denovo::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line, word_mask_t word_mask)
+inline void l2_denovo::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, line_addr_t line_addr, line_t line, word_mask_t word_mask)
 {
     // SEND_RSP_OUT;
 
@@ -1292,7 +1317,7 @@ void l2_denovo::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req, 
     l2_rsp_out.nb_put(rsp_out);
 }
 
-void l2_denovo::send_fwd_out(coh_msg_t coh_msg, cache_id_t dst_id, bool to_dst, line_addr_t line_addr, line_t line, word_mask_t word_mask)
+inline void l2_denovo::send_fwd_out(coh_msg_t coh_msg, cache_id_t dst_id, bool to_dst, line_addr_t line_addr, line_t line, word_mask_t word_mask)
 {
     // SEND_FWD_OUT;
 
