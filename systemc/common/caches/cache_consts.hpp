@@ -103,9 +103,9 @@
 
 
 // write buffer
-#define N_WB 8
-#define WB_BITS 3
-#define WB_BITS_P1 4
+#define N_WB 4
+#define WB_BITS 2
+#define WB_BITS_P1 3
 // Ongoing transaction buffers
 #define N_REQS		4	// affects REQS_BITS
 #define REQS_BITS	2	// depends on N_REQS
