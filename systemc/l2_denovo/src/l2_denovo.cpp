@@ -318,13 +318,13 @@ void l2_denovo::ctrl()
 	    switch (rsp_in.coh_msg) {
         case RSP_O:
         {
+#ifdef L2_DEBUG
             // if done, don't affect current state
             bool bad = false;
             for (int i = 0; i < WORDS_PER_LINE; i++) {
                 HLS_UNROLL_LOOP(ON, "watch dog");
                 if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
             }
-#ifdef L2_DEBUG
             if (bad) watch_dog.write(WDOG_1);
 #endif
 
@@ -333,6 +333,38 @@ void l2_denovo::ctrl()
             if (reqs[reqs_hit_i].word_mask == 0) {
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
+            }
+
+        }
+        break;
+        case RSP_Odata:
+        {
+#ifdef L2_DEBUG
+            // if done, don't affect current state
+            bool bad = false;
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                HLS_UNROLL_LOOP(ON, "watch dog");
+                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
+            }
+            if (bad) watch_dog.write(WDOG_1);
+#endif
+
+            for (int i = 0; i < WORDS_PER_LINE; i++) {
+                HLS_UNROLL_LOOP(ON, "rsp_v");
+                if (rsp_in.word_mask & (1 << i)) {
+                    // found a valid bit in response word mask
+                    reqs[reqs_hit_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                }
+            }
+
+            reqs[reqs_hit_i].word_mask &= ~(rsp_in.word_mask);
+
+            if (reqs[reqs_hit_i].word_mask == 0) {
+                HLS_DEFINE_PROTOCOL("denovo-resp");
+                reqs[reqs_hit_i].state = DNV_I;
+                reqs_cnt++;
+                send_rd_rsp(reqs[reqs_hit_i].line);
+                put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_R, reqs_hit_i);
             }
 
         }
@@ -386,15 +418,29 @@ void l2_denovo::ctrl()
 		
         case RSP_NACK :
         {
-            if(reqs[reqs_hit_i].state == DNV_IV_DCS){
-                HLS_DEFINE_PROTOCOL("send reqV miss pred");
-                send_req_out(REQ_V, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
-                reqs[reqs_hit_i].state = DNV_IV;
-            }else{
-                reqs[reqs_hit_i].retry++;
+            switch (reqs[reqs_hit_i].state)
+            {
+                case DNV_IV_DCS:
                 {
-                    HLS_DEFINE_PROTOCOL("send retry");
-                    send_req_out((reqs[reqs_hit_i].retry < MAX_RETRY) ? REQ_V : REQ_Odata, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                    HLS_DEFINE_PROTOCOL("send reqV miss pred");
+                    send_req_out(REQ_V, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                    reqs[reqs_hit_i].state = DNV_IV;
+                }
+                break;
+                case DNV_IV:
+                {
+                    reqs[reqs_hit_i].retry++;
+                    {
+                        HLS_DEFINE_PROTOCOL("send retry");
+                        coh_msg_t retry_msg;
+                        if (reqs[reqs_hit_i].retry < MAX_RETRY) {
+                            retry_msg = REQ_V;
+                        } else {
+                            retry_msg = REQ_Odata;
+                            reqs[reqs_hit_i].state = DNV_XR;
+                        }
+                        send_req_out(retry_msg, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                    }
                 }
             }
         }
@@ -423,6 +469,22 @@ void l2_denovo::ctrl()
             bool success = false;
             switch (fwd_in.coh_msg)
             {
+                case FWD_REQ_O:
+                {
+                    word_mask_t ack_mask = 0;
+                    for (int i = 0; i < WORDS_PER_LINE; i++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "1");
+                        if ((fwd_in.word_mask & (1 << i)) && reqs[reqs_fwd_stall_i].state == DNV_RI) { // if reqo and we have this word in registered
+                            ack_mask |= 1 << i;
+                        }
+                    }
+                    {
+                        HLS_DEFINE_PROTOCOL("rsp out");
+                        send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
+                    }
+
+                }
                 case FWD_WB_ACK:
                 {
                     if (reqs[reqs_fwd_stall_i].state == DNV_RI)
@@ -461,7 +523,6 @@ void l2_denovo::ctrl()
             switch (fwd_in.coh_msg) {
                 case FWD_REQ_O:
                 {
-                    word_mask_t nack_mask = 0;
                     word_mask_t ack_mask = 0;
                     // line exists
                     if (tag_hit) {
@@ -474,27 +535,11 @@ void l2_denovo::ctrl()
                                 // touched_buf[way_hit][i] = false; // enable flush on next sync
                                 ack_mask |= 1 << i;
                             }
-                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_R) { // if reqo and we do not have this word in registered
-                                nack_mask |= 1 << i;
-                            }
                         }
-
-                        {
-                            HLS_DEFINE_PROTOCOL("fwd_req_o_rsp_nack/ack");
-                            if (nack_mask) {
-                                send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
-                                wait();
-                            }
-
-                            if (ack_mask) {
-                                send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
-                            }
+                        if (ack_mask) {
+                            HLS_DEFINE_PROTOCOL("fwd_req_v_rsp_ack");
+                            send_rsp_out(RSP_O, fwd_in.req_id, true, fwd_in.addr, 0, ack_mask);
                         }
-                    }
-                    else
-                    {
-                        HLS_DEFINE_PROTOCOL("fwd_req_o_rsp_nack2");
-                        send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, fwd_in.word_mask);
                     }
                     
                 }
