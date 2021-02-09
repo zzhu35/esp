@@ -1766,6 +1766,11 @@ void l2_denovo::flush()
     {
         // send req_wb
         sc_uint<REQS_BITS> reqs_i;
+        if (reqs_cnt == 0)
+        {
+            success = false;
+            return;
+        }
         for (unsigned int i = 0; i < N_REQS; ++i) {
             HLS_UNROLL_LOOP(ON, "flush");
 
