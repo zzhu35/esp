@@ -644,6 +644,7 @@ inline bool llc::send_fwd_with_owner_mask(mix_msg_t coh_msg, line_addr_t addr, c
         }
         for (int i = 0; i < fwd_coal_send_count; i++)
         {
+                HLS_DEFINE_PROTOCOL();
                 send_fwd_out(coh_msg, addr, req_id, fwd_coal_temp_dest[i], fwd_coal_word_mask[i]);
                 fwd_coal_word_mask[i] = 0;
                 wait();
@@ -1414,16 +1415,13 @@ void llc::ctrl()
 
                                     word_owner_mask = owners_buf[way] & req_in.word_mask;
                                     if (word_owner_mask) {
-                                            other_owner = send_fwd_with_owner_mask(FWD_REQ_V, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
-                                            if (other_owner) {
-                                                    //fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OV, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
-                                                    break;
-                                            }
+                                            // if owner exist
+                                            send_fwd_with_owner_mask(FWD_REQ_V, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                     }
-                                    // we are lucky, no other owner present
-                                    {
+                                    if (req_in.word_mask & ~owners_buf[way]) {
+                                            // if left over words exist
                                             HLS_DEFINE_PROTOCOL("send_rsp_974");
-                                            send_rsp_out(RSP_V, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
+                                            send_rsp_out(RSP_V, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask & ~owners_buf[way]);
                                     }
     		        }
                         break;

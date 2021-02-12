@@ -1,5 +1,7 @@
-build:
+build-virtex7:
   stage: build
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
@@ -16,25 +18,65 @@ build:
     - make xmsim-compile soft-distclean soft sort-barec
     - echo "PASS"
 
-package:
-  stage: deploy
-  needs: [build]
+build-virtexu:
+  stage: build
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
+    - echo "Running RTL build..."
+    - source /projects/sim-gitlab
+    - cd /projects/spandex-gitlab/
+    # - git checkout -- .
+    - git checkout $CI_COMMIT_BRANCH
+    - git pull origin $CI_COMMIT_BRANCH
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
+    - git diff --name-only HEAD~1 HEAD > diffout.txt
+    - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
+    - source /projects/sim-gitlab
+    - make sort-hls
+    - rm -rf xcelium/
+    - make xmsim-compile soft-distclean soft sort-barec
+    - echo "PASS"
+
+package-virtex7:
+  stage: deploy
+  only:
+    - $CI_DEFAULT_BRANCH
+  script:
+    - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab
     - cd /projects/spandex-gitlab/tech/
     - zip -r virtex7.zip virtex7/
-    - cp -f /projects/spandex-gitlab/tech/virtex7.zip /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
+    - cp -f /projects/spandex-gitlab/tech/virtex7.zip $WORK_DIR/virtex7.zip
     - echo "PASS"
   artifacts:
     paths:
-      - /builds/hou_FuG8/0/cs_adve/spandexesp/virtex7.zip
+      - $WORK_DIR/virtex7.zip
+    expire_in: 1 month
+
+package-virtexu:
+  stage: deploy
+  only:
+    - $CI_DEFAULT_BRANCH
+  script:
+    - export WORK_DIR=$(pwd)
+    - cd /projects/spandex-gitlab
+    - cd /projects/spandex-gitlab/tech/
+    - zip -r virtexu.zip virtexu/
+    - cp -f /projects/spandex-gitlab/tech/virtexu.zip $WORK_DIR/virtexu.zip
+    - echo "PASS"
+  artifacts:
+    paths:
+      - $WORK_DIR/virtexu.zip
     expire_in: 1 month
 
 test-systest:
   stage: test
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - make soft
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - source /projects/sim-gitlab
     - rm -rf xcelium/
     - echo "Running simulation..."
@@ -45,9 +87,11 @@ test-systest:
 
 test-sort-none:
   stage: test
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
     - rm -rf xcelium/
@@ -59,9 +103,11 @@ test-sort-none:
 
 test-sort-dma:
   stage: test
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-dma.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
     - rm -rf xcelium/
@@ -74,9 +120,11 @@ test-sort-dma:
 
 test-sort-full:
   stage: test
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
     - rm -rf xcelium/
@@ -89,9 +137,11 @@ test-sort-full:
 
 test-sort-dcs:
   stage: test
+  only:
+    - $CI_DEFAULT_BRANCH
   script:
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync-dcs.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
     - make sort-barec
     - rm -rf xcelium/
@@ -102,14 +152,30 @@ test-sort-dcs:
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
   
-bistream:
+bistream-virtex7:
   stage: deploy
   script:
-    # - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
-    # - source /projects/sim-gitlab
-    # - yes | make vivado-syn
+    - export WORK_DIR=$(pwd)
+    - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
+    - source /projects/sim-gitlab
+    - yes | make vivado-syn
+    - cp -f /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/xilinx-vc707-xc7vx485t.runs/impl_1/top.bit $WORK_DIR/virtex7.bit
     - echo "PASS"
-  # artifacts:
-  #   paths:
-  #     - /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/esp-xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
-  #   expire_in: 1 month
+  artifacts:
+    paths:
+      - $WORK_DIR/virtex7.bit
+    expire_in: 1 month
+
+bistream-virtexu:
+  stage: deploy
+  script:
+    - export WORK_DIR=$(pwd)
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
+    - source /projects/sim-gitlab
+    - yes | make vivado-syn
+    - cp -f /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p/vivado/esp-xilinx-vcu118-xcvu9p.runs/impl_1/top.bit $WORK_DIR/virtexu.bit
+    - echo "PASS"
+  artifacts:
+    paths:
+      - $WORK_DIR/virtexu.bit
+    expire_in: 1 month
