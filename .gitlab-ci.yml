@@ -1,7 +1,7 @@
 build-virtex7:
   stage: build
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
@@ -21,7 +21,7 @@ build-virtex7:
 build-virtexu:
   stage: build
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
@@ -41,7 +41,7 @@ build-virtexu:
 package-virtex7:
   stage: deploy
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab
@@ -57,7 +57,7 @@ package-virtex7:
 package-virtexu:
   stage: deploy
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab
@@ -73,7 +73,7 @@ package-virtexu:
 test-systest:
   stage: test
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - make soft
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
@@ -88,7 +88,7 @@ test-systest:
 test-sort-none:
   stage: test
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
@@ -104,7 +104,7 @@ test-sort-none:
 test-sort-dma:
   stage: test
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
@@ -121,7 +121,7 @@ test-sort-dma:
 test-sort-full:
   stage: test
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
@@ -138,7 +138,7 @@ test-sort-full:
 test-sort-dcs:
   stage: test
   only:
-    - $CI_DEFAULT_BRANCH
+    - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
@@ -154,6 +154,8 @@ test-sort-dcs:
   
 bistream-virtex7:
   stage: deploy
+  only:
+    - integration
   script:
     - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
@@ -168,6 +170,8 @@ bistream-virtex7:
 
 bistream-virtexu:
   stage: deploy
+  only:
+    - integration
   script:
     - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
