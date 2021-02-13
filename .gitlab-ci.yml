@@ -167,15 +167,15 @@ bistream-virtex7:
   only:
     - integration
   script:
-    - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - source /projects/sim-gitlab
     - yes | make vivado-syn
-    - cp -f /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/xilinx-vc707-xc7vx485t.runs/impl_1/top.bit $WORK_DIR/virtex7.bit
+    - cd -
+    - zip virtex7-bit.zip /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
     - echo "PASS"
   artifacts:
     paths:
-      - $WORK_DIR/virtex7.bit
+      - virtex7-bit.zip
     expire_in: 1 month
 
 bistream-virtexu:
@@ -183,13 +183,13 @@ bistream-virtexu:
   only:
     - integration
   script:
-    - export WORK_DIR=$(pwd)
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - source /projects/sim-gitlab
     - yes | make vivado-syn
-    - cp -f /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p/vivado/esp-xilinx-vcu118-xcvu9p.runs/impl_1/top.bit $WORK_DIR/virtexu.bit
+    - cd -
+    - zip virtexup-bit.zip /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p/vivado/esp-xilinx-vcu118-xcvu9p.runs/impl_1/top.bit
     - echo "PASS"
   artifacts:
     paths:
-      - $WORK_DIR/virtexu.bit
+      - virtexup-bit.zip
     expire_in: 1 month
