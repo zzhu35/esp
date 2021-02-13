@@ -1,4 +1,5 @@
 stages:
+  - pre-build
   - build
   - package
   - test-systest
@@ -8,6 +9,16 @@ stages:
   - test-sort-dcs
   - deploy
 
+pre-build:
+  stage: pre-build
+  only:
+  - integration
+  script:
+  - cd /projects/spandex-gitlab/
+  - git checkout $CI_COMMIT_BRANCH
+  - git pull origin $CI_COMMIT_BRANCH
+  - echo "PASS"
+
 build-virtex7:
   stage: build
   only:
@@ -15,9 +26,6 @@ build-virtex7:
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/
-    - git checkout $CI_COMMIT_BRANCH
-    - git pull origin $CI_COMMIT_BRANCH
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - git diff --name-only HEAD~1 HEAD > diffout.txt
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
@@ -30,9 +38,6 @@ build-virtexu:
   script:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/
-    - git checkout $CI_COMMIT_BRANCH
-    - git pull origin $CI_COMMIT_BRANCH
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - git diff --name-only HEAD~1 HEAD > diffout.txt
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
@@ -45,9 +50,6 @@ build-soft:
   script:
     - echo "Running Software build..."
     - source /projects/sim-gitlab
-    - cd /projects/spandex-gitlab/
-    - git checkout $CI_COMMIT_BRANCH
-    - git pull origin $CI_COMMIT_BRANCH
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
 
     - make soft
