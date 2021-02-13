@@ -31,7 +31,7 @@ build-virtex7:
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
     - echo "PASS"
 
-build-virtexu:
+build-virtexup:
   stage: build
   only:
     - integration
@@ -84,16 +84,16 @@ package-virtex7:
       - virtex7.zip
     expire_in: 1 month
 
-package-virtexu:
+package-virtexup:
   stage: package
   only:
     - integration
   script:
-    - zip -r virtexu.zip /projects/spandex-gitlab/tech/virtexu/
+    - zip -r virtexup.zip /projects/spandex-gitlab/tech/virtexup/
     - echo "PASS"
   artifacts:
     paths:
-      - virtexu.zip
+      - virtexup.zip
     expire_in: 1 month
 
 test-systest:
