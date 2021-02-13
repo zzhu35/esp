@@ -1418,7 +1418,6 @@ void llc::ctrl()
                                             // if owner exist
                                             send_fwd_with_owner_mask(FWD_REQ_V, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                     }
-                                    
                                     if (req_in.word_mask & ~owners_buf[way]) {
                                             // if left over words exist
                                             HLS_DEFINE_PROTOCOL("send_rsp_974");

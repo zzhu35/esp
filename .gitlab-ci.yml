@@ -1,3 +1,13 @@
+stages:
+  - build
+  - package
+  - test-systest
+  - test-sort-none
+  - test-sort-dma
+  - test-sort-full
+  - test-sort-dcs
+  - deploy
+
 build-virtex7:
   stage: build
   only:
@@ -6,16 +16,11 @@ build-virtex7:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/
-    # - git checkout -- .
     - git checkout $CI_COMMIT_BRANCH
     - git pull origin $CI_COMMIT_BRANCH
     - cd /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t
     - git diff --name-only HEAD~1 HEAD > diffout.txt
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
-    - source /projects/sim-gitlab
-    - make sort-hls
-    - rm -rf xcelium/
-    - make xmsim-compile soft-distclean soft sort-barec
     - echo "PASS"
 
 build-virtexu:
@@ -26,20 +31,47 @@ build-virtexu:
     - echo "Running RTL build..."
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/
-    # - git checkout -- .
     - git checkout $CI_COMMIT_BRANCH
     - git pull origin $CI_COMMIT_BRANCH
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - git diff --name-only HEAD~1 HEAD > diffout.txt
     - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
+    - echo "PASS"
+
+build-soft:
+  stage: build
+  only:
+    - integration
+  script:
+    - echo "Running Software build..."
     - source /projects/sim-gitlab
-    - make sort-hls
-    - rm -rf xcelium/
-    - make xmsim-compile soft-distclean soft sort-barec
+    - cd /projects/spandex-gitlab/
+    - git checkout $CI_COMMIT_BRANCH
+    - git pull origin $CI_COMMIT_BRANCH
+    - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
+
+    - make soft
+    
+    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-dma.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - make sort-barec
+    - cp barec/sort.exe barec/sort-dma.exe
+
+    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - make sort-barec
+    - cp barec/sort.exe barec/sort-full.exe
+
+    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync-dcs.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - make sort-barec
+    - cp barec/sort.exe barec/sort-dcs.exe
+
+    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - make sort-barec
+    - cp barec/sort.exe barec/sort-none.exe
+
     - echo "PASS"
 
 package-virtex7:
-  stage: deploy
+  stage: package
   only:
     - integration
   script:
@@ -55,7 +87,7 @@ package-virtex7:
     expire_in: 1 month
 
 package-virtexu:
-  stage: deploy
+  stage: package
   only:
     - integration
   script:
@@ -71,7 +103,7 @@ package-virtexu:
     expire_in: 1 month
 
 test-systest:
-  stage: test
+  stage: test-systest
   only:
     - integration
   script:
@@ -86,68 +118,57 @@ test-systest:
     - echo "PASS"
 
 test-sort-none:
-  stage: test
+  stage: test-sort-none
   only:
     - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
-    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
-    - make sort-barec
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 16000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
+    - printf "run 16000us\nexit\n" | TEST_PROGRAM=barec/sort-none.exe make xmsim
     - cp xcelium/simout.txt test_outputs/test-sort-none.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
 test-sort-dma:
-  stage: test
+  stage: test-sort-dma
   only:
     - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
-    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-dma.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
-    - make sort-barec
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
-    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-dma.exe make xmsim
     - cp xcelium/simout.txt test_outputs/test-sort-dma.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
 test-sort-full:
-  stage: test
+  stage: test-sort-full
   only:
     - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
-    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
-    - make sort-barec
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
-    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-full.exe make xmsim
     - cp xcelium/simout.txt test_outputs/test-sort-full.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
 test-sort-dcs:
-  stage: test
+  stage: test-sort-dcs
   only:
     - integration
   script:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
-    - cp /projects/spandex-gitlab/third-party/spandex/tests/sort-sync-dcs.c /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
-    - make sort-barec
     - rm -rf xcelium/
     - echo "Running simulation..."
-    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort.exe make xmsim
-    - git checkout -- /projects/spandex-gitlab/soft/leon3/drivers/sort/barec/sort.c
+    - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-dcs.exe make xmsim
     - cp xcelium/simout.txt test_outputs/test-sort-dcs.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
