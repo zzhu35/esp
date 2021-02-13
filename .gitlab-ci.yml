@@ -40,7 +40,7 @@ build-virtexu:
     - source /projects/sim-gitlab
     - cd /projects/spandex-gitlab/socs/xilinx-vcu118-xcvu9p
     - git diff --name-only HEAD~1 HEAD > diffout.txt
-    - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls; fi;
+    - if grep "systemc" diffout.txt; then make l2-distclean l2-hls l2_denovo-distclean l2_denovo-hls llc-distclean llc-hls sort-distclean sort-hls; fi;
     - echo "PASS"
 
 build-soft:
@@ -77,15 +77,11 @@ package-virtex7:
   only:
     - integration
   script:
-    - export WORK_DIR=$(pwd)
-    - cd /projects/spandex-gitlab
-    - cd /projects/spandex-gitlab/tech/
-    - zip -r virtex7.zip virtex7/
-    - cp -f /projects/spandex-gitlab/tech/virtex7.zip $WORK_DIR/virtex7.zip
+    - zip -r virtex7.zip /projects/spandex-gitlab/tech/virtex7/
     - echo "PASS"
   artifacts:
     paths:
-      - $WORK_DIR/virtex7.zip
+      - virtex7.zip
     expire_in: 1 month
 
 package-virtexu:
@@ -93,15 +89,11 @@ package-virtexu:
   only:
     - integration
   script:
-    - export WORK_DIR=$(pwd)
-    - cd /projects/spandex-gitlab
-    - cd /projects/spandex-gitlab/tech/
-    - zip -r virtexu.zip virtexu/
-    - cp -f /projects/spandex-gitlab/tech/virtexu.zip $WORK_DIR/virtexu.zip
+    - zip -r virtexu.zip /projects/spandex-gitlab/tech/virtexu/
     - echo "PASS"
   artifacts:
     paths:
-      - $WORK_DIR/virtexu.zip
+      - virtexu.zip
     expire_in: 1 month
 
 test-systest:
