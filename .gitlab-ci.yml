@@ -107,7 +107,6 @@ test-systest:
     - rm -rf xcelium/
     - echo "Running simulation..."
     - printf "run 2000us\nexit\n" | make xmsim
-    - cp xcelium/simout.txt test_outputs/test-systest.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
@@ -121,7 +120,6 @@ test-sort-none:
     - rm -rf xcelium/
     - echo "Running simulation..."
     - printf "run 16000us\nexit\n" | TEST_PROGRAM=barec/sort-none.exe make xmsim
-    - cp xcelium/simout.txt test_outputs/test-sort-none.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
@@ -135,7 +133,6 @@ test-sort-dma:
     - rm -rf xcelium/
     - echo "Running simulation..."
     - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-dma.exe make xmsim
-    - cp xcelium/simout.txt test_outputs/test-sort-dma.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
@@ -149,7 +146,6 @@ test-sort-full:
     - rm -rf xcelium/
     - echo "Running simulation..."
     - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-full.exe make xmsim
-    - cp xcelium/simout.txt test_outputs/test-sort-full.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
 
@@ -163,7 +159,6 @@ test-sort-dcs:
     - rm -rf xcelium/
     - echo "Running simulation..."
     - printf "run 12000us\nexit\n" | TEST_PROGRAM=barec/sort-dcs.exe make xmsim
-    - cp xcelium/simout.txt test_outputs/test-sort-dcs.txt
     - grep "PASS" xcelium/xmsim.log
     - echo "PASS"
   
