@@ -6,7 +6,7 @@
 
 #define USE_WB 1
 
-
+ 
 #include "cache_utils.hpp"
 #include "l2_denovo_directives.hpp"
 
