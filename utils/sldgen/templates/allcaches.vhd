@@ -75,6 +75,8 @@ package allcaches is
       l2_cpu_req_data_addr      : in  std_logic_vector(ADDR_BITS - 1 downto 0);
       l2_cpu_req_data_word      : in  std_logic_vector(BITS_PER_WORD - 1 downto 0);
       l2_cpu_req_data_amo       : in  std_logic_vector(5 downto 0);
+      l2_cpu_req_data_aq        : in  std_ulogic;
+      l2_cpu_req_data_rl        : in  std_ulogic;
       l2_cpu_req_data_dcs_en    : in  std_ulogic;
       l2_cpu_req_data_use_owner_pred : in  std_ulogic;
       l2_cpu_req_data_dcs       : in  std_logic_vector(DCS_BITS - 1 downto 0);

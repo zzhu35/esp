@@ -672,6 +672,10 @@ void l2_denovo::ctrl()
 	    reqs_peek_req(addr_br.set, reqs_empty_i, reqs_empty_i2);
         base = addr_br.set << L2_WAY_BITS;
 
+        if(cpu_req.aq){
+            cpu_req.aq = false;
+            self_invalidate();
+        }
 
         if (set_conflict) {
 		SET_CONFLICT;
@@ -1008,7 +1012,11 @@ void l2_denovo::ctrl()
 #if (USE_WB)
                 }
 #endif
-            }      
+            }
+            if(cpu_req.rl){
+                cpu_req.rl = false;
+                drain_in_progress = true;
+            }
 	    }
 	}
     if ((do_cpu_req && !set_conflict) || (do_fwd && !fwd_stall) || do_rsp){

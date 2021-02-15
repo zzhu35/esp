@@ -699,6 +699,8 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_cpu_req_data_aq        => '0',
+      l2_cpu_req_data_rl        => '0',
       l2_flush_ready            => flush_ready_dnv,
       l2_flush_valid            => flush_valid_dnv,
       l2_flush_data             => flush_data_dnv,

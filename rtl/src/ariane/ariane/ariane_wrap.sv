@@ -622,35 +622,35 @@ module ariane_wrap
        ) dram();
 
 
-  //  axi_riscv_lrsc_wrap
-  //    #(
-  //      .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
-  //      .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
-  //      .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
-  //      .AXI_USER_WIDTH ( AXI_USER_WIDTH   )
-  //      ) i_axi_riscv_lrsc
-  //      (
-	// .clk_i  ( clk          ),
-	// .rst_ni ( rstn         ),
-	// .slv    ( master[DRAM] ),
-	// .mst    ( dram         )
-	// );
-
-   axi_riscv_atomics_wrap
+   axi_riscv_lrsc_wrap
      #(
        .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
        .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
        .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
-       .AXI_USER_WIDTH ( AXI_USER_WIDTH   ),
-       .AXI_MAX_WRITE_TXNS ( 1  ),
-       .RISCV_WORD_WIDTH   ( 64 )
-       ) i_axi_riscv_atomics
+       .AXI_USER_WIDTH ( AXI_USER_WIDTH   )
+       ) i_axi_riscv_lrsc
        (
 	.clk_i  ( clk          ),
 	.rst_ni ( rstn         ),
 	.slv    ( master[DRAM] ),
 	.mst    ( dram         )
 	);
+
+  //  axi_riscv_atomics_wrap
+  //    #(
+  //      .AXI_ADDR_WIDTH ( AXI_ADDR_WIDTH   ),
+  //      .AXI_DATA_WIDTH ( AXI_DATA_WIDTH   ),
+  //      .AXI_ID_WIDTH   ( AXI_ID_WIDTH_SLV ),
+  //      .AXI_USER_WIDTH ( AXI_USER_WIDTH   ),
+  //      .AXI_MAX_WRITE_TXNS ( 1  ),
+  //      .RISCV_WORD_WIDTH   ( 64 )
+  //      ) i_axi_riscv_atomics
+  //      (
+	// .clk_i  ( clk          ),
+	// .rst_ni ( rstn         ),
+	// .slv    ( master[DRAM] ),
+	// .mst    ( dram         )
+	// );
 
    //    AW
    assign dram_aw_id = dram.aw_id;

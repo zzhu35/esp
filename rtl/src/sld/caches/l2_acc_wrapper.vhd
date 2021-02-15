@@ -634,6 +634,8 @@ begin  -- architecture rtl of l2_acc_wrapper
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => (others => '0'),
       l2_cpu_req_data_dcs_en    => cpu_req_data_dcs_en,
+      l2_cpu_req_data_aq        => '0',
+      l2_cpu_req_data_rl        => '0',
       l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
       l2_cpu_req_data_dcs       => cpu_req_data_dcs,
       l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,

@@ -1210,7 +1210,7 @@ begin
   with_cache_coherence : if CFG_L2_ENABLE /= 0 generate
 
     -- Memory access w/ cache coherence (write-back L2 cache)
-    l2_wrapper_1 : l2_wrapper_dual_cache
+    l2_wrapper_1 : l2_wrapper
       generic map (
         tech          => CFG_FABTECH,
         sets          => CFG_L2_SETS,

@@ -74,6 +74,8 @@ public:
     addr_t	addr;
     word_t	word;
 	amo_t	amo;
+	bool    aq;
+	bool    rl;
 	bool    dcs_en;
 	bool    use_owner_pred;
 	dcs_t   dcs;
@@ -87,6 +89,8 @@ public:
 	addr(0),
 	word(0),
 	amo(0),
+	aq(0),
+	rl(0),
 	dcs_en(0),
 	use_owner_pred(0),
 	dcs(0),
@@ -100,6 +104,8 @@ public:
 	addr    = x.addr;
 	word    = x.word;
 	amo     = x.amo;
+	aq      = x.aq;
+	rl      = x.rl;
 	dcs_en  = x.dcs_en;
 	use_owner_pred = x.use_owner_pred;
 	dcs     = x.dcs;
@@ -112,6 +118,9 @@ public:
 		x.hprot   == hprot	&&
 		x.addr    == addr	&&
 		x.word    == word   &&
+		x.amo     == amo    &&
+		x.aq      == aq     &&
+		x.rl      == rl     &&
 		x.dcs_en  == dcs_en    &&
 		x.use_owner_pred == use_owner_pred    &&
 		x.dcs     == dcs    &&
@@ -123,6 +132,9 @@ public:
 	sc_trace(tf, x.hprot,    name + ".hprot");
 	sc_trace(tf, x.addr,     name + ".addr");
 	sc_trace(tf, x.word,     name + ".word");
+	sc_trace(tf, x.amo,      name + ".amo");
+	sc_trace(tf, x.aq,       name + ".aq");
+	sc_trace(tf, x.rl,       name + ".rl");
 	sc_trace(tf, x.dcs_en,   name + ".dcs_en");
 	sc_trace(tf, x.use_owner_pred, name + ".use_owner_pred");
 	sc_trace(tf, x.dcs,      name + ".dcs");
@@ -135,6 +147,9 @@ public:
 	   << ", hprot: "   << x.hprot
 	   << ", addr: "    << x.addr
 	   << ", word: "    << x.word
+	   << ", amo: "     << x.amo
+	   << ", aq: "      << x.aq
+	   << ", rl: "      << x.rl
 	   << ", dcs_en: "  << x.dcs_en
 	   << ", use_owner_pred: " << x.use_owner_pred
 	   << ", dcs: "     << x.dcs

@@ -183,6 +183,8 @@ package gencaches is
       l2_cpu_req_data_addr : in addr_t;
       l2_cpu_req_data_word : in word_t;
       l2_cpu_req_data_amo : in amo_t;
+      l2_cpu_req_data_aq : in std_ulogic;
+      l2_cpu_req_data_rl : in std_ulogic;
       l2_cpu_req_data_dcs_en : in std_ulogic;
       l2_cpu_req_data_use_owner_pred : in std_ulogic;
       l2_cpu_req_data_dcs : in dcs_t;

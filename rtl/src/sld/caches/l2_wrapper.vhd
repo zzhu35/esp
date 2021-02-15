@@ -105,6 +105,8 @@ architecture rtl of l2_wrapper is
   signal cpu_req_data_addr      : addr_t;
   signal cpu_req_data_word      : word_t;
   signal cpu_req_data_amo       : amo_t;
+  signal cpu_req_data_aq        : std_ulogic;
+  signal cpu_req_data_rl        : std_ulogic;
   signal cpu_req_data_dcs_en    : std_ulogic;
   signal cpu_req_data_use_owner_pred : std_ulogic;
   signal cpu_req_data_dcs       : dcs_t;
@@ -230,6 +232,8 @@ architecture rtl of l2_wrapper is
     lock  : std_logic;
     cache : std_logic_vector (3 downto 0);
     atop  : std_logic_vector(5 downto 0);
+    aq    : std_logic;
+    rl    : std_logic;
   end record;
 
   constant AXI_REG_DEFAULT : axi_reg_type := (
@@ -237,7 +241,9 @@ architecture rtl of l2_wrapper is
     len      => (others => '0'),
     lock     => '0',
     cache    => (others => '0'),
-    atop     => (others => '0'));
+    atop     => (others => '0'),
+    aq       => '0',
+    rl       => '0');
 
   signal axi_reg      : axi_reg_type := AXI_REG_DEFAULT;
   signal axi_reg_next : axi_reg_type := AXI_REG_DEFAULT;
@@ -741,6 +747,8 @@ begin  -- architecture rtl of l2_wrapper
       l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
       l2_cpu_req_data_word      => cpu_req_data_word,
       l2_cpu_req_data_amo       => cpu_req_data_amo,
+      l2_cpu_req_data_aq        => cpu_req_data_aq,
+      l2_cpu_req_data_rl        => cpu_req_data_rl,
       l2_flush_ready            => flush_ready,
       l2_flush_valid            => flush_valid,
       l2_flush_data             => flush_data,
@@ -795,8 +803,8 @@ begin  -- architecture rtl of l2_wrapper
       l2_stats_valid            => stats_valid,
       l2_stats_data             => stats_data,
       l2_sync_ready             => open,
-      l2_sync_valid             => sync_l2,
-      l2_sync_data              => sync_l2
+      l2_sync_valid             => '0',
+      l2_sync_data              => '0'
     );
   end generate l2_denovo_gen;
 
@@ -2129,6 +2137,8 @@ end process fsm_fwd_out;
     cpu_req_data_pred_cid<= (others => '0');
     cpu_req_data_word    <= (others => '0');
     cpu_req_data_amo     <= (others => '0');
+    cpu_req_data_aq      <= '0';
+    cpu_req_data_rl      <= '0';
 
     flush_valid <= '0';
 
@@ -2158,6 +2168,8 @@ end process fsm_fwd_out;
             xreg.lock   := mosi.ar.lock;
             xreg.cache  := mosi.ar.cache;
             xreg.atop   := (others => '0');
+            xreg.aq     := '0';
+            xreg.rl     := '0';
 
             somi.ar.ready <= '1';
           else
@@ -2174,6 +2186,8 @@ end process fsm_fwd_out;
             xreg.lock   := mosi.aw.lock;
             xreg.cache  := mosi.aw.cache;
             xreg.atop   := mosi.aw.atop;
+            xreg.aq     := mosi.aw.user(9);
+            xreg.rl     := mosi.aw.user(8);
 
             somi.aw.ready <= '1';
           end if;
@@ -2270,6 +2284,8 @@ end process fsm_fwd_out;
                 xreg.lock   := mosi.ar.lock;
                 xreg.cache  := mosi.ar.cache;
                 xreg.atop   := (others => '0');
+                xreg.aq     := '0';
+                xreg.rl     := '0';
 
                 somi.ar.ready <= '1';
               else
@@ -2286,6 +2302,8 @@ end process fsm_fwd_out;
                 xreg.lock   := mosi.aw.lock;
                 xreg.cache  := mosi.aw.cache;
                 xreg.atop   := mosi.aw.atop;
+                xreg.aq     := mosi.aw.user(9);
+                xreg.rl     := mosi.aw.user(8);
 
                 somi.aw.ready <= '1';
               end if;
@@ -2384,6 +2402,8 @@ end process fsm_fwd_out;
                 xreg.lock   := mosi.ar.lock;
                 xreg.cache  := mosi.ar.cache;
                 xreg.atop   := (others => '0');
+                xreg.aq     := '0';
+                xreg.rl     := '0';
 
                 somi.ar.ready <= '1';
               else
@@ -2400,6 +2420,8 @@ end process fsm_fwd_out;
                 xreg.lock   := mosi.aw.lock;
                 xreg.cache  := mosi.aw.cache;
                 xreg.atop   := mosi.aw.atop;
+                xreg.aq     := mosi.aw.user(9);
+                xreg.rl     := mosi.aw.user(8);
 
                 somi.aw.ready <= '1';
               end if;
@@ -2491,6 +2513,8 @@ end process fsm_fwd_out;
           cpu_req_data_pred_cid<= reg.pred_cid;
           cpu_req_data_word    <= mosi.w.data;
           cpu_req_data_amo     <= xreg.atop;
+          cpu_req_data_aq      <= xreg.aq;
+          cpu_req_data_rl      <= xreg.rl;
           cpu_req_valid <= '1';
 
           if cpu_req_ready = '1' then
@@ -2511,6 +2535,8 @@ end process fsm_fwd_out;
                   xreg.lock   := mosi.ar.lock;
                   xreg.cache  := mosi.ar.cache;
                   xreg.atop   := (others => '0');
+                  xreg.aq     := '0';
+                  xreg.rl     := '0';
 
                   somi.ar.ready <= '1';
                 else
@@ -2527,6 +2553,8 @@ end process fsm_fwd_out;
                   xreg.lock   := mosi.aw.lock;
                   xreg.cache  := mosi.aw.cache;
                   xreg.atop   := mosi.aw.atop;
+                  xreg.aq     := mosi.aw.user(9);
+                  xreg.rl     := mosi.aw.user(8);
 
                   somi.aw.ready <= '1';
                 end if;
@@ -2606,6 +2634,8 @@ end process fsm_fwd_out;
               xreg.lock   := mosi.ar.lock;
               xreg.cache  := mosi.ar.cache;
               xreg.atop   := (others => '0');
+              xreg.aq     := '0';
+              xreg.rl     := '0';
 
               somi.ar.ready <= '1';
             else
@@ -2622,6 +2652,8 @@ end process fsm_fwd_out;
               xreg.lock   := mosi.aw.lock;
               xreg.cache  := mosi.aw.cache;
               xreg.atop   := mosi.aw.atop;
+              xreg.aq     := mosi.aw.user(9);
+              xreg.rl     := mosi.aw.user(8);
 
               somi.aw.ready <= '1';
             end if;
