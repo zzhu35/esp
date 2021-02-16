@@ -619,6 +619,8 @@ begin  -- architecture rtl of l2_wrapper_dual_cache
       l2_cpu_req_data_use_owner_pred => cpu_req_data_use_owner_pred,
       l2_cpu_req_data_dcs       => cpu_req_data_dcs,
       l2_cpu_req_data_pred_cid  => cpu_req_data_pred_cid,
+      l2_cpu_req_data_aq        => '0',
+      l2_cpu_req_data_rl        => '0',
       l2_flush_ready            => flush_ready_mesi,
       l2_flush_valid            => flush_valid_mesi,
       l2_flush_data             => flush_data_mesi,
