@@ -31,7 +31,7 @@
 #define SORT_LEN_MAX_REG	0x4c
 #define SORT_BATCH_MAX_REG	0x50
 
-static void sync()
+static void sync_aq()
 {
 	// return; // if MESI, uncomment this
 	volatile int tmp;
@@ -43,7 +43,20 @@ static void sync()
 	: "0" (d)
 	: "memory", "t0"
 	);
+}
 
+static void sync_rl()
+{
+	// return; // if MESI, uncomment this
+	volatile int tmp;
+	volatile int* d = (volatile int*)&tmp;
+
+	asm volatile (
+	" amoswap.w.rl t0, t0, (%1);"
+	: "=&r"(d)
+	: "0" (d)
+	: "memory", "t0"
+	);
 }
 
 static int validate_sorted(float *array, int len)
@@ -180,7 +193,7 @@ int main(int argc, char * argv[])
 			// Start accelerator
 			printf("  Start..\n");
 			iowrite32(dev, SPANDEX_REG, 3);
-			sync();
+			sync_rl();
 			iowrite32(dev, CMD_REG, CMD_MASK_START);
 
 			done = 0;
@@ -189,7 +202,7 @@ int main(int argc, char * argv[])
 				done &= STATUS_MASK_DONE;
 			}
 			iowrite32(dev, CMD_REG, 0x0);
-			sync();
+			sync_aq();
 			printf("  Done\n");
 
 			/* /\* Print output *\/ */
