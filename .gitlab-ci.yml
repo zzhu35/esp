@@ -171,7 +171,7 @@ bistream-virtex7:
     - source /projects/sim-gitlab
     - yes | make vivado-syn || true
     - cd -
-    - zip virtex7-bit.zip /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
+    - zip virtex7-bit.zip /projects/spandex-gitlab/socs/xilinx-vc707-xc7vx485t/vivado/esp-xilinx-vc707-xc7vx485t.runs/impl_1/top.bit
     - echo "PASS"
   artifacts:
     paths:
