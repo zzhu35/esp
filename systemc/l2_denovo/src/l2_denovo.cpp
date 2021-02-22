@@ -219,11 +219,9 @@ void l2_denovo::ctrl()
         bool do_rsp = false;
         bool do_fwd = false;
         bool do_cpu_req = false;
-		bool do_sync = false;
 
         bool can_get_rsp_in = false;
         bool can_get_req_in = false;
-        bool can_get_sync_in = false;
         bool can_get_fwd_in = false;
         bool can_get_flush_in = false;
 
@@ -247,15 +245,11 @@ void l2_denovo::ctrl()
             can_get_rsp_in = l2_rsp_in.nb_can_get();
             can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0 || ongoing_atomic); // if drain in progress, block all cpu requests
             can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
-            can_get_sync_in = l2_sync.nb_can_get();
             can_get_flush_in = l2_flush.nb_can_get();
 
             wait();
 
-            if (can_get_sync_in) {
-				l2_sync.nb_get(is_sync);
-				do_sync = true;
-            } else if (can_get_flush_in) {
+            if (can_get_flush_in) {
 				l2_flush.nb_get(is_sync);
                 do_flush = true;
             } else if (can_get_rsp_in) {
@@ -291,12 +285,7 @@ void l2_denovo::ctrl()
             }
         }
 
-	if (do_sync) {
-
-		self_invalidate();
-        drain_in_progress = true;
-
-	} else if (do_flush) {
+    if (do_flush) {
         drain_in_progress = true;
         do_ongoing_flush = true;
         flush_line = 0;
