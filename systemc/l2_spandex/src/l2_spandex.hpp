@@ -9,6 +9,7 @@
 
 #include EXP_MEM_INCLUDE_STRING(l2_spandex, tags, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_spandex, states, L2_SETS, L2_WAYS)
+#include EXP_MEM_INCLUDE_STRING(l2_spandex, types, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_spandex, lines, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_spandex, hprots, L2_SETS, L2_WAYS)
 #include EXP_MEM_INCLUDE_STRING(l2_spandex, evict_ways, L2_SETS, L2_WAYS)
@@ -84,26 +85,29 @@ public:
 
     // Local memory
     EXP_MEM_TYPE_STRING(l2_spandex, tags, L2_SETS, L2_WAYS)<l2_tag_t, L2_LINES> tags;
-    EXP_MEM_TYPE_STRING(l2_spandex, states, L2_SETS, L2_WAYS)<state_t, L2_LINES> states;
+    // use denovo stable state size, mesi transient state size
+    EXP_MEM_TYPE_STRING(l2_spandex, states, L2_SETS, L2_WAYS)<sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE>, L2_LINES> states;
     EXP_MEM_TYPE_STRING(l2_spandex, lines, L2_SETS, L2_WAYS)<line_t, L2_LINES> lines;
     EXP_MEM_TYPE_STRING(l2_spandex, hprots, L2_SETS, L2_WAYS)<hprot_t, L2_LINES> hprots;
     EXP_MEM_TYPE_STRING(l2_spandex, evict_ways, L2_SETS, L2_WAYS)<l2_way_t, L2_SETS> evict_ways;
+    // type = 0 -> mesi line
+    // type = 1 -> spandex line
+    EXP_MEM_TYPE_STRING(l2_spandex, types, L2_SETS, L2_WAYS)<bool, L2_LINES> types;
 
     // Local registers
     reqs_buf_t	 reqs[N_REQS];
 
     l2_tag_t	 tag_buf[L2_WAYS];
-    state_t	 state_buf[L2_WAYS];
+    dnv_state_t	 state_buf[L2_WAYS][WORDS_PER_LINE];
     hprot_t	 hprot_buf[L2_WAYS];
     line_t	 line_buf[L2_WAYS];
+    bool    type_buf[L2_WAYS];
     l2_way_t	 evict_way;
 
-#if (USE_SPANDEX == 1)
     coh_msg_t orig_spdx_msg;
     l2_fwd_in_t spdx_tu_fake_putack;
     bool spdx_tu_fake_putack_valid;
     bool spdx_tu_pending_inv_valid[N_REQS];
-#endif
 
     // Constructor
     SC_CTOR(l2_spandex)
@@ -159,6 +163,7 @@ public:
 	    states.clk(this->clk);
 	    hprots.clk(this->clk);
 	    lines.clk(this->clk);
+	    types.clk(this->clk);
 	    evict_ways.clk(this->clk);
 	}
 

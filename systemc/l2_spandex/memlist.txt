@@ -2,9 +2,11 @@ l2_spandex_tags_32sets_2ways 64 23 1w:0r 0w:2r
 l2_spandex_states_32sets_2ways 64 2 1w:0r 0w:2r
 l2_spandex_hprots_32sets_2ways 64 2 1w:0r 0w:2r
 l2_spandex_lines_32sets_2ways 64 128 1w:0r 0w:2r
+l2_spandex_types_32sets_2ways 64 1 1w:0r 0w:2r
 l2_spandex_evict_ways_32sets_2ways 32 1 1w:0r 0w:1r
 l2_spandex_tags_64sets_2ways 128 22 1w:0r 0w:2r
 l2_spandex_states_64sets_2ways 128 2 1w:0r 0w:2r
 l2_spandex_hprots_64sets_2ways 128 2 1w:0r 0w:2rW
 l2_spandex_lines_64sets_2ways 128 128 1w:0r 0w:2r
+l2_spandex_types_64sets_2ways 128 1 1w:0r 0w:2r
 l2_spandex_evict_ways_64sets_2ways 64 1 1w:0r 0w:1r

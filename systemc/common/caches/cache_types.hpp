@@ -927,6 +927,7 @@ public:
     line_t		line;
 	word_mask_t word_mask;
 	retry_t 	retry;
+	bool	type;
 
     reqs_buf_t() :
 	cpu_msg(0),
@@ -942,7 +943,8 @@ public:
 	invack_cnt(0),
 	word(0),
 	line(0),
-	word_mask(0)
+	word_mask(0),
+	type(0)
     {}
 
     inline reqs_buf_t& operator = (const reqs_buf_t& x) {
@@ -960,6 +962,7 @@ public:
 	word			= x.word;
 	line			= x.line;
 	word_mask = x.word_mask;
+	type = x.type;
 
 	return *this;
     }
@@ -977,7 +980,8 @@ public:
 		x.invack_cnt == invack_cnt	&&
 		x.word	     == word		&&
 		x.word_mask == word_mask &&
-		x.line	     == line);
+		x.line	     == line &&
+		x.type == type);
     }
     inline friend void sc_trace(sc_trace_file *tf, const reqs_buf_t& x, const std::string & name) {
 	sc_trace(tf, x.cpu_msg , name + ".cpu_msg ");

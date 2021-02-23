@@ -55,6 +55,7 @@ void l2_spandex::ctrl()
 
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
+			// SPANDEXTODO handle denovo style aq rl
             if (l2_flush.nb_can_get() && reqs_cnt == N_REQS) {
                 is_flush_all = get_flush();
                 ongoing_flush = true;
@@ -124,7 +125,7 @@ void l2_spandex::ctrl()
 	    reqs_lookup(line_br, reqs_hit_i);
 
 	    switch (rsp_in.coh_msg) {
-
+			// SPANDEXTODO handle denovo responses. see denovo.cpp
 	    case RSP_EDATA :
 			{
 			RSP_EDATA_ISD;
@@ -282,6 +283,7 @@ void l2_spandex::ctrl()
 	    }
 
 	} else if (do_fwd) {
+		// SPANDEXTODO handle denovo forward
 
 	    line_breakdown_t<l2_tag_t, l2_set_t> line_br;
 	    bool reqs_hit, tag_hit;
@@ -297,7 +299,6 @@ void l2_spandex::ctrl()
 
 	    fwd_stall = reqs_peek_fwd(line_br, reqs_hit_i, reqs_hit, fwd_in.coh_msg);
 
-#if (USE_SPANDEX)
 		if (!(tag_hit || reqs_hit)) {
 			switch (fwd_in.coh_msg) {
 
@@ -312,7 +313,6 @@ void l2_spandex::ctrl()
 			}
 
 		} else
-#endif
 		
 		if (fwd_in.coh_msg == FWD_PUTACK) {
 
@@ -373,17 +373,14 @@ void l2_spandex::ctrl()
 			FWD_STALL_BEGIN;
 
 			fwd_in_stalled = fwd_in;
-#if (USE_SPANDEX)
 			if (reqs[reqs_hit_i].state == ISD && fwd_in.coh_msg == FWD_INV) {
 				send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // handle silent eviction
 				fwd_stall = false;
 				spdx_tu_pending_inv_valid[reqs_hit_i] = true;
 			}
-#endif
 
 	    } else if (reqs_hit) {
-
-#if (USE_SPANDEX)
+			// SPANDEXTODO handle both fwd on both transient states
 			if (fwd_in.coh_msg == FWD_INV) {
 				switch (reqs[reqs_hit_i].state) {
 					case SMAD:
@@ -410,7 +407,6 @@ void l2_spandex::ctrl()
 
 				}
 			}
-#endif
 
 			switch (reqs[reqs_hit_i].state) {
 
@@ -421,11 +417,7 @@ void l2_spandex::ctrl()
 
 				if (fwd_in.coh_msg == FWD_INV) {
 					send_inval(fwd_in.addr);
-#if (USE_SPANDEX == 0)
-					send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-#else
 					send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0); // send incack to llc for spandex
-#endif
 
 				}
 				reqs[reqs_hit_i].state -= 4; // TODO remove hardcoding, also in other places
@@ -439,14 +431,6 @@ void l2_spandex::ctrl()
 
 				if (fwd_in.coh_msg == FWD_GETS) {
 
-	#if (USE_SPANDEX == 0)
-				for (int i = 0; i < 2; i++) {
-					// same rsp_s in spdx
-					send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
-						fwd_in.addr, reqs[reqs_hit_i].line);
-					wait();
-				}
-	#else
 				{
 					HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
 					send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to llc
@@ -454,26 +438,17 @@ void l2_spandex::ctrl()
 					send_rsp_out(RSP_S, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // same as rsp_s
 					wait();
 				}
-	#endif
 
 				reqs[reqs_hit_i].state = SIA;
 
 				} else {
 
 				if (fwd_in.coh_msg == FWD_GETM) {
-	#if (USE_SPANDEX == 0)
-					send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
-	#else
 					send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, reqs[reqs_hit_i].line); // to requestor
-	#endif
 				}
 				else
 				// non coherent dma
-	#if (USE_SPANDEX == 0)
-					send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // to LLC
-	#else
 					send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, reqs[reqs_hit_i].line); // rsp_rvk_o to LLC
-	#endif
 
 				reqs[reqs_hit_i].state = IIA;
 
@@ -488,11 +463,7 @@ void l2_spandex::ctrl()
 
 				if (fwd_in.coh_msg == FWD_INV) {
 
-	#if (USE_SPANDEX == 0)
-				send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-	#else
 				send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-	#endif
 
 				}
 				reqs[reqs_hit_i].state = IIA;
@@ -505,32 +476,20 @@ void l2_spandex::ctrl()
 			}
 
 	    } else {
-
+			// SPANDEXTODO handle both fwd on both stable states
 			switch (fwd_in.coh_msg) {
 
-	#if (USE_SPANDEX == 1)
 			case FWD_REQ_V:
 			{
-				if (state_buf[way_hit] == MODIFIED) send_rsp_out(RSP_V, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
+				if (state_buf[way_hit][0] == MODIFIED) send_rsp_out(RSP_V, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
 				else send_rsp_out(RSP_NACK, fwd_in.req_id, 1, fwd_in.addr, 0);
 			}
 			break;
-
-	#endif
-
 
 			case FWD_GETS :
 			{
 				// FWD_NOHIT_GETS;
 
-	#if (USE_SPANDEX == 0)
-				for (int i = 0; i < 2; i++) {
-				// same rsp_s in spdx
-				send_rsp_out(RSP_DATA, fwd_in.req_id, is_to_req[i],
-						fwd_in.addr, line_buf[way_hit]);
-				wait();
-				}
-	#else
 				{
 					HLS_DEFINE_PROTOCOL("spandex_dual_rsp");
 					send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]); // to llc
@@ -538,7 +497,6 @@ void l2_spandex::ctrl()
 					send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // same as rsp_s
 					wait();
 				}
-	#endif
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = SHARED;
 
 				break;
@@ -551,11 +509,7 @@ void l2_spandex::ctrl()
 				if (!ongoing_flush)
 				send_inval(fwd_in.addr);
 
-	#if (USE_SPANDEX == 0)
-				send_rsp_out(RSP_DATA, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]);
-	#else
 				send_rsp_out(orig_spdx_msg, fwd_in.req_id, 1, fwd_in.addr, line_buf[way_hit]); // to requestor
-	#endif
 
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -569,11 +523,7 @@ void l2_spandex::ctrl()
 				if (!ongoing_flush)
 				send_inval(fwd_in.addr);
 
-	#if (USE_SPANDEX == 0)
-				send_rsp_out(RSP_INVACK, fwd_in.req_id, 1, fwd_in.addr, 0);
-	#else
 				send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0);
-	#endif
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
 				break;
@@ -587,15 +537,10 @@ void l2_spandex::ctrl()
 				send_inval(fwd_in.addr);
 
 
-				// @TODO no worries for now
-				if (state_buf[way_hit] == EXCLUSIVE)
+				if (state_buf[way_hit][0] == EXCLUSIVE)
 				send_rsp_out(RSP_INVACK, 0, 0, fwd_in.addr, 0);
 				else
-	#if (USE_SPANDEX == 0)
-				send_rsp_out(RSP_DATA, 0, 0, fwd_in.addr, line_buf[way_hit]);
-	#else
 				send_rsp_out(RSP_RVK_O, 0, 0, fwd_in.addr, line_buf[way_hit]);
-	#endif
 
 				states.port1[0][(line_br.set << L2_WAY_BITS) + way_hit] = INVALID;
 
@@ -630,7 +575,8 @@ void l2_spandex::ctrl()
             flush_way_dbg.write(flush_way);
             flush_set_dbg.write(flush_set);
 #endif
-            if ((state_buf[flush_way] != INVALID) &&
+			// SPANDEXTODO check type and handle denovo lines
+            if ((state_buf[flush_way][0] != INVALID) &&
                 (is_flush_all || hprot_buf[flush_way])) {
 
                 reqs_peek_flush(flush_set, reqs_hit_i);
@@ -647,7 +593,7 @@ void l2_spandex::ctrl()
                 unstable_state_t state_tmp;
                 coh_msg_t coh_msg_tmp;
 
-                switch (state_buf[flush_way]) {
+                switch (state_buf[flush_way][0]) {
 
                 case SHARED :
                     coh_msg_tmp = REQ_PUTS;
@@ -788,7 +734,7 @@ void l2_spandex::ctrl()
 			send_stats(tag_hit);
 #endif
 
-			if (tag_hit) {
+			if (tag_hit && type_buf[way_hit] == 0) { // mesi line
 
 				switch (cpu_req.cpu_msg) {
 
@@ -803,7 +749,7 @@ void l2_spandex::ctrl()
 
 				case READ_ATOMIC : // read atomic hit
 
-					switch (state_buf[way_hit]) {
+					switch (state_buf[way_hit][0]) {
 
 					case SHARED :
 					{
@@ -843,7 +789,7 @@ void l2_spandex::ctrl()
 
 				case WRITE :
 
-					switch (state_buf[way_hit]) {
+					switch (state_buf[way_hit][0]) {
 
 					case SHARED :
 					{
@@ -881,8 +827,10 @@ void l2_spandex::ctrl()
 					HIT_DEFAULT;
 				}
 
+			} else if (tag_hit && type_buf[way_hit] == 1) {
+				// SPANDEXTODO tag hit on denovo line. make sure check wb
 			} else if (empty_way_found) {
-
+				// SPANDEXTODO handle denovo style miss
 				unstable_state_t state_tmp;
 				coh_msg_t coh_msg_tmp;
 
@@ -939,8 +887,8 @@ void l2_spandex::ctrl()
 				unstable_state_t state_tmp;
 				coh_msg_t coh_msg_tmp;
 
-				switch (state_buf[evict_way]) {
-
+				switch (state_buf[evict_way][0]) {
+					// SPANDEXTODO handle denovo line evict. here we guarantee there's no wb hit because wb entries are in R state
 					case SHARED :
 						coh_msg_tmp = REQ_PUTS;
 						state_tmp = SIA;
@@ -994,7 +942,7 @@ void l2_spandex::ctrl()
 	for (int i = 0; i < L2_WAYS; i++) {
 	    BUFS_DBG;
 	    tag_buf_dbg[i] = tag_buf[i];
-	    state_buf_dbg[i] = state_buf[i];
+	    state_buf_dbg[i] = state_buf[i][0];
 	}
 
 	evict_way_dbg.write(evict_way);
@@ -1172,54 +1120,27 @@ void l2_spandex::get_cpu_req(l2_cpu_req_t &cpu_req)
     GET_CPU_REQ;
 
     l2_cpu_req.nb_get(cpu_req);
+	// SPANDEXTODO the following part can be removed when compiler ships
+	if (cpu_req.addr >= 0xA0000000)
+	{
+		cpu_req.dcs_en = 1;
+		cpu_req.dcs = 1;
+		cpu_req.use_owner_pred = 0;
+	}
 }
 
 void l2_spandex::get_fwd_in(l2_fwd_in_t &fwd_in)
 {
     L2_GET_FWD_IN;
-
-
-#if (USE_SPANDEX == 1)
-// fake putack
 	if (spdx_tu_fake_putack_valid)
 	{
 		fwd_in = spdx_tu_fake_putack;
 		spdx_tu_fake_putack_valid = false;
 		return;
 	}
-
-#endif
-
     l2_fwd_in.nb_get(fwd_in);
-
-#if (USE_SPANDEX == 1)
-    // switch (fwd_in.coh_msg)
-    // {
-    //     case FWD_REQ_V:
-    //         // @TODO
-    //         break;
-    //     // case FWD_REQ_S:
-    //     //     fwd_in.coh_msg = FWD_GETS;
-    //     //     break;
-    //     // case FWD_REQ_O:
-    //     case FWD_REQ_Odata:
-    //         fwd_in.coh_msg = FWD_GETM;
-    //         break;
-    //     case FWD_RVK_O:
-    //         // same as inv for MESI
-    //     // case FWD_INV_SPDX:
-    //     //     fwd_in.coh_msg = FWD_INV;
-    //     //     break;
-    //     // case FWD_WB_ACK:
-    //     //     fwd_in.coh_msg = FWD_PUTACK;
-    //     //     break;
-    //     default:
-    //         break;
-
-    // }
 	orig_spdx_msg = fwd_in.coh_msg;
 	if (fwd_in.coh_msg == FWD_REQ_O) fwd_in.coh_msg = FWD_REQ_Odata;
-#endif
 }
 
 void l2_spandex::get_rsp_in(l2_rsp_in_t &rsp_in)
@@ -1227,25 +1148,7 @@ void l2_spandex::get_rsp_in(l2_rsp_in_t &rsp_in)
     L2_GET_RSP_IN;
 
     l2_rsp_in.nb_get(rsp_in);
-
-#if (USE_SPANDEX == 1)
-    // switch (rsp_in.coh_msg)
-    // {
-    //     // case RSP_S:
-    //     //     rsp_in.coh_msg = RSP_DATA;
-    //     //     break;
-    //     case RSP_O:
-    //         rsp_in.coh_msg = RSP_DATA;
-    //         break;
-    //     case RSP_Odata:
-    //         rsp_in.coh_msg = RSP_DATA;
-    //         break;
-    //     defaut:
-    //         break;
-    // }
 	if (rsp_in.coh_msg == RSP_O || rsp_in.coh_msg == RSP_Odata) rsp_in.coh_msg = RSP_DATA;
-
-#endif
 }
 
 bool l2_spandex::get_flush()
@@ -1292,7 +1195,6 @@ void l2_spandex::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line
     req_out.addr = line_addr;
     req_out.line = line;
 
-#if (USE_SPANDEX == 1)
 	req_out.word_mask = WORD_MASK_ALL; // 0b1111
 	if (req_out.coh_msg == REQ_PUTS)
 	{
@@ -1303,24 +1205,6 @@ void l2_spandex::send_req_out(coh_msg_t coh_msg, hprot_t hprot, line_addr_t line
 		spdx_tu_fake_putack_valid = 1;
 		return;
 	}
-    // switch (req_out.coh_msg)
-    // {
-    //     // case REQ_GETS:
-    //     //     req_out.coh_msg = REQ_S;
-    //     //     break;
-    //     // case REQ_GETM:
-    //     //     req_out.coh_msg = REQ_O;
-	// 	// 	break;
-    //     case REQ_PUTS:
-    //         // silent eviction
-    //         return;
-    //     // case REQ_PUTM:
-    //     //     req_out.coh_msg = REQ_WB;
-	// 	// 	break;
-    //     default:
-    //         break;
-    // }
-#endif
 
     while (!l2_req_out.nb_can_put()) wait();
 
@@ -1339,21 +1223,6 @@ void l2_spandex::send_rsp_out(coh_msg_t coh_msg, cache_id_t req_id, bool to_req,
     rsp_out.addr    = line_addr;
     rsp_out.line    = line;
 	rsp_out.word_mask = WORD_MASK_ALL;
-
-// #if USE_SPANDEX == 1
-// 	switch (rsp_out.coh_msg)
-//     {
-//         case RSP_DATA:
-//             // @TODO check what type of request that has data?
-//             break;
-//         case RSP_INVACK:
-//             // @TODO inv_ack or rsp_rvko?
-//             rsp_out.coh_msg = RSP_INV_ACK_SPDX;
-//             break;
-//         default:
-//             break;
-//     }
-// #endif
 
     while (!l2_rsp_out.nb_can_put()) wait();
 
@@ -1425,6 +1294,7 @@ void l2_spandex::fill_reqs(cpu_msg_t cpu_msg, addr_breakdown_t addr_br, l2_tag_t
     reqs[reqs_i].word	     = word;
     reqs[reqs_i].line	     = line;
 	reqs[reqs_i].word_mask   = 0;
+	reqs[reqs_i].type = 0;
 
     reqs_cnt--;
 }
@@ -1453,50 +1323,83 @@ inline void l2_spandex::read_set(l2_set_t set)
     //Manual unroll because these are explicit memories, see commented code
     // below for implicit memories usage
     sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
+    sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
 
     tag_buf[0] = tags.port2[0][base + 0];
-    state_buf[0] = states.port2[0][base + 0];
+    line_state = states.port2[0][base + 0];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[0][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[0] = hprots.port2[0][base + 0];
     line_buf[0] = lines.port2[0][base + 0];
 
 #if (L2_WAYS >= 2)
 
     tag_buf[1] = tags.port3[0][base + 1];
-    state_buf[1] = states.port3[0][base + 1];
+	line_state = states.port3[0][base + 1];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[1][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[1] = hprots.port3[0][base + 1];
     line_buf[1] = lines.port3[0][base + 1];
 
 #if (L2_WAYS >= 4)
 
     tag_buf[2] = tags.port4[0][base + 2];
-    state_buf[2] = states.port4[0][base + 2];
+	line_state = states.port4[0][base + 2];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[2][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[2] = hprots.port4[0][base + 2];
     line_buf[2] = lines.port4[0][base + 2];
 
     tag_buf[3] = tags.port5[0][base + 3];
-    state_buf[3] = states.port5[0][base + 3];
+	line_state = states.port5[0][base + 3];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[3][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[3] = hprots.port5[0][base + 3];
     line_buf[3] = lines.port5[0][base + 3];
 
 #if (L2_WAYS >= 8)
 
     tag_buf[4] = tags.port6[0][base + 4];
-    state_buf[4] = states.port6[0][base + 4];
+	line_state = states.port6[0][base + 4];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[4][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[4] = hprots.port6[0][base + 4];
     line_buf[4] = lines.port6[0][base + 4];
 
     tag_buf[5] = tags.port7[0][base + 5];
-    state_buf[5] = states.port7[0][base + 5];
+	line_state = states.port7[0][base + 5];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[5][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[5] = hprots.port7[0][base + 5];
     line_buf[5] = lines.port7[0][base + 5];
 
     tag_buf[6] = tags.port8[0][base + 6];
-    state_buf[6] = states.port8[0][base + 6];
+	line_state = states.port8[0][base + 6];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[6][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[6] = hprots.port8[0][base + 6];
     line_buf[6] = lines.port8[0][base + 6];
 
     tag_buf[7] = tags.port9[0][base + 7];
-    state_buf[7] = states.port9[0][base + 7];
+	line_state = states.port9[0][base + 7];
+    for (int i = 0; i < WORDS_PER_LINE; i++) {
+        HLS_UNROLL_LOOP(ON, "8");
+        state_buf[7][i] = line_state >> (i * DNV_STABLE_STATE_BITS);
+    }
     hprot_buf[7] = hprots.port9[0][base + 7];
     line_buf[7] = lines.port9[0][base + 7];
 
@@ -1529,12 +1432,14 @@ void l2_spandex::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &w
 	// hprot_buf[i] = hprots[base + i];
 	// line_buf[i] = lines[base + i];
 
-	if (tag_buf[i] == addr_br.tag && state_buf[i] != INVALID) {
+	// SPANDEXTODO check hit on denovo lines
+	if (tag_buf[i] == addr_br.tag && state_buf[i][0] != INVALID) {
 	    tag_hit = true;
 	    way_hit = i;
 	}
 
-	if (state_buf[i] == INVALID) {
+	// SPANDEXTODO
+	if (state_buf[i][0] == INVALID) {
 	    empty_way_found = true;
 	    empty_way = i;
 	}
@@ -1568,7 +1473,8 @@ void l2_spandex::tag_lookup_fwd(line_breakdown_t<l2_tag_t, l2_set_t> line_br, bo
 	// hprot_buf[i] = hprots[base + i];
 	// line_buf[i] = lines[base + i];
 
-	if (tag_buf[i] == line_br.tag && state_buf[i] != INVALID) {
+	// SPANDEXTODO check denovo lines
+	if (tag_buf[i] == line_br.tag && state_buf[i][0] != INVALID) {
 	    way_hit = i;
 		tag_hit = true;
 	}
