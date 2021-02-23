@@ -1,10 +1,11 @@
 {
     "l2_types": [
         "denovo",
-        "gpu"
+        "gpu",
+        "spandex"
     ],
     "l2": {
-        "1": "denovo",
+        "1": "spandex",
         "2": "denovo",
         "3": "mesi",
         "4": "mesi"

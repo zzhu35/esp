@@ -2248,6 +2248,8 @@ def create_socmap(esp_config, soc):
         spandex_l2_type = '1'
       elif spandex_config['l2'][str(i)] == 'denovo':
         spandex_l2_type = '2'
+      elif spandex_config['l2'][str(i)] == 'spandex':
+        spandex_l2_type = '3'
       else:
         pass
     spandex_l2_config += ', ' * (i > 0) + spandex_l2_type

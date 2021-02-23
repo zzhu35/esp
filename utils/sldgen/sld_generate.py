@@ -1260,6 +1260,8 @@ def gen_tech_indep_impl(accelerator_list, cache_list, dma_width, template_dir, o
           pass
         elif 'denovo' in cac.name:
           pass
+        elif 'spandex' in cac.name:
+          pass
         else:
           f.write("  rtl_gen: if use_rtl /= 0 generate\n")
           f.write("    " + cac.name + "_rtl_top_i: " + cac.name + "_rtl_top\n")
@@ -1564,10 +1566,12 @@ caches = [ ]
 tmp_l2_dir = caches_rtl_dir + '/l2'
 tmp_l2_gpu_dir = caches_rtl_dir + '/l2_gpu'
 tmp_l2_denovo_dir = caches_rtl_dir + '/l2_denovo'
+tmp_l2_spandex_dir = caches_rtl_dir + '/l2_spandex'
 tmp_llc_dir = caches_rtl_dir + '/llc'
 caches.append('l2')
 caches.append('l2_gpu')
 caches.append('l2_denovo')
+caches.append('l2_spandex')
 caches.append('llc')
 
 # Spandex TODO existence checking

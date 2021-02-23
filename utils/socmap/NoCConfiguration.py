@@ -22,7 +22,7 @@ from socmap_gen import NLLC_COHERENT_MAX
 
 import json
 
-SPANDEX_CONFIG = {'l2_types':['denovo','gpu'],'l2':{}}
+SPANDEX_CONFIG = {'l2_types':['denovo','gpu', 'spandex'],'l2':{}}
 SPANDEX_CONFIG_FILE = '../../third-party/spandex/spandex-config.json'
 try:
   f = open(SPANDEX_CONFIG_FILE)
@@ -59,7 +59,7 @@ class Tile():
     self.ip_list.forget()
     self.ip_list.setitems(soc.list_of_ips)
     self.ip_list.pack(side=LEFT)
-    self.spandex_select.setitems(["mesi", "gpu", "denovo"])
+    self.spandex_select.setitems(["mesi", "gpu", "denovo", "spandex"])
     if soc.IPs.PROCESSORS.count(selection):
        self.label.config(bg="#ef6865")
     elif soc.IPs.MISC.count(selection):
