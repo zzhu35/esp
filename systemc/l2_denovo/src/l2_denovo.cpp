@@ -1705,7 +1705,7 @@ void l2_denovo::self_invalidate()
             for (int j = 0; j < WORDS_PER_LINE; j++){
                 HLS_UNROLL_LOOP(ON, "8");
                 state_tmp = line_state >> (j * DNV_STABLE_STATE_BITS);
-                if(state_tmp != DNV_R){
+                if(state_tmp != DNV_R && state_tmp != DNV_S){
                     state_tmp = DNV_I;
                 }
                 line_state_in |= state_tmp << (j * DNV_STABLE_STATE_BITS);

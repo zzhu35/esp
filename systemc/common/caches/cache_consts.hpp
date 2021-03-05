@@ -229,8 +229,9 @@
 
 // DeNovo states
 #define DNV_I       0
-#define DNV_MAX_V   (DNV_R - 1)
-#define DNV_R       (DNV_NUM_STATE-1)
+#define DNV_MAX_V   (DNV_S - 1)
+#define DNV_S       (DNV_NUM_STATE - 2)
+#define DNV_R       (DNV_NUM_STATE - 1)
 
 // DeNovo Transient state
 #define DNV_IV      1
