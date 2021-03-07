@@ -435,6 +435,33 @@ void l2_denovo::ctrl()
         }
         break;
 
+        case RSP_S:
+        {
+            if (reqs[reqs_hit_i].state == DNV_IS) {
+
+                    for (int i = 0; i < WORDS_PER_LINE; i++) {
+                        HLS_UNROLL_LOOP(ON);
+                        if (rsp_in.word_mask & (1 << i)) {
+                            // found a valid bit in response word mask
+                            reqs[reqs_hit_i].line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD) = rsp_in.line.range((i + 1) * BITS_PER_WORD - 1, i * BITS_PER_WORD); // write back new data
+                            reqs[reqs_hit_i].word_mask |= 1 << i;
+                        }
+                    }
+
+                    // all words valid now
+                    if (reqs[reqs_hit_i].word_mask == WORD_MASK_ALL){
+                        
+                        HLS_DEFINE_PROTOCOL();
+                        // touched_buf[reqs[reqs_hit_i].way][reqs[reqs_hit_i].w_off] = true;
+                        send_rd_rsp(reqs[reqs_hit_i].line);
+                        reqs[reqs_hit_i].state = DNV_I;
+                        reqs_cnt++;
+                        put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_S, reqs_hit_i);
+                    }
+            }
+        }
+        break;
+
 	    default:
 		    RSP_DEFAULT;
 
