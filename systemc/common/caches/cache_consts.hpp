@@ -266,7 +266,8 @@
 #define WRITE_ATOMIC	3
 
 // CPU DCS
-#define DCS_ReqWTfwd    0
+#define DCS_ReqWTfwd    1
+#define DCS_ReqS        2
 
 // LLC requests (LLC to mem)
 #define LLC_READ  0

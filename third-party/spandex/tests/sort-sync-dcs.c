@@ -192,7 +192,7 @@ int main(int argc, char * argv[])
 
 			// Start accelerator
 			printf("  Start..\n");
-			iowrite32(dev, SPANDEX_REG, 3);
+			iowrite32(dev, SPANDEX_REG, 7);
 			sync_rl();
 			iowrite32(dev, CMD_REG, CMD_MASK_START);
 
