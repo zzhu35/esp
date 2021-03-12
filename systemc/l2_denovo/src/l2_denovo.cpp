@@ -243,7 +243,7 @@ void l2_denovo::ctrl()
             // HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
 
             can_get_rsp_in = l2_rsp_in.nb_can_get();
-            can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0 || ongoing_atomic); // if drain in progress, block all cpu requests
+            can_get_req_in = ((l2_cpu_req.nb_can_get() && (!drain_in_progress)) || set_conflict) && !evict_stall && (reqs_cnt != 0); // if drain in progress, block all cpu requests
             can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
             can_get_flush_in = l2_flush.nb_can_get();
 
@@ -307,16 +307,6 @@ void l2_denovo::ctrl()
 	    switch (rsp_in.coh_msg) {
         case RSP_O:
         {
-#ifdef L2_DEBUG
-            // if done, don't affect current state
-            bool bad = false;
-            for (int i = 0; i < WORDS_PER_LINE; i++) {
-                HLS_UNROLL_LOOP(ON, "watch dog");
-                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
-            }
-            if (bad) watch_dog.write(WDOG_1);
-#endif
-
             reqs[reqs_hit_i].word_mask &= ~(rsp_in.word_mask);
 
             if (reqs[reqs_hit_i].word_mask == 0) {
@@ -328,16 +318,6 @@ void l2_denovo::ctrl()
         break;
         case RSP_Odata:
         {
-#ifdef L2_DEBUG
-            // if done, don't affect current state
-            bool bad = false;
-            for (int i = 0; i < WORDS_PER_LINE; i++) {
-                HLS_UNROLL_LOOP(ON, "watch dog");
-                if ((rsp_in.word_mask & 1 << i) && state_buf[reqs[reqs_hit_i].way][i] != DNV_R) bad = true;
-            }
-            if (bad) watch_dog.write(WDOG_1);
-#endif
-
             for (int i = 0; i < WORDS_PER_LINE; i++) {
                 HLS_UNROLL_LOOP(ON, "rsp_v");
                 if (rsp_in.word_mask & (1 << i)) {
@@ -350,9 +330,9 @@ void l2_denovo::ctrl()
 
             if (reqs[reqs_hit_i].word_mask == 0) {
                 HLS_DEFINE_PROTOCOL("denovo-resp");
+                if (reqs[reqs_hit_i].state == DNV_IV) send_rd_rsp(reqs[reqs_hit_i].line);
                 reqs[reqs_hit_i].state = DNV_I;
                 reqs_cnt++;
-                send_rd_rsp(reqs[reqs_hit_i].line);
                 put_reqs(line_br.set, reqs[reqs_hit_i].way, line_br.tag, reqs[reqs_hit_i].line, reqs[reqs_hit_i].hprot, DNV_R, reqs_hit_i);
             }
 
@@ -426,9 +406,9 @@ void l2_denovo::ctrl()
                             retry_msg = REQ_V;
                         } else {
                             retry_msg = REQ_Odata;
-                            reqs[reqs_hit_i].state = DNV_XR;
                         }
                         send_req_out(retry_msg, reqs[reqs_hit_i].hprot, (reqs[reqs_hit_i].tag, reqs[reqs_hit_i].set), 0, ~reqs[reqs_hit_i].word_mask);
+                        reqs_word_mask_in[reqs_hit_i] = ~reqs[reqs_hit_i].word_mask;
                     }
                 }
             }
@@ -769,23 +749,23 @@ void l2_denovo::ctrl()
                     default:
                         break;
                 }
-                line_t line;
-                line.range((addr_br.w_off + 1) * BITS_PER_WORD - 1, addr_br.w_off * BITS_PER_WORD) = cpu_req.word;
+                line_t line = line_buf[way_hit];
+                write_word(line, cpu_req.word, addr_br.w_off, addr_br.b_off, cpu_req.hsize);
 
-                if (word_hit && (state_buf[way_hit][addr_br.w_off] == DNV_R || (state_buf[way_hit][addr_br.w_off] == current_valid_state))) {
-                    state_buf[way_hit][addr_br.w_off] = DNV_R;
-
+                if (word_hit && (state_buf[way_hit][addr_br.w_off] == DNV_R)) {
+                    send_rd_rsp(line_buf[way_hit]);
                     calc_amo(line_buf[way_hit], line, msg, 1 << addr_br.w_off);
                     lines.port1[0][base + way_hit] = line_buf[way_hit];
-                    line = line >> (BITS_PER_WORD * addr_br.w_off);
-                    send_rd_rsp(line);
                 }
                 else
                 {
                     HLS_DEFINE_PROTOCOL("send_req_amo");
                     fill_reqs(0, addr_br, 0, 0, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_empty_i);
-                    send_req_out(msg, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
-
+                    send_req_out(REQ_Odata, cpu_req.hprot, addr_br.line_addr, line, 1 << addr_br.w_off);
+                    reqs[reqs_empty_i].word_mask = 1 << addr_br.w_off;
+                    reqs_word_mask_in[reqs_empty_i] = 1 << addr_br.w_off;
+                    cpu_req_conflict = cpu_req;
+                    set_conflict = true;
                 }
             }
 
@@ -892,24 +872,35 @@ void l2_denovo::ctrl()
                         }
                 }else{
                     if ((!word_hit) || (state_buf[way_write][addr_br.w_off] != DNV_R)) { // if no hit or not in registered
-                        HLS_DEFINE_PROTOCOL("spandex_dual_req");
-#if (USE_WB)
-                        bool success = false;
-                        add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot, cpu_req.dcs_en, cpu_req.use_owner_pred, cpu_req.pred_cid);
-                        if (!success)
+                        if (cpu_req.hsize < BYTE_BITS) // partial word write
                         {
-                            // if wb refused attempted insertion, raise set_conflict
+                            fill_reqs(0, addr_br, 0, 0, 0, DNV_XR, cpu_req.hprot, 0, 0, 0, reqs_empty_i);
+                            send_req_out(REQ_Odata, cpu_req.hprot, addr_br.line_addr, 0, 1 << addr_br.w_off);
+                            reqs[reqs_empty_i].word_mask = 1 << addr_br.w_off;
+                            reqs_word_mask_in[reqs_empty_i] = 1 << addr_br.w_off;
                             set_conflict = true;
                             cpu_req_conflict = cpu_req;
-                        } else {
-                            state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
                         }
+                        else
+                        {
+#if (USE_WB)
+                            bool success = false;
+                            add_wb(success, addr_br, cpu_req.word, way_write, cpu_req.hprot, cpu_req.dcs_en, cpu_req.use_owner_pred, cpu_req.pred_cid);
+                            if (!success)
+                            {
+                                // if wb refused attempted insertion, raise set_conflict
+                                set_conflict = true;
+                                cpu_req_conflict = cpu_req;
+                            } else {
+                                state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+                            }
 
 #else
-                        send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
-                        wait();
-                        state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
+                            send_req_out(REQ_O, cpu_req.hprot, addr_br.line_addr, line_buf[way_write], 1 << addr_br.w_off); // send registration
+                            wait();
+                            state_buf[way_write][addr_br.w_off] = DNV_R; // directly go to registered
 #endif
+                        }
                     }
                 }
 
@@ -1086,7 +1077,6 @@ void l2_denovo::ctrl()
 	fwd_stall_ended_dbg.write(fwd_stall_ended);
 	fwd_in_stalled_dbg.write(fwd_in_stalled);
 	reqs_fwd_stall_i_dbg.write(reqs_fwd_stall_i);
-	ongoing_atomic_dbg.write(ongoing_atomic);
 	atomic_line_addr_dbg.write(atomic_line_addr);
 	reqs_atomic_i_dbg.write(reqs_atomic_i);
 	ongoing_flush_dbg.write(ongoing_flush);
@@ -1241,7 +1231,6 @@ inline void l2_denovo::reset_io()
     fwd_stall_ended_dbg.write(0);
     // fwd_in_stalled_dbg.write(0);
     reqs_fwd_stall_i_dbg.write(0);
-    ongoing_atomic_dbg.write(0);
     atomic_line_addr_dbg.write(0);
     reqs_atomic_i_dbg.write(0);
     ongoing_flush_dbg.write(0);
@@ -1292,7 +1281,6 @@ inline void l2_denovo::reset_io()
     fwd_stall_ended = false;
     // fwd_in_stalled =
     reqs_fwd_stall_i = 0;
-    ongoing_atomic = false;
     atomic_line_addr = 0;
     reqs_atomic_i = 0;
     ongoing_flush = false;
