@@ -19,7 +19,7 @@ source ../../common/stratus/caches.tcl
 set_attr fpga_part "xc7v2000tflg1925-2"
 
 # Xilinx Virtex7 ESP target clock cycle
-set CLOCK_PERIOD 12.5
+set CLOCK_PERIOD 10
 
 #
 # System level modules to be synthesized

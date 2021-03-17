@@ -70,6 +70,8 @@ public:
     sc_signal<l2_way_t>	evict_way_dbg;
     sc_signal< sc_uint<3> > watch_dog;
     sc_signal< sc_uint<32> > flush_line_dbg;
+    sc_signal<sc_uint<2> > current_status_dbg; // 0 idle, 1 cpu req, 2 fwd, 3 resp
+    sc_signal<line_addr_t> current_line_dbg;
 #endif
 
     // Other signals
@@ -247,6 +249,7 @@ private:
     bool do_ongoing_flush;
     bool flush_complete;
     int flush_line;
+    l2_set_t current_set;
     
     l2_cpu_req_t cpu_req_conflict;
     bool evict_stall;

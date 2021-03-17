@@ -377,6 +377,8 @@
     HLS_PRESERVE_SIGNAL(evict_way_dbg, true); \
     HLS_PRESERVE_SIGNAL(flush_line_dbg, true); \
     HLS_PRESERVE_SIGNAL(drain_in_progress_dbg, true); \
+    HLS_PRESERVE_SIGNAL(current_line_dbg, true); \
+    HLS_PRESERVE_SIGNAL(current_status_dbg, true); \
     HLS_PRESERVE_SIGNAL(states_dbg, true)
 
 

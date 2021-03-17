@@ -108,6 +108,70 @@ inline void write_word(line_t &line, word_t word, word_offset_t w_off, byte_offs
     line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
 }
 
+inline void write_word_amo(line_t &line, word_t word, word_offset_t w_off, byte_offset_t b_off, hsize_t hsize, amo_t amo)
+{
+    uint32_t size = BITS_PER_WORD, b_off_tmp = 0;
+
+    b_off_tmp = b_off;
+
+    switch (hsize) {
+    case BYTE:
+	size = 8; break;
+    case HALFWORD:
+	size = 16; break;
+    case WORD_32:
+        size = 32; break;
+    default:
+        size = 64; break;
+    }
+
+    uint32_t w_off_bits = BITS_PER_WORD * w_off;
+    uint32_t b_off_bits = 8 * b_off_tmp;
+    uint32_t off_bits = w_off_bits + b_off_bits;
+
+    uint32_t word_range_hi = b_off_bits + size - 1;
+    uint32_t line_range_hi = off_bits + size - 1;
+
+    bool gt = line.range(line_range_hi, off_bits).to_int() > word.range(word_range_hi, b_off_bits).to_int();
+    bool ugt = line.range(line_range_hi, off_bits).to_uint() > word.range(word_range_hi, b_off_bits).to_uint();
+
+    switch (amo)
+    {
+        case AMO_SWAP :
+            line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_ADD :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits).to_int() + word.range(word_range_hi, b_off_bits).to_int();
+            break;
+        case AMO_AND :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) & ~(word.range(word_range_hi, b_off_bits));
+            break;
+        case AMO_OR :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) | word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_XOR :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) ^ word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MAX :
+            if (!gt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MAXU :
+            if (!ugt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MIN :
+            if (gt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MINU :
+            if (ugt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+
+        default:
+            break;
+    }
+
+
+}
+
 inline word_t read_word(line_t line, word_offset_t w_off)
 {
     word_t word;
