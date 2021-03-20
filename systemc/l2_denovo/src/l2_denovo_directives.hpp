@@ -344,6 +344,9 @@
     HLS_PRESERVE_SIGNAL(asserts, true);	                \
     HLS_PRESERVE_SIGNAL(bookmark, true);		\
     HLS_PRESERVE_SIGNAL(watch_dog, true);		\
+    HLS_PRESERVE_SIGNAL(watch_dog2, true);		\
+    HLS_PRESERVE_SIGNAL(watch_dog3, true);		\
+    HLS_PRESERVE_SIGNAL(watch_dog4, true);		\
     HLS_PRESERVE_SIGNAL(reqs_cnt_dbg, true);		\
     HLS_PRESERVE_SIGNAL(current_valid_state_dbg, true);		\
     HLS_PRESERVE_SIGNAL(wbs_cnt_dbg, true);		\

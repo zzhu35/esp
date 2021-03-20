@@ -69,6 +69,9 @@ public:
     sc_signal<dnv_state_t> states_dbg[L2_LINES][WORDS_PER_LINE];
     sc_signal<l2_way_t>	evict_way_dbg;
     sc_signal< sc_uint<3> > watch_dog;
+    sc_signal< sc_uint<4> > watch_dog2;
+    sc_signal< sc_uint<32> > watch_dog3;
+    sc_signal< sc_uint<4> > watch_dog4;
     sc_signal< sc_uint<32> > flush_line_dbg;
     sc_signal<sc_uint<2> > current_status_dbg; // 0 idle, 1 cpu req, 2 fwd, 3 resp
     sc_signal<line_addr_t> current_line_dbg;
@@ -119,7 +122,8 @@ public:
     hprot_t	 hprot_buf[L2_WAYS];
     line_t	 line_buf[L2_WAYS];
     l2_way_t	 evict_way;
-
+    int count;
+    int count2;
 
     // Constructor
     SC_CTOR(l2_denovo)

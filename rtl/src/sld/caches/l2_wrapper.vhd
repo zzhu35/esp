@@ -2588,6 +2588,9 @@ end process fsm_fwd_out;
 
           if mosi.w.last = '1' then
             somi.b.valid <= '1';
+            if reg.cpu_msg = "11" then
+              somi.b.resp <= "01";
+            end if;
           end if;
 
           cpu_req_data_cpu_msg <= reg.cpu_msg;
@@ -2671,14 +2674,13 @@ end process fsm_fwd_out;
 
               elsif valid_axi_req = '1' then
 
-                if mosi.ar.valid = '1' then
-
-                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
-                  reg.state      := load_req;
+                if mosi.ar.valid = '0' then
+                  reg.state := store_req;
 
                 else
 
-                  reg.state := store_req;
+                  alloc_reg.addr := reg.haddr(LINE_RANGE_HI downto LINE_RANGE_LO);
+                  reg.state      := load_req;
 
                 end if;
 
@@ -2700,6 +2702,9 @@ end process fsm_fwd_out;
       -- STORE ACK
       when send_wr_ack =>
         somi.b.valid <= '1';
+        if reg.cpu_msg = "11" then
+          somi.b.resp <= "01";
+        end if;
 
         if mosi.b.ready = '1' then
 
