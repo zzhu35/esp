@@ -519,7 +519,7 @@ void l2_denovo::ctrl()
                 }
                 case FWD_WB_ACK:
                 {
-                    if (reqs[reqs_fwd_stall_i].state == DNV_RI)
+                    if (reqs[reqs_fwd_stall_i].state == DNV_RI || reqs[reqs_fwd_stall_i].state == DNV_II)
                     {
                         // erase this line when WB complete
                         // no need to call put_reqs here because there is no state change to either SRAM or xxx_buf
@@ -534,10 +534,12 @@ void l2_denovo::ctrl()
                 {
                     if (reqs[reqs_fwd_stall_i].state == DNV_RI)
                     {
-                        // TODO!!! bug
                         // handle DNV_RI - LLC_OV deadlock
                         HLS_DEFINE_PROTOCOL("deadlock-solver-1");
-                        send_rsp_out(RSP_RVK_O, 0, false, addr_br.line_addr, reqs[reqs_fwd_stall_i].line, reqs[reqs_fwd_stall_i].word_mask);
+                        word_mask_t rsp_mask = reqs[reqs_fwd_stall_i].word_mask & fwd_in.word_mask;
+                        reqs[reqs_fwd_stall_i].word_mask &= ~rsp_mask;
+                        if (rsp_mask) send_rsp_out(RSP_RVK_O, 0, false, addr_br.line_addr, reqs[reqs_fwd_stall_i].line, rsp_mask);
+                        if (!reqs[reqs_fwd_stall_i].word_mask) reqs[reqs_fwd_stall_i].state = DNV_II;
                         success = true;
                     }
                     else if (reqs[reqs_fwd_stall_i].state == DNV_XR)
@@ -826,7 +828,6 @@ void l2_denovo::ctrl()
                             // fill_reqs(0, addr_br, 0, amo_way, 0, DNV_AMO, cpu_req.hprot, 0, 0, 0, reqs_empty_i);
                             fill_reqs(cpu_req.cpu_msg, addr_br, 0, amo_way, cpu_req.hsize, DNV_AMO, cpu_req.hprot, 0, line_buf[amo_way], 0, reqs_empty_i);
                             send_req_out(REQ_Odata, cpu_req.hprot, addr_br.line_addr, 0, 1 << addr_br.w_off);
-                            // todo goto R state
                             reqs[reqs_empty_i].word_mask = 1 << addr_br.w_off;
                             reqs_word_mask_in[reqs_empty_i] = 1 << addr_br.w_off;
 
@@ -1401,11 +1402,11 @@ void l2_denovo::put_reqs(l2_set_t set, l2_way_t way, l2_tag_t tag, line_t line, 
 
     sc_uint<L2_SET_BITS+L2_WAY_BITS> base = set << L2_WAY_BITS;
 
-    lines.port1[0][base + way]  = line; // TODO bug
+    lines.port1[0][base + way]  = line;
     hprots.port1[0][base + way] = hprot;
     for (int i = 0; i < WORDS_PER_LINE; i++) {
         HLS_UNROLL_LOOP(ON, "put reqs");
-        if (reqs_word_mask_in[reqs_i] & 1 << i) // @TODO be careful some reqs buffer might not have word_mask set
+        if (reqs_word_mask_in[reqs_i] & 1 << i)
             state_buf[way][i] = state;
     }
     tags.port1[0][base + way]   = tag;
