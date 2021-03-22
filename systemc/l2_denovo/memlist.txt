@@ -13,3 +13,8 @@ l2_denovo_hprots_512sets_2ways 1024 2 1w:0r 0w:2r
 l2_denovo_lines_512sets_2ways 1024 128 1w:0r 0w:2r
 l2_denovo_states_512sets_2ways 1024 6 1w:0r 0w:2r
 l2_denovo_evict_ways_512sets_2ways 512 1 1w:0r 0w:1r
+l2_denovo_tags_512sets_4ways 2048 19 1w:0r 0w:4r
+l2_denovo_hprots_512sets_4ways 2048 2 1w:0r 0w:4r
+l2_denovo_lines_512sets_4ways 2048 128 1w:0r 0w:4r
+l2_denovo_states_512sets_4ways 2048 6 1w:0r 0w:4r
+l2_denovo_evict_ways_512sets_4ways 512 2 1w:0r 0w:1r

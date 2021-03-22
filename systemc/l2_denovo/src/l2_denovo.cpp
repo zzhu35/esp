@@ -843,7 +843,6 @@ void l2_denovo::ctrl()
                     lines.port1[0][base + way_write] = line_buf[way_write];
                     hprots.port1[0][base + way_write] = cpu_req.hprot;
                     tags.port1[0][base + way_write] = addr_br.tag;
-                    evict_ways.port1[0][addr_br.set] = way_write + 1;
                     if(cpu_req.dcs_en){
                             switch (cpu_req.dcs){
                                 case DCS_ReqWTfwd:
@@ -1540,6 +1539,7 @@ void l2_denovo::tag_lookup(addr_breakdown_t addr_br, bool &tag_hit, l2_way_t &wa
     read_set(addr_br.set);
     // wait();
     evict_way = evict_ways.port2[0][addr_br.set];
+    evict_ways.port1[0][addr_br.set] = evict_way + 1;
 
     for (int i = L2_WAYS-1; i >=0; --i) {
 	TAG_LOOKUP_LOOP;
