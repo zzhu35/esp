@@ -39,25 +39,6 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
     // dispatch to reqs if full line
     // reset success if wb full && reqs full
 
-    if (wbs_cnt == 0) {
-        sc_uint<WB_BITS> evict_wb = 0;
-        for (int i = 0; i < N_WB; i++)
-        {
-            HLS_UNROLL_LOOP(ON, "add wb");
-            sc_uint<WB_BITS> idx_tmp = wb_evict + i;
-            if (wbs[idx_tmp].valid && wbs[idx_tmp].word_mask == WORD_MASK_ALL)
-            {
-                evict_wb = idx_tmp;
-                break;
-            }
-        }
-        // try dispatching
-        dispatch_wb(success, evict_wb);
-        // if mshr refuse dispatching, return unsuccess
-        if (!success) return;
-        wb_evict++;
-    }
-
     success = true;
 
     bool hit = false;
@@ -72,6 +53,23 @@ void l2_denovo::add_wb(bool& success, addr_breakdown_t addr_br, word_t word, l2_
 
     }
     else {
+        if (wbs_cnt == 0) {
+            for (int j = 0; j < N_WB; j++)
+            {
+                HLS_UNROLL_LOOP(ON, "add wb");
+                sc_uint<WB_BITS> idx_tmp = wb_evict + j;
+                if (wbs[idx_tmp].valid && wbs[idx_tmp].word_mask == WORD_MASK_ALL)
+                {
+                    i = idx_tmp;
+                    break;
+                }
+            }
+            // try dispatching
+            dispatch_wb(success, i);
+            // if mshr refuse dispatching, return unsuccess
+            if (!success) return;
+            wb_evict++;
+        }
         // empty in WB
         wbs[i].valid = true;
         wbs[i].tag = addr_br.tag;
@@ -216,6 +214,7 @@ void l2_denovo::ctrl()
 #endif
 
         bool do_flush = false;
+        bool do_flush_once = false;
         bool do_rsp = false;
         bool do_fwd = false;
         bool do_cpu_req = false;
@@ -247,8 +246,6 @@ void l2_denovo::ctrl()
             can_get_fwd_in = (l2_fwd_in.nb_can_get() && !fwd_stall) || fwd_stall_ended;
             can_get_flush_in = l2_flush.nb_can_get();
 
-            wait();
-
             if (can_get_flush_in) {
 				l2_flush.nb_get(is_sync);
                 do_flush = true;
@@ -265,7 +262,7 @@ void l2_denovo::ctrl()
                 do_fwd = true;
             } else if (do_ongoing_flush && !drain_in_progress) {
                 // if flush has not started, but drain has finished, flush
-                if (!flush_complete) flush();
+                if (!flush_complete) do_flush_once = true;
                 else if (reqs_cnt == N_REQS)
                 {
                     do_ongoing_flush = false;
@@ -274,7 +271,6 @@ void l2_denovo::ctrl()
                     flush_done.write(0);
                 }
             } else if (can_get_req_in) { // assuming
-                wait();
 				if (!set_conflict) {
                     get_cpu_req(cpu_req);
                 } else {
@@ -290,7 +286,11 @@ void l2_denovo::ctrl()
         do_ongoing_flush = true;
         flush_line = 0;
         flush_complete = false;
-	} else if (do_rsp) {
+	} else if (do_flush_once) {
+        // if flush has not started, but drain has finished, flush
+        flush();
+        
+    } else if (do_rsp) {
 
 	    // if (ongoing_flush)
 	    //     RSP_WHILE_FLUSHING;
@@ -1663,7 +1663,6 @@ void l2_denovo::reqs_peek_fwd(addr_breakdown_t addr_br)
 
 void l2_denovo::self_invalidate()
 {
-    watch_dog.write(1);
     if(current_valid_state != DNV_MAX_V){
         current_valid_state++;
     }else{
@@ -1701,7 +1700,6 @@ void l2_denovo::self_invalidate()
 
 void l2_denovo::flush()
 {
-    watch_dog4.write(1);
     sc_uint<DNV_STABLE_STATE_BITS * WORDS_PER_LINE> line_state;
     bool success = false;
     line_t line_data;
