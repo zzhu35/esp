@@ -382,6 +382,7 @@
     HLS_PRESERVE_SIGNAL(drain_in_progress_dbg, true); \
     HLS_PRESERVE_SIGNAL(current_line_dbg, true); \
     HLS_PRESERVE_SIGNAL(current_status_dbg, true); \
+    HLS_PRESERVE_SIGNAL(forced_req_s_dbg, true); \
     HLS_PRESERVE_SIGNAL(states_dbg, true)
 
 

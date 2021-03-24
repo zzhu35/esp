@@ -237,6 +237,10 @@ void l2_denovo::ctrl()
         if (drain_in_progress) drain_wb();
 #endif
 
+#ifdef L2_DEBUG
+        TEST_new_req = false;
+#endif
+
         {
             HLS_DEFINE_PROTOCOL("llc-io-check");
             // HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "l2-io-latency");
@@ -273,6 +277,9 @@ void l2_denovo::ctrl()
             } else if (can_get_req_in) { // assuming
 				if (!set_conflict) {
                     get_cpu_req(cpu_req);
+#ifdef L2_DEBUG
+                    TEST_new_req = true;
+#endif
                 } else {
                     cpu_req = cpu_req_conflict;
                 }
@@ -280,6 +287,26 @@ void l2_denovo::ctrl()
                 do_cpu_req = true;
             }
         }
+
+#ifdef L2_DEBUG
+        // To Simulate ReqS request since we do not have compiler support yet
+        // Here for each CPU Read, one using ReqV and one using ReqS
+        // In the waveform, dcs_en and dcs will NOT show which requests are using ReqS
+        // Have to use forced_req_s_dbg to check if the request is ReqS
+        if(TEST_new_req && cpu_req.cpu_msg == READ){
+            // if(TEST_inverter){
+                cpu_req.dcs_en = true;
+                cpu_req.dcs = DCS_ReqS;
+            // }
+            TEST_inverter = !TEST_inverter;
+        }
+
+        if(cpu_req.dcs == DCS_ReqS){
+            forced_req_s_dbg.write(1);
+        }else{
+            forced_req_s_dbg.write(0);
+        }
+#endif
 
     if (do_flush) {
         drain_in_progress = true;
@@ -501,6 +528,18 @@ void l2_denovo::ctrl()
             bool success = false;
             switch (fwd_in.coh_msg)
             {
+                case FWD_INV_SPDX:
+                {
+                    if(reqs[reqs_fwd_stall_i].state == DNV_IS){
+                        reqs[reqs_fwd_stall_i].state = DNV_II;
+                    }
+                    {
+                        HLS_DEFINE_PROTOCOL("send rsp_inv_ack_spdx fwd_stall");
+                        send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0, WORD_MASK_ALL);
+                    }
+                    success = true;
+                }
+                break;
                 case FWD_REQ_O:
                 {
                     word_mask_t ack_mask = 0;
@@ -517,6 +556,7 @@ void l2_denovo::ctrl()
                     }
 
                 }
+                break;
                 case FWD_WB_ACK:
                 {
                     if (reqs[reqs_fwd_stall_i].state == DNV_RI || reqs[reqs_fwd_stall_i].state == DNV_II)
@@ -577,6 +617,25 @@ void l2_denovo::ctrl()
 
 	    } else {
             switch (fwd_in.coh_msg) {
+                case FWD_INV_SPDX:
+                {
+                    // line exists
+                    if (tag_hit) {
+                        for (int i = 0; i < WORDS_PER_LINE; i++){
+                            HLS_UNROLL_LOOP(ON);
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_S) {
+                                // if the word in the way is hit in the cache, go to invalid state
+                                state_buf[way_hit][i] = DNV_I;
+                            }
+                        }
+                        send_inval(fwd_in.addr);
+                    }
+                    {
+                        HLS_DEFINE_PROTOCOL("send rsp_inv_ack_spdx");
+                        send_rsp_out(RSP_INV_ACK_SPDX, 0, 0, fwd_in.addr, 0, WORD_MASK_ALL);
+                    }
+                }
+                break;
                 case FWD_REQ_O:
                 {
                     word_mask_t ack_mask = 0;
@@ -609,10 +668,10 @@ void l2_denovo::ctrl()
                         for (int i = 0; i < WORDS_PER_LINE; i++)
                         {
                             HLS_UNROLL_LOOP(ON, "1");
-                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] >= current_valid_state) { // if reqv and we have this word in valid or registered
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) {
                                 ack_mask |= 1 << i;
                             }
-                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] < current_valid_state) { // if reqv and we have this word in invalid
+                            if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] != DNV_R) {
                                 nack_mask |= 1 << i;
                             }
                         }
@@ -667,7 +726,7 @@ void l2_denovo::ctrl()
                             HLS_UNROLL_LOOP(ON, "1");
                             if ((fwd_in.word_mask & (1 << i)) && state_buf[way_hit][i] == DNV_R) { // if reqo and we have this word in registered
                                 rsp_mask |= 1 << i;
-                                state_buf[way_hit][i] = current_valid_state;
+                                state_buf[way_hit][i] = DNV_S;
                             }
                         }
                         if (rsp_mask) {
@@ -748,10 +807,25 @@ void l2_denovo::ctrl()
 			l2_way_t way_hit;
 			bool empty_way_found;
 			l2_way_t empty_way;
+            bool req_s_needs_evict;
 
 			tag_lookup(addr_br, tag_hit, way_hit, empty_way_found, empty_way, word_hit);
 
-            if (!tag_hit && !empty_way_found)
+            word_mask_t word_mask_owned = 0;
+            for (int i = 0; i < WORDS_PER_LINE; i++){
+                HLS_UNROLL_LOOP(ON);
+                if(state_buf[way_hit][i] == DNV_R){
+                    word_mask_owned |= 1 << i;
+                }
+            }
+            // When reqs is tag hit but NOT word hit AND when the line is partial owned
+            // We need to write back
+            req_s_needs_evict = tag_hit && !word_hit && cpu_req.dcs_en && cpu_req.dcs == DCS_ReqS && word_mask_owned && word_mask_owned != WORD_MASK_ALL;
+            if(req_s_needs_evict){
+                evict_way = way_hit;
+            }
+
+            if ((!tag_hit && !empty_way_found) || req_s_needs_evict)
             {
                 // eviction
 				line_addr_t line_addr_evict = (tag_buf[evict_way] << L2_SET_BITS) | (addr_br.set);
@@ -843,6 +917,16 @@ void l2_denovo::ctrl()
                     lines.port1[0][base + way_write] = line_buf[way_write];
                     hprots.port1[0][base + way_write] = cpu_req.hprot;
                     tags.port1[0][base + way_write] = addr_br.tag;
+
+                    // If the line is in Shared state, then set it to Valid
+                    // b/c we cannot have partial Shared line
+                    for(int i = 0; i < WORDS_PER_LINE; i++){
+                        HLS_UNROLL_LOOP(ON);
+                        if(state_buf[way_write][i] == DNV_S){
+                            state_buf[way_write][i] = current_valid_state;
+                        }
+                    }
+
                     if(cpu_req.dcs_en){
                             switch (cpu_req.dcs){
                                 case DCS_ReqWTfwd:
@@ -933,8 +1017,20 @@ void l2_denovo::ctrl()
                             word_mask |= 1 << i;
                         }
                     }
-                    
-                    if (word_mask) // some words are present but not whole line. send reqv
+
+                    if(cpu_req.dcs_en && cpu_req.dcs == DCS_ReqS){
+                        // ReqS Tag hit
+                        if(word_hit){
+                            // ReqS with word hit, directly respond
+                            send_rd_rsp(line_buf[way_hit]);
+                        }else{
+                            // ReqS word miss, and other words are V/I
+                            HLS_DEFINE_PROTOCOL("cpu read req s partial v");
+                            send_req_out(REQ_S, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                            fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, way_hit, cpu_req.hsize, DNV_IS, cpu_req.hprot, cpu_req.word, line_buf[way_hit], 0, reqs_empty_i);
+                        }
+                    }
+                    else if (word_mask) // NOT ReqS; some words are present but not whole line. send reqv
                     {
                         if(cpu_req.dcs_en && cpu_req.use_owner_pred){
                             HLS_DEFINE_PROTOCOL("cpu read fwd req v");
@@ -960,6 +1056,10 @@ void l2_denovo::ctrl()
                         HLS_DEFINE_PROTOCOL("cpu read empty way fwd req v");
                         send_fwd_out(FWD_REQ_V, cpu_req.pred_cid, 1, addr_br.line_addr, 0, WORD_MASK_ALL);
                         fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IV_DCS, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
+                    }else if(cpu_req.dcs_en && cpu_req.dcs == DCS_ReqS){
+                        HLS_DEFINE_PROTOCOL("cpu read empty way req s");
+                        send_req_out(REQ_S, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
+                        fill_reqs(cpu_req.cpu_msg, addr_br, addr_br.tag, empty_way, cpu_req.hsize, DNV_IS, cpu_req.hprot, cpu_req.word, line_buf[empty_way], 0, reqs_empty_i);
                     }else{
                         HLS_DEFINE_PROTOCOL("cpu read empty way req v");
                         send_req_out(REQ_V, cpu_req.hprot, addr_br.line_addr, 0, WORD_MASK_ALL);
@@ -1204,6 +1304,8 @@ inline void l2_denovo::reset_io()
     /* Reset variables */
     asserts_tmp = 0;
     bookmark_tmp = 0;
+
+    TEST_inverter = false;
 #endif
 
     reqs_cnt = N_REQS;

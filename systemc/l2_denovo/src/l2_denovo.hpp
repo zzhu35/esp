@@ -75,6 +75,10 @@ public:
     sc_signal< sc_uint<32> > flush_line_dbg;
     sc_signal<sc_uint<2> > current_status_dbg; // 0 idle, 1 cpu req, 2 fwd, 3 resp
     sc_signal<line_addr_t> current_line_dbg;
+
+    sc_signal<bool> forced_req_s_dbg;
+    bool TEST_inverter;
+    bool TEST_new_req;
 #endif
 
     // Other signals
