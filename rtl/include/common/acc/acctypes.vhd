@@ -70,10 +70,14 @@ package acctypes is
   constant DST_OFFSET_REG : integer range 0 to MAXREGNUM - 1 := 13;
 
   -- bank(14)       : spandex config
-  -- dcs_en 0
-  -- use_op 1
-  -- dcs  2-3
-  -- cid  4-7
+  -- r dcs_en 0
+  -- r use_op 1
+  -- r dcs  2-3
+  -- r cid  4-7
+  -- w dcs_en 8
+  -- w use_op 9
+  -- w dcs  10-11
+  -- w cid  12-15
   constant SPANDEX_REG : integer range 0 to MAXREGNUM - 1 := 14;
 
 
