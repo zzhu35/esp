@@ -1706,13 +1706,10 @@ void l2_denovo::flush()
     hprot_t line_hprot;
     l2_tag_t line_tag;
     {
-        HLS_DEFINE_PROTOCOL("flush read");
-        wait();
         line_data = lines.port2[0][flush_line];
         line_hprot = hprots.port2[0][flush_line];
         line_tag = tags.port2[0][flush_line];
         line_state = states.port2[0][flush_line];
-        wait();
     }
 
     line_addr_t flush_addr = (line_tag << L2_SET_BITS) | (flush_line >> L2_WAY_BITS);
@@ -1724,7 +1721,8 @@ void l2_denovo::flush()
     for (unsigned int i = 0; i < WORDS_PER_LINE; i++)
     {
         HLS_UNROLL_LOOP(ON, "flush");
-        if ((line_state >> (i * DNV_STABLE_STATE_BITS)) & ((1 << DNV_STABLE_STATE_BITS) - 1) == DNV_R)
+        dnv_state_t word_state = line_state >> (i * DNV_STABLE_STATE_BITS);
+        if (word_state == DNV_R)
         {
             flush_owned |= 1 << i;
         }
@@ -1766,10 +1764,7 @@ void l2_denovo::flush()
     
 
     if (success) {
-        HLS_DEFINE_PROTOCOL("flush write");
-        wait();
         states.port1[0][flush_line] = 0;
-        wait();
         flush_line++;
     }
 
