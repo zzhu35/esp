@@ -64,13 +64,15 @@
 #define BITS_PER_DOUBLEWORD (BITS_PER_WORD << 1)
 #define BITS_PER_LINE		(BITS_PER_WORD * WORDS_PER_LINE)
 #define WORDS_PER_LINE		(1 << WORD_BITS)
+#define WORD_MASK_ALL       ((1 << WORDS_PER_LINE) - 1)
 
 // Cache data types width
 #define CPU_MSG_TYPE_WIDTH	2
-#define COH_MSG_TYPE_WIDTH	2
+#define COH_MSG_TYPE_WIDTH	4
 #define DMA_MSG_TYPE_WIDTH      1
 #define MIX_MSG_TYPE_WIDTH	(COH_MSG_TYPE_WIDTH + DMA_MSG_TYPE_WIDTH)
 #define HSIZE_WIDTH		3
+#define DCS_WIDTH               2
 // TODO: HPROT_WIDTH should be 1, but that triggers a bug of the memory generator
 #define HPROT_WIDTH		2
 #define INVACK_CNT_WIDTH	MAX_N_L2_BITS
@@ -99,6 +101,11 @@
 #define L2_SET_RANGE_HI	(L2_TAG_RANGE_LO - 1)
 #define L2_TAG_OFFSET	(1 << L2_TAG_RANGE_LO)
 
+
+// write buffer
+#define N_WB 4
+#define WB_BITS 2
+#define WB_BITS_P1 3
 // Ongoing transaction buffers
 #define N_REQS		4	// affects REQS_BITS
 #define REQS_BITS	2	// depends on N_REQS
@@ -126,8 +133,15 @@
 #define LLC_TAG_OFFSET		(1 << LLC_TAG_RANGE_LO)
 #define LLC_LOOKUP_WAYS         16
 
+
+// Ongoing transaction buffers
+#define LLC_N_REQS		4	// affects LLC_REQS_BITS
+#define LLC_REQS_BITS   	(ilog2(LLC_N_REQS))	// depends on LLC_N_REQS
+#define LLC_REQS_BITS_P1	(LLC_REQS_BITS + 1)	// depends on LLC_N_REQS + 1
+
+
 /*
- * Testbench 
+ * Testbench
  */
 
 // L2 operation behavior
@@ -160,21 +174,23 @@
 /* Protocol states */
 
 // N bits to indicate the state
+#define DNV_NUM_STATE       8
+#define DNV_STABLE_STATE_BITS   ilog2(DNV_NUM_STATE)
 #define STABLE_STATE_BITS	2	// depends on # of stable states
-#define LLC_STATE_BITS	        3 	// M, E, S, I, S^D, VALID, EID
+#define LLC_STABLE_STATE_BITS	2
 #define UNSTABLE_STATE_BITS	4	// depends on # of unstable states
+#define LLC_UNSTABLE_STATE_BITS	4	// depends on # of unstable states
 
-// Stable states (last 3 for LLC only)
+// L2 Stable states
 #define INVALID			0
 #define SHARED			1
 #define EXCLUSIVE		2
 #define MODIFIED		3
-#define SD                      4
-#define VALID                   5
-#define EID                     6
+
+
 // #define MID merged with EID
 
-// Unstable states
+// L2 Unstable states
 #define ISD			1
 #define IMAD			2
 #define IMADW			3
@@ -189,6 +205,56 @@
 #define SIA			12
 #define MIA			13
 
+// LLC states
+#define LLC_I       0
+#define LLC_V       1
+#define LLC_S       2
+
+// LLC unstable states
+#define LLC_IV      1
+#define LLC_IS      2
+#define LLC_IO      3
+#define LLC_SO      4
+#define LLC_SV      5
+#define LLC_OS      6
+#define LLC_OV      7
+#define LLC_SWB     8
+#define LLC_OWB     9
+#define LLC_SI      10
+#define LLC_WB      11
+
+
+// RTL watch dogs
+#define WDOG_1      1
+
+// DeNovo states
+#define DNV_I       0
+#define DNV_MAX_V   (DNV_S - 1)
+#define DNV_S       (DNV_NUM_STATE - 2)
+#define DNV_R       (DNV_NUM_STATE - 1)
+
+// DeNovo Transient state
+#define DNV_IV      1
+#define DNV_II      2
+#define DNV_RI      3
+#define DNV_AMO     4
+#define DNV_IV_DCS  5
+#define DNV_XR      6
+#define DNV_XRV     7
+#define DNV_IS      8
+
+// GPU states
+#define GPU_I       0
+#define GPU_V       1
+
+// DeNovo Transient state
+#define GPU_IV      1
+#define GPU_II      2
+#define GPU_AMO     3
+
+#define MAX_RETRY 4
+#define MAX_RETRY_BITS ilog2(MAX_RETRY)
+
 /*
  * Protocol messages
  */
@@ -199,6 +265,10 @@
 #define WRITE		2
 #define WRITE_ATOMIC	3
 
+// CPU DCS
+#define DCS_ReqWTfwd    1
+#define DCS_ReqS        2
+
 // LLC requests (LLC to mem)
 #define LLC_READ  0
 #define LLC_WRITE 1
@@ -208,6 +278,10 @@
 #define FWD_PLANE 1
 #define RSP_PLANE 2
 
+/******************
+original ESP messages
+*****************/
+
 // requests (L2 to L3)
 #define REQ_GETS		0
 #define REQ_GETM		1
@@ -215,8 +289,10 @@
 #define REQ_PUTM		3
 #define REQ_DMA_READ		4
 #define REQ_DMA_WRITE		5
-#define REQ_DMA_READ_BURST	6
-#define REQ_DMA_WRITE_BURST	7
+#define REQ_DMA_READ_BURST	0x1E
+#define REQ_DMA_WRITE_BURST	0x1F
+
+#define DMA_BURST_LENGTH_BITS 32
 
 // forwards (L3 to L2)
 #define FWD_GETS	0
@@ -232,8 +308,68 @@
 #define RSP_INVACK	2
 #define RSP_DATA_DMA    3
 
-// DMA burst
-#define DMA_BURST_LENGTH_BITS 32
+/******************
+end original ESP messages
+*****************/
+
+#define ARIANE_AMO_BITS 6
+
+
+// requests (L2/TU to L3)
+#define REQ_S          0 // same as gets
+#define REQ_Odata      1 // same as getm
+#define REQ_WT         2
+#define REQ_WB         3 // same as putm
+#define REQ_O          4
+#define REQ_V          5
+#define REQ_WTdata     6
+#define REQ_AMO_SWAP    REQ_WTdata
+#define REQ_AMO_ADD     7 // ADD
+#define REQ_AMO_AND     8 // CLR
+#define REQ_AMO_OR      9 // SET
+#define REQ_AMO_XOR     10 // EOR
+#define REQ_AMO_MAX     11 // SMAX
+#define REQ_AMO_MAXU    12 // UMAX
+#define REQ_AMO_MIN     13 // SMIN
+#define REQ_AMO_MINU    14 // UMIN
+/* DMA currently not used by Spandex */
+#define REQ_WTfwd       15
+
+
+// forwards (L3 to L2/TU)
+#define FWD_REQ_S      0 // same as fwd_gets
+#define FWD_REQ_Odata  1 // same as fwd_getm
+#define FWD_INV_SPDX   2 // same as fwd_inv
+#define FWD_WB_ACK     3 // same as fwd_putack
+#define FWD_RVK_O      4 // same as getm_llc
+#define FWD_REQ_V      7 // non existent in ESP
+#define FWD_REQ_O      6
+#define FWD_WTfwd      5
+
+// response (L2/TU to L2/TU, L2/TU to L3, L3 to L2/TU)
+#define RSP_S          0
+#define RSP_Odata      1 // same as fwd_req_odata
+#define RSP_INV_ACK_SPDX    2 // same as fwd_inv_spdx
+#define RSP_NACK       3
+#define RSP_RVK_O      4 // same as fwd_rvk_o
+#define RSP_V          5
+#define RSP_O          6 // same as fwd_req_o
+#define RSP_WT         7
+#define RSP_WTdata     8
+
+
+// AMOS
+#define AMO_SWAP    48      // 0b110000 // SWAP
+#define AMO_ADD     32      // 0b100000 // ADD
+#define AMO_AND     33      // 0b100001 // CLR
+#define AMO_OR      35      // 0b100011 // SET
+#define AMO_XOR     34      // 0b100010 // EOR
+#define AMO_MAX     36      // 0b100100 // SMAX
+#define AMO_MAXU    38      // 0b100110 // UMAX
+#define AMO_MIN     37      // 0b100101 // SMIN
+#define AMO_MINU    39      // 0b100111 // UMIN
+
+// DMA burst not currently supported in Spandex
 
 /*
  * AMBA Bus
@@ -255,7 +391,7 @@
 #define INSTR 0
 #define DATA  1
 
-/* 
+/*
  * Debug and report (currently not in use)
  */
 
@@ -264,7 +400,7 @@
 
 #define STATS_ENABLE 1
 
-// Decide whether to send to LLC regular DMA transaction or to send the unrolled 
+// Decide whether to send to LLC regular DMA transaction or to send the unrolled
 // DMA transaction one cache line at a time
 
 #define INTERNAL 0
@@ -354,54 +490,11 @@
 //
 // LLC
 //
+// @TODO add LLC debug bitmasks
+//#define LLC_ASSERT_WIDTH
+//#define LLC_BOOKMARK_WIDTH
+//#define BM_LLC_
 
-#define LLC_ASSERT_WIDTH    6
-#define LLC_BOOKMARK_WIDTH  41
-
-#define BM_LLC_SEND_MEM_REQ	(1 <<  0)
-#define BM_LLC_GET_MEM_RSP	(1 <<  1)
-#define BM_LLC_GET_REQ_IN	(1 <<  2)
-#define BM_LLC_GET_RSP_IN	(1 <<  3)
-#define BM_LLC_SEND_RSP_OUT	(1 <<  4)
-#define BM_LLC_SEND_FWD_OUT	(1 <<  5)
-#define BM_LLC_GETS		(1 <<  6)
-#define BM_LLC_GETM		(1 <<  7)
-#define BM_LLC_PUTS		(1 <<  8)
-#define BM_LLC_PUTM		(1 <<  9)
-#define BM_LLC_DMA_READ         (1 << 10)
-#define BM_LLC_DMA_WRITE	(1 << 11)
-#define BM_LLC_RESET_STATES	(1 << 12)
-#define BM_LLC_FLUSH		(1 << 13)
-#define BM_FLUSH_DIRTY_LINE	(1 << 14)
-#define BM_LLC_EVICT		(1 << 15)
-#define BM_EVICT_EM		(1 << 16)
-#define BM_EVICT_S		(1 << 17)
-#define BM_EVICT_V		(1 << 18)
-#define BM_GETS_IV		(1 << 19)
-#define BM_GETS_S		(1 << 20)
-#define BM_GETS_EM		(1 << 21)
-#define BM_GETS_SD		(1 << 22)
-#define BM_GETM_IV		(1 << 23)
-#define BM_GETM_S		(1 << 24)
-#define BM_GETM_E		(1 << 25)
-#define BM_GETM_M		(1 << 26)
-#define BM_GETM_SD		(1 << 27)
-#define BM_PUTS_IVM		(1 << 28)
-#define BM_PUTS_S		(1 << 29)
-#define BM_PUTS_E		(1 << 30)
-#define BM_PUTS_SD		(1 << 31)
-#define BM_PUTM_IV		((1 << 31) <<  1)
-#define BM_PUTM_S		((1 << 31) <<  2)
-#define BM_PUTM_EM		((1 << 31) <<  3)
-#define BM_PUTM_SD		((1 << 31) <<  4)
-#define BM_DMA_READ_SD		((1 << 31) <<  5)
-#define BM_DMA_READ_I		((1 << 31) <<  6)
-#define BM_DMA_READ_NOTSD	((1 << 31) <<  7)
-#define BM_DMA_WRITE_SD		((1 << 31) <<  8)
-#define BM_DMA_WRITE_I		((1 << 31) <<  9)
-#define BM_DMA_WRITE_NOTSD	((1 << 31) << 10)
-#define BM_LLC_GET_DMA_REQ_IN	((1 << 31) << 11)
-#define BM_LLC_SEND_DMA_RSP_OUT	((1 << 31) << 12)
 
 #define AS_GENERIC		(1 << 0)
 #define AS_GETS_S_NOSHARE	(1 << 1)

@@ -33,7 +33,7 @@ set_attr sharing_effort_regs low
 
 
 if {$TECH eq "virtex7"} {
-    set CLOCK_PERIOD 12.5
+    set CLOCK_PERIOD 10
     set_attr default_input_delay      0.1
 }
 if {$TECH eq "zynq7000"} {

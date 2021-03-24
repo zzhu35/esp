@@ -13,7 +13,10 @@
     HLS_FLATTEN_ARRAY(hprots_buf);		\
     HLS_FLATTEN_ARRAY(sharers_buf);		\
     HLS_FLATTEN_ARRAY(owners_buf);		\
-    HLS_FLATTEN_ARRAY(dirty_bits_buf)
+    HLS_FLATTEN_ARRAY(dirty_bits_buf);   \
+    HLS_FLATTEN_ARRAY(reqs);            \
+    HLS_FLATTEN_ARRAY(fwd_coal_word_mask); \
+    HLS_FLATTEN_ARRAY(fwd_coal_temp_dest)
 
 #define LLC_MAP_MEMORY                                                                       \
     HLS_MAP_TO_MEMORY(tags, IMP_MEM_NAME_STRING(llc, tags, LLC_SETS, LLC_WAYS));             \
@@ -25,7 +28,7 @@
     HLS_MAP_TO_MEMORY(dirty_bits, IMP_MEM_NAME_STRING(llc, dirty_bits, LLC_SETS, LLC_WAYS)); \
     HLS_MAP_TO_MEMORY(evict_ways, IMP_MEM_NAME_STRING(llc, evict_ways, LLC_SETS, LLC_WAYS))
 
-#ifdef LLC_DEBUG
+#ifdef LLC_DEBUG_TURN_OFF_HERE
 
 #define LLC_RESET_STATES						\
     bookmark_tmp |= BM_LLC_RESET_STATES;				\
@@ -98,8 +101,8 @@
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
 
-#define LLC_GETS \
-    bookmark_tmp |= BM_LLC_GETS
+#define LLC_REQS \
+    bookmark_tmp |= BM_LLC_REQS
 
 #define LLC_GETM \
     bookmark_tmp |= BM_LLC_GETM
@@ -132,16 +135,16 @@
 #define GENERIC_ASSERT \
     asserts_tmp |= AS_GENERIC
 
-#define GETS_IV							 \
+#define REQS_IV							 \
     bookmark_tmp |= BM_GETS_IV
 
-#define GETS_S							 \
+#define REQS_S							 \
     bookmark_tmp |= BM_GETS_S;					 \
     if (sharers_buf[way] == 0) asserts_tmp |= AS_GETS_S_NOSHARE; \
     if ((sharers_buf[way] & (1 << req_in.req_id)) != 0)		 \
 	asserts_tmp |= AS_GETS_S_ALREADYSHARE
 
-#define GETS_EM				     \
+#define REQS_O				     \
     bookmark_tmp |= BM_GETS_EM;			\
     if (owner_buf[way] == req_in.req_id)	\
 	asserts_tmp |= AS_GETS_EM_ALREADYOWN
@@ -213,14 +216,9 @@
     bookmark_tmp |= BM_DMA_WRITE_NOTSD
 
 #define PRESERVE_SIGNALS						\
-    HLS_PRESERVE_SIGNAL(dbg_asserts, true);                             \
-    HLS_PRESERVE_SIGNAL(dbg_bookmark, true);				\
     HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
     HLS_PRESERVE_SIGNAL(dbg_is_req_to_get, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_read_to_resume, true);               \
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true);              \
-    HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true);                   \
     HLS_PRESERVE_SIGNAL(dbg_tag_hit, true);				\
     HLS_PRESERVE_SIGNAL(dbg_hit_way, true);				\
     HLS_PRESERVE_SIGNAL(dbg_empty_way_found, true);			\
@@ -233,23 +231,19 @@
     HLS_PRESERVE_SIGNAL(dbg_evict_addr, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_set, true);				\
     HLS_PRESERVE_SIGNAL(dbg_flush_way, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_req_stall, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_valid, true);		\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_tag, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_req_in_stalled_set, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_length, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_length, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_done, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dma_addr, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_tag_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_state_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_hprot_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_line_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_tags_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_states_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hprots_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_lines_buf, true);				\
     HLS_PRESERVE_SIGNAL(dbg_sharers_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_owner_buf, true);				\
-    HLS_PRESERVE_SIGNAL(dbg_dirty_bit_buf, true);			\
-    HLS_PRESERVE_SIGNAL(dbg_evict_way_buf, true)
+    HLS_PRESERVE_SIGNAL(dbg_owners_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_dirty_bits_buf, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_ways_buf, true);           \
+    HLS_PRESERVE_SIGNAL(reqs_dbg, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_stall, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_inprogress, true); \
+    HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
+
 
 #else
 
@@ -306,6 +300,35 @@
 
 #define SEND_STATS							\
     if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "Send stats.")
+
+#define LLC_FILL_REQS							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-fill-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Fill reqs.")
+
+#define LLC_PUT_REQS					\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-put-reqs-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Put reqs.")
+
+#define LLC_REQS_LOOKUP							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-lookup-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs lookup rsp.")
+
+#define LLC_REQS_LOOKUP_LOOP				\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-lookup-loop-unroll")
+
+#define LLC_REQS_PEEK_REQ							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-req-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek req.")
+
+#define LLC_REQS_PEEK_REQ_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-req-loop-unroll")
+
+#define LLC_REQS_PEEK_FWD							\
+    HLS_CONSTRAIN_LATENCY(0, HLS_ACHIEVABLE, "llc-reqs-peek-fwd-latency"); \
+    if (RPT_RTL) CACHE_REPORT_TIME(sc_time_stamp(), "LLC Reqs peek fwd.")
+
+#define LLC_REQS_PEEK_FWD_LOOP					\
+    HLS_UNROLL_LOOP(ON, "llc-reqs-peek-fwd-loop-unroll")
 
 #define LLC_GETS
 #define LLC_GETM
@@ -375,7 +398,51 @@
 
 #define DMA_WRITE_NOTSD
 
+#ifdef LLC_DEBUG
+
+#define PRESERVE_SIGNALS \
+    HLS_PRESERVE_SIGNAL(dbg_is_rst_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_is_rsp_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_is_req_to_get, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_tag_hit, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hit_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_empty_way_found, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_empty_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_way, true);					\
+    HLS_PRESERVE_SIGNAL(dbg_llc_addr, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict_valid, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_evict_way_not_sd, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_addr, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_flush_set, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_flush_way, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_tags_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_states_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_hprots_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_lines_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_sharers_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_owners_buf, true);				\
+    HLS_PRESERVE_SIGNAL(dbg_dirty_bits_buf, true);			\
+    HLS_PRESERVE_SIGNAL(dbg_evict_ways_buf, true);           \
+    HLS_PRESERVE_SIGNAL(reqs_dbg, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_stall, true); \
+    HLS_PRESERVE_SIGNAL(dbg_evict_inprogress, true); \
+    HLS_PRESERVE_SIGNAL(dbg_length, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_length, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_done, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_addr, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_addr, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_pending, true); \
+    HLS_PRESERVE_SIGNAL(dbg_recall_valid, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_read_pending, true); \
+    HLS_PRESERVE_SIGNAL(dbg_dma_write_pending, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_read_to_resume, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_write_to_resume, true); \
+    HLS_PRESERVE_SIGNAL(dbg_is_dma_req_to_get, true); \
+    HLS_PRESERVE_SIGNAL(dbg_set_conflict, true)
+#else
 #define PRESERVE_SIGNALS
+#endif
 
 #endif
 

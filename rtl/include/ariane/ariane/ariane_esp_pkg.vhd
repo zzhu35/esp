@@ -31,6 +31,7 @@ package ariane_esp_pkg is
       irq         : in  std_logic_vector(1 downto 0);
       timer_irq   : in  std_logic;
       ipi         : in  std_logic;
+      sync_l2     : out std_logic;
       romi        : out axi_mosi_type;
       romo        : in  axi_somi_type;
       drami       : out axi_mosi_type;

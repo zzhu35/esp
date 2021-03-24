@@ -32,6 +32,7 @@ entity ariane_axi_wrap is
     irq         : in  std_logic_vector(1 downto 0);
     timer_irq   : in  std_logic;
     ipi         : in  std_logic;
+    sync_l2     : out std_logic;
     romi        : out axi_mosi_type;
     romo        : in  axi_somi_type;
     drami       : out axi_mosi_type;
@@ -78,6 +79,7 @@ architecture rtl of ariane_axi_wrap is
       irq             : in  std_logic_vector(1 downto 0);
       timer_irq       : in  std_logic;
       ipi             : in  std_logic;
+      sync_l2         : out std_logic;
       rom_aw_id       : out std_logic_vector(AXI_ID_WIDTH_SLV-1 downto 0);
       rom_aw_addr     : out std_logic_vector(AXI_ADDR_WIDTH-1 downto 0);
       rom_aw_len      : out std_logic_vector(7 downto 0);
@@ -311,6 +313,7 @@ begin  -- architecture rtl
       irq             => irq,
       timer_irq       => timer_irq,
       ipi             => ipi,
+      sync_l2         => sync_l2,
       rom_aw_id       => romi.aw.id(ARIANE_AXI_ID_WIDTH_SLV - 1 downto 0),
       rom_aw_addr     => romi.aw.addr,
       rom_aw_len      => romi.aw.len,

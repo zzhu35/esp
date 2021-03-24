@@ -1,0 +1,4 @@
+l2_gpu_tags_32sets_2ways 64 23 1w:0r 0w:2r
+l2_gpu_hprots_32sets_2ways 64 2 1w:0r 0w:2r
+l2_gpu_lines_32sets_2ways 64 128 1w:0r 0w:2r
+l2_gpu_evict_ways_32sets_2ways 32 1 1w:0r 0w:1r

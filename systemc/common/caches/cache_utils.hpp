@@ -11,6 +11,8 @@
 #include "cache_consts.hpp"
 #include "cache_types.hpp"
 
+#define USE_SPANDEX 1
+
 #define CACHE_REPORT_INFO(text)						\
     cerr << "Info:  " << sc_object::basename() << ".\t " << text << endl;
 
@@ -55,30 +57,31 @@ inline void write_word(line_t &line, word_t word, word_offset_t w_off, byte_offs
 {
     uint32_t size = BITS_PER_WORD, b_off_tmp = 0;
 
-#ifdef BIG_ENDIAN
+// #ifdef BIG_ENDIAN
 
-    switch (hsize) {
-    case BYTE:
-        b_off_tmp = BYTES_PER_WORD - 1 - b_off;
-	size = 8; break;
-    case HALFWORD:
-        b_off_tmp = BYTES_PER_WORD - BYTES_PER_WORD/2 - b_off;
-	size = 16; break;
-#if (BYTES_PER_WORD == 4)
-    default:
-        b_off_tmp = 0;
-        size = 32; break;
-#else
-    case WORD_32:
-        b_off_tmp = BYTES_PER_WORD - BYTES_PER_WORD/4 - b_off;
-        size = 32; break;
-    default:
-        b_off_tmp = 0;
-        size = 64; break;
-#endif
-    }
+//     switch (hsize) {
+//     case BYTE:
+//         b_off_tmp = BYTES_PER_WORD - 1 - b_off;
+// 	size = 8; break;
+//     case HALFWORD:
+//         b_off_tmp = BYTES_PER_WORD - BYTES_PER_WORD/2 - b_off;
+// 	size = 16; break;
+// #if (BYTES_PER_WORD == 4)
+//     default:
+//         b_off_tmp = 0;
+//         size = 32; break;
+// #else
+//     case WORD_32:
+//         b_off_tmp = BYTES_PER_WORD - BYTES_PER_WORD/4 - b_off;
+//         size = 32; break;
+//     default:
+//         b_off_tmp = 0;
+//         size = 64; break;
+// #endif
+//     }
+// // #endif
 
-#else // LITTLE_ENDIAN
+// #else // LITTLE_ENDIAN
     b_off_tmp = b_off;
 
     switch (hsize) {
@@ -91,7 +94,7 @@ inline void write_word(line_t &line, word_t word, word_offset_t w_off, byte_offs
     default:
         size = 64; break;
     }
-#endif
+// #endif
 
     uint32_t w_off_bits = BITS_PER_WORD * w_off;
     uint32_t b_off_bits = 8 * b_off_tmp;
@@ -105,6 +108,70 @@ inline void write_word(line_t &line, word_t word, word_offset_t w_off, byte_offs
     line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
 }
 
+inline void write_word_amo(line_t &line, word_t word, word_offset_t w_off, byte_offset_t b_off, hsize_t hsize, amo_t amo)
+{
+    uint32_t size = BITS_PER_WORD, b_off_tmp = 0;
+
+    b_off_tmp = b_off;
+
+    switch (hsize) {
+    case BYTE:
+	size = 8; break;
+    case HALFWORD:
+	size = 16; break;
+    case WORD_32:
+        size = 32; break;
+    default:
+        size = 64; break;
+    }
+
+    uint32_t w_off_bits = BITS_PER_WORD * w_off;
+    uint32_t b_off_bits = 8 * b_off_tmp;
+    uint32_t off_bits = w_off_bits + b_off_bits;
+
+    uint32_t word_range_hi = b_off_bits + size - 1;
+    uint32_t line_range_hi = off_bits + size - 1;
+
+    bool gt = line.range(line_range_hi, off_bits).to_int() > word.range(word_range_hi, b_off_bits).to_int();
+    bool ugt = line.range(line_range_hi, off_bits).to_uint() > word.range(word_range_hi, b_off_bits).to_uint();
+
+    switch (amo)
+    {
+        case AMO_SWAP :
+            line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_ADD :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits).to_int() + word.range(word_range_hi, b_off_bits).to_int();
+            break;
+        case AMO_AND :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) & ~(word.range(word_range_hi, b_off_bits));
+            break;
+        case AMO_OR :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) | word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_XOR :
+            line.range(line_range_hi, off_bits) = line.range(line_range_hi, off_bits) ^ word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MAX :
+            if (!gt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MAXU :
+            if (!ugt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MIN :
+            if (gt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+        case AMO_MINU :
+            if (ugt) line.range(line_range_hi, off_bits) = word.range(word_range_hi, b_off_bits);
+            break;
+
+        default:
+            break;
+    }
+
+
+}
+
 inline word_t read_word(line_t line, word_offset_t w_off)
 {
     word_t word;
@@ -116,7 +183,7 @@ inline word_t read_word(line_t line, word_offset_t w_off)
 inline void rand_wait()
 {
     int waits = rand() % 5;
-    
+
     for (int i=0; i < waits; i++) wait();
 }
 
@@ -150,7 +217,7 @@ inline word_t rand_word()
     return word;
 }
 
-inline line_t line_of_addr(addr_t addr) 
+inline line_t line_of_addr(addr_t addr)
 {
     line_t line;
 
@@ -178,6 +245,59 @@ inline word_t word_of_addr(addr_t addr)
 
     return word;
 }
+
+inline void calc_amo(line_t& line, line_t& data, coh_msg_t req, word_mask_t word_mask)
+{
+            // word_mask must contain only one bit set
+        int i;
+        for (i = 0; i < WORDS_PER_LINE; i++)
+        {
+                HLS_UNROLL_LOOP("amo");
+                if (word_mask & (1 << i)) break;
+        }
+        wait();
+        int old = line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
+        int dataw = data.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD).to_int();
+
+        // @TODO MAX MIN might not work, depending on if to_int() sign_extends
+
+        data = line; // send old data back
+        switch (req)
+        {
+                case REQ_AMO_SWAP:
+                        old = dataw;
+                        break;
+                case REQ_AMO_ADD:
+                        old += dataw;
+                        break;
+                case REQ_AMO_AND:
+                        old &= dataw;
+                        break;
+                case REQ_AMO_OR:
+                        old |= dataw;
+                        break;
+                case REQ_AMO_XOR:
+                        old ^= dataw;
+                        break;
+                case REQ_AMO_MAX:
+                        old = (old > dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MAXU:
+                        old = ((unsigned)old > (unsigned)dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MIN:
+                        old = (old < dataw) ? old : dataw;
+                        break;
+                case REQ_AMO_MINU:
+                        old = ((unsigned)old < (unsigned)dataw) ? old : dataw;
+                        break;
+                default:
+                break;
+        }
+        line.range((i+1)*BITS_PER_WORD-1, i*BITS_PER_WORD) = old; // store calculated new word in the line
+
+}
+
 
 
 #endif /* __CACHE_UTILS_HPP__ */

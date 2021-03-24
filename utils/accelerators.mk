@@ -374,6 +374,7 @@ SLDGEN_DEPS  = $(ESP_ROOT)/tech/$(TECHLIB)/acc/installed.log
 SLDGEN_DEPS += $(ESP_ROOT)/utils/sldgen/sld_generate.py
 SLDGEN_DEPS += $(wildcard $(ESP_ROOT)/utils/sldgen/templates/*.vhd)
 SLDGEN_DEPS += socmap.vhd esp_global.vhd
+SLDGEN_DEPS += $(ESP_ROOT)/third-party/spandex/spandex-config.json
 
 ### ESP Wrappers ###
 sldgen: $(SLDGEN_DEPS)
