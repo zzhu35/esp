@@ -1463,19 +1463,22 @@ void llc::ctrl()
 			// REQS_IV;
 
                         word_owner_mask = owners_buf[way] & req_in.word_mask;
+                        other_owner = false;
                         if (word_owner_mask) {
                                 other_owner = send_fwd_with_owner_mask(FWD_REQ_S, req_in.addr, req_in.req_id, word_owner_mask, lines_buf[way]);
                                 if (other_owner) {
                                         fill_reqs(req_in.coh_msg, req_in.req_id, addr_br_real, 0, way, LLC_OS, req_in.hprot, 0, lines_buf[way], req_in.word_mask, reqs_empty_i); // save this request in reqs buffer
-                                        break;
                                 }
                         }
-                        // we are lucky, no other owner present
-                        {
+                        // send rsp for those words without owners
+                        if (req_in.word_mask & ~owners_buf[way]) {
                                 HLS_DEFINE_PROTOCOL("send_rsp_1027");
-                                send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask);
-                                states_buf[way] = LLC_S;
-                                sharers_buf[way] = 1 << req_in.req_id;
+                                send_rsp_out(RSP_S, req_in.addr, lines_buf[way], req_in.req_id, req_in.req_id, 0, 0, req_in.word_mask & ~owners_buf[way]);
+                                // if other_owner is false, then it means no transient state in reqs, and we can change state and shares here
+                                if(!other_owner){
+                                        states_buf[way] = LLC_S;
+                                        sharers_buf[way] = 1 << req_in.req_id;
+                                }
                         }
 
 		    }
