@@ -557,6 +557,36 @@ void l2_denovo::ctrl()
 
                 }
                 break;
+                case FWD_REQ_V:
+                {
+                    word_mask_t nack_mask = 0;
+                    word_mask_t ack_mask = 0;
+                    for (int i = 0; i < WORDS_PER_LINE; i++)
+                    {
+                        HLS_UNROLL_LOOP(ON, "1");
+                        if(fwd_in.word_mask & (1 << i)){
+                            // Check if the word is in the ReqWB
+                            // Since Fwd Req V can be sent by other caches (NOT llc)
+                            // We need to handle mispredicted owner
+                            if((reqs[reqs_fwd_stall_i].word_mask & (1 << i)) && reqs[reqs_fwd_stall_i].state == DNV_RI){
+                                ack_mask |= 1 << i;
+                            }else{
+                                nack_mask |= 1 << i;
+                            }
+                        }
+                    }
+                    if(nack_mask){
+                        HLS_DEFINE_PROTOCOL("fwd req v stall rsp nack");
+                        send_rsp_out(RSP_NACK, fwd_in.req_id, true, fwd_in.addr, 0, nack_mask);
+                        wait();
+                    }
+                    if(ack_mask){
+                        HLS_DEFINE_PROTOCOL("fwd req v stall rsp v");
+                        send_rsp_out(RSP_V, fwd_in.req_id, true, fwd_in.addr, reqs[reqs_fwd_stall_i].line, ack_mask);
+                    }
+                    success = true;
+                }
+                break;
                 case FWD_WB_ACK:
                 {
                     if (reqs[reqs_fwd_stall_i].state == DNV_RI || reqs[reqs_fwd_stall_i].state == DNV_II)
