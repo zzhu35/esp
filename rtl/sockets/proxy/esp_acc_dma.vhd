@@ -852,10 +852,9 @@ begin  -- rtl
       when wr_handshake =>
         burst <= '1';
         if dma_snd_full_int = '0' or coherence = ACC_COH_FULL then
-          if wr_request = '1' then
-            wr_grant <= '1';
-          elsif dma_tran_start = '1' and scatter_gather /= 0 then
+          if wr_request = '1' and dma_tran_start = '1' and scatter_gather /= 0 then
             sample_flits <= '1';
+            wr_grant <= '1';
             if coherence /= ACC_COH_FULL then
               if bankreg(P2P_REG)(P2P_BIT_DST_IS_P2P) = '1' then
                 dma_next <= wait_req_p2p;
@@ -865,7 +864,8 @@ begin  -- rtl
             else
               dma_next <= fully_coherent_request;
             end if;
-          elsif scatter_gather = 0 then
+          elsif wr_request = '1' and scatter_gather = 0 then
+            wr_grant <= '1';
             if coherence /= ACC_COH_FULL then
               if bankreg(P2P_REG)(P2P_BIT_DST_IS_P2P) = '1' then
                 dma_next <= wait_req_p2p;
